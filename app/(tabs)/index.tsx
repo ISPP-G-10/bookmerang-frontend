@@ -25,7 +25,7 @@ export default function TabOneScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
+      <Text style={styles.title}>Bookmerang1</Text>
 
       <Text style={styles.status}>
         Backend status: {status}
