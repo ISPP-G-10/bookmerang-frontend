@@ -1,10 +1,10 @@
-import { StyleSheet, Button } from "react-native";
 import { useState } from "react";
+import { Button, StyleSheet } from "react-native";
 
 import EditScreenInfo from "@/components/EditScreenInfo";
 import { Text, View } from "@/components/Themed";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8080";
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5044";
 
 export default function TabOneScreen() {
   const [status, setStatus] = useState<string>("sin comprobar");
