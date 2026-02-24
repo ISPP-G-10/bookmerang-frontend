@@ -1,14 +1,15 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    TextInput,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
@@ -48,7 +49,21 @@ export default function ChatDetailScreen() {
     chat?.messages ?? []
   );
   const [inputText, setInputText] = useState('');
+  const [exchangeExpanded, setExchangeExpanded] = useState(true);
   const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () =>
+      setExchangeExpanded(false)
+    );
+    const hideSub = Keyboard.addListener('keyboardDidHide', () =>
+      setExchangeExpanded(true)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   if (!chat) {
     return (
@@ -198,67 +213,94 @@ export default function ChatDetailScreen() {
         {/* Tarjeta del intercambio */}
         {chat.exchange && (
           <View style={styles.exchangeCard}>
-            <View style={styles.exchangeBooks}>
-              {/* Libro propio */}
-              <View style={styles.bookItem}>
-                <Text style={styles.bookLabel}>TU LIBRO</Text>
-                <View style={styles.bookCover}>
-                  <FontAwesome name="book" size={22} color="#e4715f" />
+            {/* Header siempre visible – toca para desplegar/colapsar */}
+            <Pressable
+              style={styles.exchangeHeader}
+              onPress={() => setExchangeExpanded((v) => !v)}
+            >
+              <FontAwesome name="book" size={12} color="#e4715f" style={{ marginRight: 5 }} />
+              <Text style={styles.exchangeHeaderText} numberOfLines={1}>
+                {chat.exchange.book_1.titulo}
+              </Text>
+              <FontAwesome name="exchange" size={11} color="#9CA3AF" style={{ marginHorizontal: 6 }} />
+              <Text style={styles.exchangeHeaderText} numberOfLines={1}>
+                {chat.exchange.book_2.titulo}
+              </Text>
+              <FontAwesome
+                name={exchangeExpanded ? 'chevron-up' : 'chevron-down'}
+                size={12}
+                color="#9CA3AF"
+                style={{ marginLeft: 8 }}
+              />
+            </Pressable>
+
+            {/* Contenido desplegable */}
+            {exchangeExpanded && (
+              <>
+                <View style={styles.exchangeHeaderDivider} />
+                <View style={styles.exchangeBooks}>
+                  {/* Libro propio */}
+                  <View style={styles.bookItem}>
+                    <Text style={styles.bookLabel}>TU LIBRO</Text>
+                    <View style={styles.bookCover}>
+                      <FontAwesome name="book" size={16} color="#e4715f" />
+                    </View>
+                    <Text style={styles.bookTitle} numberOfLines={2}>
+                      {chat.exchange.book_1.titulo}
+                    </Text>
+                    <Text style={styles.bookAuthor} numberOfLines={1}>
+                      {chat.exchange.book_1.autor}
+                    </Text>
+                  </View>
+
+                  <View style={styles.exchangeArrow}>
+                    <FontAwesome name="exchange" size={14} color="#2b2c2d" />
+                  </View>
+
+                  {/* Libro de cambio */}
+                  <View style={styles.bookItem}>
+                    <Text style={styles.bookLabel}>LIBRO DE CAMBIO</Text>
+                    <View style={[styles.bookCover, styles.bookCoverAlt]}>
+                      <FontAwesome name="book" size={16} color="#10B981" />
+                    </View>
+                    <Text style={styles.bookTitle} numberOfLines={2}>
+                      {chat.exchange.book_2.titulo}
+                    </Text>
+                    <Text style={styles.bookAuthor} numberOfLines={1}>
+                      {chat.exchange.book_2.autor}
+                    </Text>
+                  </View>
                 </View>
-                <Text style={styles.bookTitle} numberOfLines={2}>
-                  {chat.exchange.book_1.titulo}
-                </Text>
-                <Text style={styles.bookAuthor} numberOfLines={1}>
-                  {chat.exchange.book_1.autor}
-                </Text>
-              </View>
 
-              <View style={styles.exchangeArrow}>
-                <FontAwesome name="exchange" size={18} color="#2b2c2d" />
-              </View>
-
-              {/* Libro de cambio */}
-              <View style={styles.bookItem}>
-                <Text style={styles.bookLabel}>LIBRO DE CAMBIO</Text>
-                <View style={[styles.bookCover, styles.bookCoverAlt]}>
-                  <FontAwesome name="book" size={22} color="#10B981" />
-                </View>
-                <Text style={styles.bookTitle} numberOfLines={2}>
-                  {chat.exchange.book_2.titulo}
-                </Text>
-                <Text style={styles.bookAuthor} numberOfLines={1}>
-                  {chat.exchange.book_2.autor}
-                </Text>
-              </View>
-            </View>
-
-            {/* Acciones según estado */}
-            {chat.exchange.status === 'NEGOTIATING' ? (
-              <View style={styles.exchangeActions}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.btnAccept,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                >
-                  <FontAwesome name="check" size={13} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.btnAcceptText}>Aceptar</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.btnDecline,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <FontAwesome name="times" size={13} color="#6B7280" style={{ marginRight: 6 }} />
-                  <Text style={styles.btnDeclineText}>Desestimar</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View style={styles.acceptedBanner}>
-                <FontAwesome name="check-circle" size={14} color="#10B981" style={{ marginRight: 6 }} />
-                <Text style={styles.acceptedBannerText}>Intercambio aceptado</Text>
-              </View>
+                {/* Acciones según estado */}
+                {chat.exchange.status === 'NEGOTIATING' ? (
+                  <View style={styles.exchangeActions}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.btnAccept,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                    >
+                      <FontAwesome name="check" size={11} color="#fff" style={{ marginRight: 5 }} />
+                      <Text style={styles.btnAcceptText}>Aceptar</Text>
+                    </Pressable>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.btnDecline,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <FontAwesome name="times" size={11} color="#6B7280" style={{ marginRight: 5 }} />
+                      <Text style={styles.btnDeclineText}>Desestimar</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.acceptedBanner}>
+                    <FontAwesome name="check-circle" size={12} color="#10B981" style={{ marginRight: 5 }} />
+                    <Text style={styles.acceptedBannerText}>Intercambio aceptado</Text>
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
@@ -311,7 +353,7 @@ export default function ChatDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2cfc5',
+    backgroundColor: '#fbf7f4',
   },
   centered: {
     flex: 1,
@@ -321,23 +363,42 @@ const styles = StyleSheet.create({
 
   // ── Exchange card ─────────────────────────────────────
   exchangeCard: {
-    backgroundColor: '#ea7656',
+    backgroundColor: '#fbf7f4',
     marginHorizontal: 14,
-    marginVertical: 10,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    marginVertical: 6,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
     shadowRadius: 8,
     elevation: 3,
   },
+  exchangeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    paddingVertical: 2,
+  },
+  exchangeHeaderText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  exchangeHeaderDivider: {
+    height: 1,
+    backgroundColor: '#E9EBF0',
+    marginTop: 8,
+    marginBottom: 2,
+  },
   exchangeBooks: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    marginBottom: 8,
+    marginTop: 6,
     backgroundColor: 'transparent',
   },
   bookItem: {
@@ -346,21 +407,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   bookLabel: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
     color: '#2b2c2d',
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: 0.8,
+    marginBottom: 5,
     textTransform: 'uppercase',
   },
   bookCover: {
-    width: 64,
-    height: 88,
-    borderRadius: 8,
+    width: 46,
+    height: 62,
+    borderRadius: 7,
     backgroundColor: '#FBE9E7',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 5,
     shadowColor: '#e4715f',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
@@ -372,23 +433,23 @@ const styles = StyleSheet.create({
     shadowColor: '#10B981',
   },
   bookTitle: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#2b2c2d',
     textAlign: 'center',
-    lineHeight: 15,
+    lineHeight: 13,
     paddingHorizontal: 4,
   },
   bookAuthor: {
-    fontSize: 10,
+    fontSize: 9,
     color: '#2b2c2d',
     textAlign: 'center',
-    marginTop: 2,
+    marginTop: 1,
     paddingHorizontal: 4,
   },
   exchangeArrow: {
     paddingHorizontal: 8,
-    paddingTop: 40,
+    paddingBottom: 36,
     backgroundColor: 'transparent',
   },
   exchangeActions: {
@@ -400,22 +461,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     backgroundColor: '#10B981',
-    borderRadius: 12,
-    paddingVertical: 11,
+    borderRadius: 10,
+    paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
   btnAcceptText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 12,
   },
   btnDecline: {
     flex: 1,
     flexDirection: 'row',
     backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingVertical: 11,
+    borderRadius: 10,
+    paddingVertical: 8,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -424,18 +485,18 @@ const styles = StyleSheet.create({
   btnDeclineText: {
     color: '#6B7280',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 12,
   },
   acceptedBanner: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#D1FAE5',
-    borderRadius: 10,
-    paddingVertical: 8,
+    borderRadius: 8,
+    paddingVertical: 6,
   },
   acceptedBannerText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#065F46',
   },
@@ -486,7 +547,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#e4715f',
+    backgroundColor: '#fbf7f4',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -550,9 +611,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#f2cfc5',
+    backgroundColor: '#fbf7f4',
     borderTopWidth: 1,
-    borderTopColor: '#f2cfc5',
+    borderTopColor: '#fbf7f4',
   },
   textInput: {
     flex: 1,

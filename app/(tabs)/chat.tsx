@@ -2,11 +2,11 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-    FlatList,
-    Image,
-    Pressable,
-    View as RNView,
-    StyleSheet,
+  FlatList,
+  Image,
+  Pressable,
+  View as RNView,
+  StyleSheet,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
@@ -166,7 +166,7 @@ export default function ChatListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f2cfc5',
+    backgroundColor: '#fbf7f4',
   },
   listContent: {
     paddingVertical: 6,
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: '#f2cfc5',
+    backgroundColor: '#fbf7f4',
   },
   chatItemPressed: {
     backgroundColor: '#e8af9f',
