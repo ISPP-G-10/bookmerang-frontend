@@ -11,8 +11,10 @@ import React from 'react';
 import { Dimensions, View } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.85;
-const CARD_HEIGHT = CARD_WIDTH * 1.6;
+const IS_MOBILE = SCREEN_WIDTH < 768;
+
+const CARD_WIDTH = IS_MOBILE ? SCREEN_WIDTH * 0.85 : Math.min(400, SCREEN_WIDTH * 0.45);
+const CARD_HEIGHT = IS_MOBILE ? CARD_WIDTH * 1.6 : CARD_WIDTH * 1.4;
 
 const CONDITION_LABELS: Record<BookCondition, string> = {
   LIKE_NEW: 'Como nuevo',
@@ -30,16 +32,18 @@ interface BookCardProps {
 export default function BookCard({ card, onTap }: BookCardProps) {
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;
-  const firstGenre = book.genres[0]?.name;
 
   return (
     <Card
       variant="elevated"
       size="md"
       className="overflow-hidden rounded-3xl p-0 shadow-hard-2 bg-white"
-      style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}
+      style={{ 
+        width: CARD_WIDTH, 
+        height: CARD_HEIGHT,
+        marginTop: IS_MOBILE ? 0 : -100
+      }}
     >
-      {/* Imagen - Ocupa ~70% de la altura */}
       <Box style={{ height: '75%', width: '100%' }}>
         <Image
           source={{ uri: heroPhoto }}
@@ -49,7 +53,6 @@ export default function BookCard({ card, onTap }: BookCardProps) {
           resizeMode="cover"
         />
 
-        {/* Distancia + Condición en Cabecera */}
         <HStack className="absolute top-4 left-4 right-4 justify-between">
           <Badge
             action="info"
@@ -77,12 +80,10 @@ export default function BookCard({ card, onTap }: BookCardProps) {
         </HStack>
       </Box>
 
-      {/* Contenido inferior sobre fondo blanco sólido - Ocupa ~30% */}
       <VStack 
         className="bg-white p-5 gap-2 rounded-b-3xl" 
         style={{ height: '25%' }}
       >
-        {/* Título */}
         <Heading
           size="lg"
           className="text-[#4A3B31] font-bold leading-tight"
@@ -91,14 +92,11 @@ export default function BookCard({ card, onTap }: BookCardProps) {
           {book.titulo ?? 'Sin título'}
         </Heading>
 
-        {/* Autor */}
         <Text size="sm" className="text-[#8B7355] font-medium">
           por {book.autor ?? 'Autor desconocido'}
         </Text>
 
-        {/* Usuario y Géneros - En la misma fila */}
         <HStack className="items-center justify-between gap-2 mt-auto">
-          {/* Usuario a la izquierda */}
           <HStack className="items-center gap-2 flex-shrink-0">
             <View className="w-6 h-6 rounded-full bg-[#E2725B] overflow-hidden border border-white shadow-sm">
               {owner.fotoPerfilUrl ? (
@@ -122,7 +120,6 @@ export default function BookCard({ card, onTap }: BookCardProps) {
             </Text>
           </HStack>
 
-          {/* Géneros a la derecha */}
           <HStack className="gap-1.5 flex-wrap justify-end flex-1">
             {book.genres.slice(0, 2).map((genre) => (
               <Badge
