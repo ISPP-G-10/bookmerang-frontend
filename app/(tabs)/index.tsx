@@ -1,14 +1,28 @@
-import { StyleSheet, Button } from "react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Button, StyleSheet } from "react-native";
 
 import EditScreenInfo from "@/components/EditScreenInfo";
 import { Text, View } from "@/components/Themed";
+import { router } from "expo-router";
+import supabase from "../../lib/supabase";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export default function TabOneScreen() {
   const [status, setStatus] = useState<string>("sin comprobar");
   const [loading, setLoading] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        setLoggedIn(!!data?.session);
+      } catch (e) {
+        setLoggedIn(false);
+      }
+    })();
+  }, []);
 
   const checkStatus = async () => {
     try {
@@ -27,9 +41,7 @@ export default function TabOneScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Bookmerang1</Text>
 
-      <Text style={styles.status}>
-        Backend status: {status}
-      </Text>
+      <Text style={styles.status}>Backend status: {status}</Text>
 
       <Button
         title={loading ? "Comprobando..." : "Comprobar backend"}
@@ -37,11 +49,11 @@ export default function TabOneScreen() {
         disabled={loading}
       />
 
-      <View
-        style={styles.separator}
-        lightColor="#eee"
-        darkColor="rgba(255,255,255,0.1)"
-      />
+      {loggedIn && (
+        <Button title="Ver mi perfil" onPress={() => router.push("/profile")} />
+      )}
+
+      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
 
       <EditScreenInfo path="app/(tabs)/index.tsx" />
     </View>
