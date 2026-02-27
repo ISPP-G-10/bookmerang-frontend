@@ -6,15 +6,11 @@ import { HStack } from '@/components/ui/hstack';
 import { Image } from '@/components/ui/image';
 import { Text } from '@/components/ui/text';
 import { VStack } from '@/components/ui/vstack';
+import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
+import { useDeviceType } from '@/hooks/useDeviceType';
 import type { BookCondition, MatcherCard } from '@/types/matcher';
-import React from 'react';
-import { Dimensions, View } from 'react-native';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IS_MOBILE = SCREEN_WIDTH < 768;
-
-const CARD_WIDTH = IS_MOBILE ? SCREEN_WIDTH * 0.85 : Math.min(400, SCREEN_WIDTH * 0.45);
-const CARD_HEIGHT = IS_MOBILE ? CARD_WIDTH * 1.6 : CARD_WIDTH * 1.4;
+import React, { useMemo } from 'react';
+import { View, useWindowDimensions } from 'react-native';
 
 const CONDITION_LABELS: Record<BookCondition, string> = {
   LIKE_NEW: 'Como nuevo',
@@ -30,6 +26,23 @@ interface BookCardProps {
 }
 
 export default function BookCard({ card, onTap }: BookCardProps) {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const { deviceType, orientation } = useDeviceType();
+
+  const { cardWidth, cardHeight, cardMarginTop } = useMemo(() => {
+    const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
+    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
+    
+    const width = SCREEN_WIDTH * sizeConfig.widthRatio;
+    const height = width * sizeConfig.heightRatio;
+
+    return {
+      cardWidth: width,
+      cardHeight: height,
+      cardMarginTop: layoutConfig.cardMarginTop,
+    };
+  }, [SCREEN_WIDTH, deviceType, orientation]);
+
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;
 
@@ -39,9 +52,9 @@ export default function BookCard({ card, onTap }: BookCardProps) {
       size="md"
       className="overflow-hidden rounded-3xl p-0 shadow-hard-2 bg-white"
       style={{ 
-        width: CARD_WIDTH, 
-        height: CARD_HEIGHT,
-        marginTop: IS_MOBILE ? 0 : -100
+        width: cardWidth, 
+        height: cardHeight,
+        marginTop: cardMarginTop,
       }}
     >
       <Box style={{ height: '75%', width: '100%' }}>
