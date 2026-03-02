@@ -30,7 +30,7 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace("/(tabs)" as any);
+    router.replace("/(tabs)/matcher" as any);
   };
 
   return (

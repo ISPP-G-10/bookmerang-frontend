@@ -56,7 +56,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    router.replace("/(tabs)" as any);
+    router.replace("/(tabs)/matcher" as any);
   };
 
   return (
