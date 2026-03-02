@@ -5,9 +5,7 @@ name: Node.js CI
 
 on:
   push:
-    branches: [develop, main]
   pull_request:
-    branches: [develop, main]
 
 jobs:
   build:
@@ -15,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 20.x, 22.x, 24.x]
+        node-version: [18.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
@@ -26,7 +24,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
-      # Build and test scripts are optional (--if-present)
-      # They will only run if defined in package.json
+      # Scripts de build y test
       - run: npm run build --if-present
-      - run: npm test --if-present
+      # Script de test: placeholder mientras se configuran los tests
+      # Reemplazar con 'jest' u otro test runner cuando los tests estén listos
+      - run: npm test

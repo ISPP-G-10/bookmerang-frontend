@@ -9,7 +9,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
@@ -24,8 +24,13 @@ export default function RegisterScreen() {
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(false);
-  const [availableGenres, setAvailableGenres] = useState<Array<{ id: number; name: string }>>([]);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [availableGenres, setAvailableGenres] = useState<
+    Array<{ id: number; name: string }>
+  >([]);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   const handleRegister = async () => {
     setLoading(true);
@@ -80,14 +85,19 @@ export default function RegisterScreen() {
 
     // 3. Fetch genres and get location
     try {
-      const { data: { session: newSession } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/userpreferences/genres`, {
-        headers: newSession?.access_token
-          ? { Authorization: `Bearer ${newSession.access_token}` }
-          : {},
-      });
+      const {
+        data: { session: newSession },
+      } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/userpreferences/genres`,
+        {
+          headers: newSession?.access_token
+            ? { Authorization: `Bearer ${newSession.access_token}` }
+            : {},
+        },
+      );
       console.log("Genres response status:", res.status);
-      
+
       if (res.ok) {
         const genres = await res.json();
         console.log("Genres loaded:", genres);
@@ -116,7 +126,9 @@ export default function RegisterScreen() {
             longitude: location.coords.longitude,
           });
         } catch (locErr) {
-          console.warn("Could not get current position, using default location");
+          console.warn(
+            "Could not get current position, using default location",
+          );
         }
       }
     } catch (permErr) {
@@ -139,7 +151,9 @@ export default function RegisterScreen() {
       console.log("Preferences:", preferences);
 
       // Get the current session to get the JWT token
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         console.error("No session found");
         setPreferencesError("No autorizado");
@@ -204,7 +218,7 @@ export default function RegisterScreen() {
         body,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
       });
 
@@ -230,6 +244,7 @@ export default function RegisterScreen() {
   const handleSkipPreferences = () => {
     setShowPreferences(false);
     router.replace("/(tabs)" as any);
+    router.replace("/(tabs)/matcher" as any);
   };
 
   return (

@@ -6,7 +6,11 @@ module.exports = {
   ],
   presets: [require("nativewind/preset")],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        outfit: ['Outfit_400Regular', 'Outfit_700Bold'],
+      },
+    },
   },
   plugins: [],
 }
