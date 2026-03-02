@@ -1,16 +1,18 @@
-import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
+import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import { MOCK_CARDS } from '@/components/matcher/mockData';
+import TinderSwiper, { TinderSwiperRef } from '@/components/matcher/TinderSwiper';
 import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 export default function MatcherScreen() {
   const swiperRef = useRef<TinderSwiperRef>(null);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const { deviceType, orientation, isMobile } = useDeviceType();
+  const [selectedCard, setSelectedCard] = useState<MatcherCard | null>(null);
 
   const styles = useMemo(() => {
     const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
@@ -59,19 +61,33 @@ export default function MatcherScreen() {
   }, [SCREEN_WIDTH, SCREEN_HEIGHT, deviceType, orientation, isMobile]);
 
   const iconSize = useMemo(() => {
-    return LAYOUT_CONFIG[deviceType][orientation].iconSize;
+    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
+    return {
+      dislike: layoutConfig.dislikeButtonSize * 0.5,
+      like: layoutConfig.likeButtonSize * 0.5,
+    };
   }, [deviceType, orientation]);
 
   const handleSwipeLeft = (card: MatcherCard) => {
-    console.log('NOPE:', card.book.titulo);
+    console.log('Dislike:', card.book.titulo);
   };
 
   const handleSwipeRight = (card: MatcherCard) => {
-    console.log('LIKE:', card.book.titulo);
+    console.log('Like:', card.book.titulo);
   };
 
   const handleTap = (card: MatcherCard) => {
-    console.log('TAP:', card.book.titulo);
+    setSelectedCard(card);
+  };
+
+  const handleCloseDetails = () => {
+    setSelectedCard(null);
+  };
+
+  const handleChat = (card: MatcherCard) => {
+    console.log('Chat con:', card.book.titulo);
+    setSelectedCard(null);
+    // Aquí iría la navegación al chat
   };
 
   return (
@@ -89,16 +105,23 @@ export default function MatcherScreen() {
           onPress={() => swiperRef.current?.swipeLeft()}
           style={[styles.actionButton, styles.dislikeButton]}
         >
-          <Ionicons name="close" size={iconSize} color="#ef4444" />
+          <Ionicons name="close" size={iconSize.dislike} color="#E2725B" />
         </Pressable>
 
         <Pressable
           onPress={() => swiperRef.current?.swipeRight()}
           style={[styles.actionButton, styles.likeButton]}
         >
-          <Ionicons name="heart" size={iconSize} color="#fff" />
+          <Ionicons name="heart" size={iconSize.like} color="#fff" />
         </Pressable>
       </View>
+
+      <BookDetailsScreen
+        visible={!!selectedCard}
+        card={selectedCard}
+        onClose={handleCloseDetails}
+        onChat={handleChat}
+      />
     </View>
   );
 }

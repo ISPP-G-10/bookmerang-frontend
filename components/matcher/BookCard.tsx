@@ -10,7 +10,7 @@ import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import type { BookCondition, MatcherCard } from '@/types/matcher';
 import React, { useMemo } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { View, useColorScheme, useWindowDimensions } from 'react-native';
 
 const CONDITION_LABELS: Record<BookCondition, string> = {
   LIKE_NEW: 'Como nuevo',
@@ -28,6 +28,8 @@ interface BookCardProps {
 export default function BookCard({ card, onTap }: BookCardProps) {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const { deviceType, orientation } = useDeviceType();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const { cardWidth, cardHeight, cardMarginTop } = useMemo(() => {
     const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
@@ -55,6 +57,8 @@ export default function BookCard({ card, onTap }: BookCardProps) {
         width: cardWidth, 
         height: cardHeight,
         marginTop: cardMarginTop,
+        borderWidth: 1,
+        borderColor: isDark ? '#3A3A3C' : '#E8DFD6',
       }}
     >
       <Box style={{ height: '75%', width: '100%' }}>

@@ -6,12 +6,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   interpolate,
   interpolateColor,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
 import BookCard from './BookCard';
 
 const SWIPE_THRESHOLD_RATIO = 0.3;
@@ -72,7 +72,7 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
         translateX.value = withTiming(targetX, { duration: 500 }, (finished) => {
           if (finished) {
-            scheduleOnRN(goToNext, direction);
+            runOnJS(goToNext)(direction);
           }
         });
         translateY.value = withTiming(0, { duration: 500 });
@@ -100,7 +100,7 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
           translateX.value = withTiming(targetX, { duration: 300 }, (finished) => {
             if (finished) {
-              scheduleOnRN(goToNext, direction);
+              runOnJS(goToNext)(direction);
             }
           });
           translateY.value = withTiming(e.translationY * 1.5, { duration: 300 });
@@ -114,8 +114,8 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
     const tapGesture = Gesture.Tap().onEnd(() => {
       const card = cards[currentIndex % cards.length];
-      if (card) {
-        scheduleOnRN(onTap ?? (() => {}), card);
+      if (card && onTap) {
+        runOnJS(onTap)(card);
       }
     });
 
@@ -131,7 +131,7 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       const borderWidth = interpolate(
         Math.abs(translateX.value),
         [0, SWIPE_THRESHOLD],
-        [0, 4],
+        [0, 8],
         'clamp'
       );
 
