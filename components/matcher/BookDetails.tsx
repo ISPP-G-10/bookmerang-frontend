@@ -47,7 +47,7 @@ export function BookDetailsScreen({
   const bgColor = isDark ? '#1C1C1E' : '#FAF7F4';
   const cardBgColor = isDark ? '#2C2C2E' : '#FFFFFF';
   const borderColor = isDark ? '#3A3A3C' : '#F3E9E0';
-  const textPrimary = isDark ? '#FFFFFF' : '#4A3B31';
+  const textPrimary = isDark ? '#fdfbf7' : '#3e2723';
   const textSecondary = isDark ? '#AEAEB2' : '#8B7355';
 
   return (
@@ -67,26 +67,26 @@ export function BookDetailsScreen({
               resizeMode="cover"
             />
           ) : (
-            <View style={[styles.heroImage, { backgroundColor: '#E2725B', alignItems: 'center', justifyContent: 'center' }]}>
-              <Ionicons name="book" size={80} color="#fff" />
+            <View style={[styles.heroImage, { backgroundColor: '#e07a5f', alignItems: 'center', justifyContent: 'center' }]}>
+              <Ionicons name="book" size={80} color="#fdfbf7" />
             </View>
           )}
 
           {/* Back Button */}
           <Pressable onPress={onClose} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+            <Ionicons name="arrow-back" size={24} color="#fdfbf7" />
           </Pressable>
 
           {/* Action Buttons (Share & Report) */}
           <HStack style={styles.topActions} className="gap-2">
             <Pressable style={styles.iconButton}>
-              <Ionicons name="share-outline" size={20} color="#fff" />
+              <Ionicons name="share-outline" size={20} color="#fdfbf7" />
             </Pressable>
             <Pressable
               onPress={() => setShowReportMenu(!showReportMenu)}
               style={styles.iconButton}
             >
-              <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
+              <Ionicons name="ellipsis-vertical" size={20} color="#fdfbf7" />
             </Pressable>
           </HStack>
 
@@ -95,7 +95,7 @@ export function BookDetailsScreen({
             <View style={[styles.reportMenu, { backgroundColor: cardBgColor, borderColor }]}>
               <HStack style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: borderColor, alignItems: 'center', justifyContent: 'space-between' }}>
                 <HStack className="items-center gap-2">
-                  <Ionicons name="flag-outline" size={14} color="#E2725B" />
+                  <Ionicons name="flag-outline" size={14} color="#e07a5f" />
                   <Text style={{ fontSize: 14, fontWeight: 'bold', color: textPrimary }}>
                     Reportar libro
                   </Text>
@@ -139,7 +139,7 @@ export function BookDetailsScreen({
           <View style={{ padding: 16, backgroundColor: cardBgColor, borderRadius: 16, borderWidth: 1, borderColor }}>
             <HStack className="items-center justify-between">
               <HStack className="items-center gap-3">
-                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#E2725B', overflow: 'hidden', borderWidth: 2, borderColor: bgColor }}>
+                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#e07a5f', overflow: 'hidden', borderWidth: 2, borderColor: bgColor }}>
                   {owner.fotoPerfilUrl ? (
                     <RNImage
                       source={{ uri: owner.fotoPerfilUrl }}
@@ -147,7 +147,7 @@ export function BookDetailsScreen({
                       resizeMode="cover"
                     />
                   ) : (
-                    <View className="w-full h-full bg-[#E2725B] items-center justify-center">
+                    <View className="w-full h-full bg-[#e07a5f] items-center justify-center">
                       <Text className="text-white text-lg font-black">
                         {owner.username.charAt(0).toUpperCase()}
                       </Text>
@@ -159,7 +159,7 @@ export function BookDetailsScreen({
                     {owner.username}
                   </Text>
                   <HStack className="items-center gap-1">
-                    <Ionicons name="location-outline" size={12} color="#E2725B" />
+                    <Ionicons name="location-outline" size={12} color="#e07a5f" />
                     <Text style={{ fontSize: 12, color: textSecondary }}>
                       A {distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${Math.round(distanceKm)} km`} de ti
                     </Text>
@@ -167,7 +167,7 @@ export function BookDetailsScreen({
                 </VStack>
               </HStack>
               <Pressable>
-                <Text className="text-[#E2725B] font-bold text-sm">
+                <Text className="text-[#e07a5f] font-bold text-sm">
                   Ver perfil
                 </Text>
               </Pressable>
@@ -214,7 +214,7 @@ export function BookDetailsScreen({
           {book.observaciones && (
             <VStack>
               <HStack className="items-center gap-2" style={{ marginBottom: 8 }}>
-                <Ionicons name="information-circle-outline" size={18} color="#E2725B" />
+                <Ionicons name="information-circle-outline" size={18} color="#e07a5f" />
                 <Heading size="md" style={{ color: textPrimary, fontWeight: '900' }}>
                   Sobre este libro
                 </Heading>
@@ -234,11 +234,11 @@ export function BookDetailsScreen({
         <View style={styles.actionButtonContainer}>
           <Pressable
             onPress={() => onChat?.(card)}
-            className="w-full bg-[#E2725B] py-4 rounded-2xl items-center"
+            className="w-full bg-[#e07a5f] py-4 rounded-2xl items-center"
             style={styles.actionButton}
           >
             <HStack className="items-center gap-2">
-              <Ionicons name="chatbubble-outline" size={22} color="#fff" />
+              <Ionicons name="chatbubble-outline" size={22} color="#fdfbf7" />
               <Text className="text-white font-black text-base">
                 Solicitar intercambio
               </Text>
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   actionButton: {
-    shadowColor: '#E2725B',
+    shadowColor: '#e07a5f',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

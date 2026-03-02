@@ -50,12 +50,12 @@ export default function MatcherScreen() {
       dislikeButton: {
         width: layoutConfig.dislikeButtonSize,
         height: layoutConfig.dislikeButtonSize,
-        backgroundColor: '#fff',
+        backgroundColor: '#fdfbf7',
       },
       likeButton: {
         width: layoutConfig.likeButtonSize,
         height: layoutConfig.likeButtonSize,
-        backgroundColor: '#E2725B',
+        backgroundColor: '#e07a5f',
       },
     });
   }, [SCREEN_WIDTH, SCREEN_HEIGHT, deviceType, orientation, isMobile]);
@@ -105,14 +105,14 @@ export default function MatcherScreen() {
           onPress={() => swiperRef.current?.swipeLeft()}
           style={[styles.actionButton, styles.dislikeButton]}
         >
-          <Ionicons name="close" size={iconSize.dislike} color="#E2725B" />
+          <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
         </Pressable>
 
         <Pressable
           onPress={() => swiperRef.current?.swipeRight()}
           style={[styles.actionButton, styles.likeButton]}
         >
-          <Ionicons name="heart" size={iconSize.like} color="#fff" />
+          <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
         </Pressable>
       </View>
 

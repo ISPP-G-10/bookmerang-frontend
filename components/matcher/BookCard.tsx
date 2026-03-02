@@ -58,7 +58,7 @@ export default function BookCard({ card, onTap }: BookCardProps) {
         height: cardHeight,
         marginTop: cardMarginTop,
         borderWidth: 1,
-        borderColor: isDark ? '#3A3A3C' : '#E8DFD6',
+        borderColor: isDark ? '#3e2723' : '#fdfbf7',
       }}
     >
       <Box style={{ height: '75%', width: '100%' }}>
@@ -87,7 +87,7 @@ export default function BookCard({ card, onTap }: BookCardProps) {
             <Badge
               action="success"
               variant="solid"
-              className="rounded-full bg-[#E2725B] border-0 px-3 py-1.5"
+              className="rounded-full bg-[#e07a5f] border-0 px-3 py-1.5"
             >
               <BadgeText className="text-white text-xs normal-case font-medium">
                 {CONDITION_LABELS[book.condition]}
@@ -98,24 +98,24 @@ export default function BookCard({ card, onTap }: BookCardProps) {
       </Box>
 
       <VStack 
-        className="bg-white p-5 gap-2 rounded-b-3xl" 
+        className="bg-[#fdfbf7] p-5 gap-2 rounded-b-3xl" 
         style={{ height: '25%' }}
       >
         <Heading
           size="lg"
-          className="text-[#4A3B31] font-bold leading-tight"
+          className="text-[#3e2723] font-bold leading-tight"
           numberOfLines={2}
         >
           {book.titulo ?? 'Sin título'}
         </Heading>
 
-        <Text size="sm" className="text-[#8B7355] font-medium">
+        <Text size="sm" className="text-[#3e2723] font-medium">
           por {book.autor ?? 'Autor desconocido'}
         </Text>
 
         <HStack className="items-center justify-between gap-2 mt-auto">
           <HStack className="items-center gap-2 flex-shrink-0">
-            <View className="w-6 h-6 rounded-full bg-[#E2725B] overflow-hidden border border-white shadow-sm">
+            <View className="w-6 h-6 rounded-full bg-[#e07a5f] overflow-hidden border border-white shadow-sm">
               {owner.fotoPerfilUrl ? (
                 <Image
                   source={{ uri: owner.fotoPerfilUrl }}
@@ -125,14 +125,14 @@ export default function BookCard({ card, onTap }: BookCardProps) {
                   resizeMode="cover"
                 />
               ) : (
-                <View className="w-full h-full bg-[#E2725B] items-center justify-center">
+                <View className="w-full h-full bg-[#e07a5f] items-center justify-center">
                   <Text className="text-white text-[10px] font-bold">
                     {owner.username.charAt(0).toUpperCase()}
                   </Text>
                 </View>
               )}
             </View>
-            <Text size="xs" className="text-[#4A3B31] font-bold" numberOfLines={1}>
+            <Text size="xs" className="text-[#3e2723] font-bold" numberOfLines={1}>
               {owner.username}
             </Text>
           </HStack>
@@ -143,9 +143,9 @@ export default function BookCard({ card, onTap }: BookCardProps) {
                 key={genre.id}
                 action="muted"
                 variant="solid"
-                className="rounded-full bg-[#F3E9E0] border-0 px-2.5 py-1"
+                className="rounded-full bg-[#f2cc8f] border-0 px-2.5 py-1"
               >
-                <BadgeText className="text-[#4A3B31] text-[10px] normal-case font-medium">
+                <BadgeText className="text-[#3e2723] text-[10px] normal-case font-medium">
                   {genre.name}
                 </BadgeText>
               </Badge>
