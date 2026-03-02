@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
 
 export default function ProfileScreen() {
@@ -43,6 +44,35 @@ export default function ProfileScreen() {
   const [preferencesLoading, setPreferencesLoading] = useState(false);
   const [availableGenres, setAvailableGenres] = useState<Array<{ id: number; name: string }>>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
+
+  // Reverse-geocode coordinates to a human-readable city, country label (frontend fallback)
+  const reverseGeocode = async (lat: number, lon: number) => {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&accept-language=es`;
+      const res = await fetch(url, {
+        headers: {
+          // Provide a descriptive user-agent per Nominatim usage policy
+          "User-Agent": "BookmerangApp/1.0 (contact: peter@example.com)",
+        },
+      });
+      if (!res.ok) return "";
+      const json = await res.json();
+      const addr = json.address ?? {};
+      let city = addr.city || addr.town || addr.village || addr.hamlet || "";
+      const country = addr.country || "";
+      if (city && country) return `${city}, ${country}`;
+      if (country) return country;
+      return "";
+    } catch (err) {
+      return "";
+    }
+  };
+
+  const reverseGeocodeAndSet = async (lat: number, lon: number) => {
+    const label = await reverseGeocode(lat, lon);
+    if (label) setLocationLabel(label);
+  };
 
   useEffect(() => {
     (async () => {
@@ -106,11 +136,9 @@ export default function ProfileScreen() {
         console.warn("Location permission denied or unavailable");
       }
 
-      // Fetch profile from your backend `base_users` via API
+      // Fetch profile from your backend `base_users` via API (AuthController.GetPerfil -> /api/auth/perfil)
       try {
-        const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/auth/me`, {
-          headers: { "Content-Type": "application/json" },
-        });
+        const res = await apiRequest("/auth/perfil", { method: "GET" });
 
         if (res.ok) {
           const json = await res.json();
@@ -119,12 +147,23 @@ export default function ProfileScreen() {
           if (json.preferences) {
             setPreferences(json.preferences);
           }
+          // Try frontend reverse-geocoding using numeric lat/lon fields if backend doesn't provide a location string
+          const maybeLat = json.latitud ?? json.Latitud ?? json.latitude ?? json.Latitude ?? json.lat ?? json.Lat;
+          const maybeLon = json.longitud ?? json.Longitud ?? json.longitude ?? json.Longitude ?? json.lon ?? json.Lon ?? json.Long;
+          const parsedLat = typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
+          const parsedLon = typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
+          if (parsedLat && parsedLon && !isNaN(parsedLat) && !isNaN(parsedLon)) {
+            reverseGeocodeAndSet(parsedLat, parsedLon);
+          } else if (json.location) {
+            setLocationLabel(json.location);
+          }
         } else {
           // fallback: try Supabase user metadata
           const { data: { user: u } = {} } = await supabase.auth.getUser();
           setProfile({ email: u?.email, name: u?.user_metadata?.name ?? "", username: u?.user_metadata?.username ?? "" });
         }
       } catch (err: any) {
+        console.error("Error fetching profile via API:", err);
         const { data: { user: u } = {} } = await supabase.auth.getUser();
         setProfile({ email: u?.email, name: u?.user_metadata?.name ?? "", username: u?.user_metadata?.username ?? "" });
       }
@@ -341,8 +380,8 @@ export default function ProfileScreen() {
           </View>
 
           <Text className="text-2xl font-bold text-amber-900 mt-4">{profile?.name ?? "—"}</Text>
-          <Text className="text-amber-700 mt-1">{profile?.username ? `@${profile.username}` : "—"}</Text>
-          <Text className="text-gray-500 text-sm mt-1">📍 {profile?.location ?? "Madrid, España"}</Text>
+          <Text className="text-amber-700 mt-1">{profile?.username ? `${profile.username}` : "—"}</Text>
+          <Text className="text-gray-500 text-sm mt-1">📍 {locationLabel ?? profile?.location ?? "Madrid, España"}</Text>
         </View>
       </View>
 
