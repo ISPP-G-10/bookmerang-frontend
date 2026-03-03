@@ -489,6 +489,11 @@ function ChangeEmailModal({
   };
 
   return (
+    /**TODO: mostrar el email actual real, no el nuevo 
+        <Text style={{ fontSize: 13, color: "#8B7355", marginBottom: 16 }}>
+          Email actual: {newEmail}
+        </Text>*/
+
     <FloatingModal visible={visible} onClose={onClose}>
       <View style={{ padding: 24 }}>
         <Text
@@ -500,9 +505,6 @@ function ChangeEmailModal({
           }}
         >
           Cambiar Email
-        </Text>
-        <Text style={{ fontSize: 13, color: "#8B7355", marginBottom: 16 }}>
-          Email actual: {currentEmail}
         </Text>
 
         {success ? (
