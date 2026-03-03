@@ -18,7 +18,7 @@ import "../global.css";
 export { ErrorBoundary } from "expo-router";
 
 export const unstable_settings = {
-  initialRouteName: "(tabs)",
+  initialRouteName: "(tabs)/matcher",
 };
 
 SplashScreen.preventAutoHideAsync();

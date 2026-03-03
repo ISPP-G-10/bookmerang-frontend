@@ -14,36 +14,92 @@ import {
 import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
 
+type Genre = { id: number; name: string };
+
+function bookLengthToExtension(
+  bookLength: string[],
+): "SHORT" | "MEDIUM" | "LONG" {
+  if (!bookLength || bookLength.length === 0) return "MEDIUM";
+  if (bookLength.length === 3) return "MEDIUM";
+  if (bookLength.includes("0-200")) return "SHORT";
+  if (bookLength.includes("400+")) return "LONG";
+  return "MEDIUM";
+}
+
+function mapGenresToIds(
+  selectedNames: string[],
+  availableGenres: Genre[],
+): number[] {
+  return selectedNames
+    .map((name) => availableGenres.find((g) => g.name === name)?.id)
+    .filter((id): id is number => id !== undefined);
+}
+
 export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(false);
-  const [availableGenres, setAvailableGenres] = useState<
-    Array<{ id: number; name: string }>
-  >([]);
+
+  const [availableGenres, setAvailableGenres] = useState<Genre[]>([]);
   const [userLocation, setUserLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
 
+  const fetchGenres = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/genres`, {
+        headers: session?.access_token
+          ? { Authorization: `Bearer ${session.access_token}` }
+          : {},
+      });
+
+      if (!res.ok) return;
+
+      const genres = await res.json();
+      if (Array.isArray(genres)) setAvailableGenres(genres);
+    } catch {
+      // silencioso: si falla, el modal tiene fallback interno
+    }
+  };
+
+  const getUserLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+    } catch {
+      // silencioso: se usará ubicación por defecto al guardar preferencias
+    }
+  };
+
   const handleRegister = async () => {
     setLoading(true);
     setError("");
 
-    // 1. Crear cuenta en Supabase
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    // 1) Crear cuenta en Supabase
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          display_name: name,
-        },
+        data: { display_name: name },
       },
     });
 
@@ -53,7 +109,7 @@ export default function RegisterScreen() {
       return;
     }
 
-    // 2. Guardar en base_users
+    // 2) Guardar en base_users (backend)
     try {
       const response = await apiRequest("/api/auth/register", {
         method: "POST",
@@ -61,7 +117,7 @@ export default function RegisterScreen() {
           username,
           name,
           profilePhoto: "",
-          userType: 2, // USER
+          userType: 2,
           latitud: 37.3886,
           longitud: -5.9823,
         }),
@@ -69,73 +125,23 @@ export default function RegisterScreen() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("Register error:", errorText);
         setError("Error al guardar el perfil: " + errorText);
         setLoading(false);
         return;
       }
     } catch (err: any) {
-      console.error("Register request error:", err);
-      setError("Error en la solicitud: " + err.message);
+      setError("Error en la solicitud: " + (err?.message ?? "desconocido"));
       setLoading(false);
       return;
     }
 
     setLoading(false);
 
-    // 3. Fetch genres and get location
-    try {
-      const {
-        data: { session: newSession },
-      } = await supabase.auth.getSession();
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/userpreferences/genres`,
-        {
-          headers: newSession?.access_token
-            ? { Authorization: `Bearer ${newSession.access_token}` }
-            : {},
-        },
-      );
-      console.log("Genres response status:", res.status);
+    // 3) Preparar modal: géneros + ubicación (no bloqueante, pero mejor en orden)
+    await fetchGenres();
+    await getUserLocation();
 
-      if (res.ok) {
-        const genres = await res.json();
-        console.log("Genres loaded:", genres);
-        console.log("Genres type:", typeof genres);
-        console.log("Genres is array?", Array.isArray(genres));
-        if (Array.isArray(genres) && genres.length > 0) {
-          console.log("First genre:", genres[0]);
-        }
-        setAvailableGenres(genres);
-      } else {
-        console.error("Failed to fetch genres, status:", res.status);
-        const errorText = await res.text();
-        console.error("Error response:", errorText);
-      }
-    } catch (err) {
-      console.error("Error fetching genres:", err);
-    }
-
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === "granted") {
-        try {
-          const location = await Location.getCurrentPositionAsync({});
-          setUserLocation({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
-        } catch (locErr) {
-          console.warn(
-            "Could not get current position, using default location",
-          );
-        }
-      }
-    } catch (permErr) {
-      console.warn("Location permission denied or unavailable");
-    }
-
-    // 4. Mostrar modal de preferencias
+    // 4) Mostrar modal
     setShowPreferences(true);
   };
 
@@ -146,95 +152,56 @@ export default function RegisterScreen() {
   }) => {
     setPreferencesLoading(true);
     setPreferencesError("");
-    try {
-      console.log("=== Starting save preferences ===");
-      console.log("Preferences:", preferences);
 
-      // Get the current session to get the JWT token
+    try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
       if (!session) {
-        console.error("No session found");
         setPreferencesError("No autorizado");
-        setPreferencesLoading(false);
         return;
       }
 
-      console.log("Session user ID:", session.user.id);
+      const latitude = userLocation?.latitude ?? 37.3886;
+      const longitude = userLocation?.longitude ?? -5.9823;
 
-      // Get user ID from session
-      const userId = session.user.id;
-
-      // Use location from state or default coordinates
-      const latitude = userLocation?.latitude || 37.3886;
-      const longitude = userLocation?.longitude || -5.9823;
-
-      // Use distanceKm directly from the input
       const radioKm = preferences.distanceKm || 10;
 
-      // Map genre names to IDs using availableGenres from the API
-      const genreIds: number[] = preferences.genres
-        .map((name) => availableGenres.find((g) => g.name === name)?.id)
-        .filter((id): id is number => id !== undefined);
-
-      console.log("Mapped genreIds:", genreIds, "RadioKm:", radioKm);
-
-      if (genreIds.length === 0 && preferences.genres.length > 0) {
+      const genreIds = mapGenresToIds(preferences.genres, availableGenres);
+      if (preferences.genres.length > 0 && genreIds.length === 0) {
         setPreferencesError("Error mapeando géneros. Intenta de nuevo.");
-        setPreferencesLoading(false);
         return;
       }
 
-      // Map book lengths to extension
-      let extension = "MEDIUM"; // default
-      if (preferences.bookLength.length > 0) {
-        const lengths = preferences.bookLength;
-        if (lengths.length === 3) {
-          extension = "MEDIUM";
-        } else if (lengths.includes("0-200")) {
-          extension = "SHORT";
-        } else if (lengths.includes("400+")) {
-          extension = "LONG";
-        }
-      }
+      const extension = bookLengthToExtension(preferences.bookLength);
 
-      console.log("Mapped extension:", extension);
-
-      const apiUrl = `${process.env.EXPO_PUBLIC_API_URL}/api/users/${userId}/preferences`;
-      const body = JSON.stringify({
-        latitud: latitude,
-        longitud: longitude,
-        radioKm,
-        extension,
-        genreIds,
-      });
-
-      console.log("API URL:", apiUrl);
-      console.log("Request body:", body);
+      const apiUrl = `${process.env.EXPO_PUBLIC_API_URL}/api/users/${session.user.id}/preferences`;
 
       const res = await fetch(apiUrl, {
         method: "PUT",
-        body,
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
+        body: JSON.stringify({
+          latitud: latitude,
+          longitud: longitude,
+          radioKm,
+          extension,
+          genreIds,
+        }),
       });
 
-      console.log("Response status:", res.status);
-
       if (res.ok) {
-        console.log("✓ Preferences saved successfully");
         setShowPreferences(false);
-        router.replace("/(tabs)" as any);
-      } else {
-        const errorData = await res.text();
-        console.error("✗ Error response:", errorData);
-        setPreferencesError(errorData || "Error al guardar preferencias");
+        router.replace("/(tabs)/matcher" as any);
+        return;
       }
+
+      const errorData = await res.text();
+      setPreferencesError(errorData || "Error al guardar preferencias");
     } catch (err: any) {
-      console.error("✗ Exception saving preferences:", err);
       setPreferencesError(err?.message || "Error al guardar preferencias");
     } finally {
       setPreferencesLoading(false);
@@ -243,7 +210,6 @@ export default function RegisterScreen() {
 
   const handleSkipPreferences = () => {
     setShowPreferences(false);
-    router.replace("/(tabs)" as any);
     router.replace("/(tabs)/matcher" as any);
   };
 
@@ -313,7 +279,9 @@ export default function RegisterScreen() {
           )}
 
           <TouchableOpacity
-            className={`rounded-xl p-4 items-center mb-4 ${loading ? "bg-amber-400" : "bg-amber-800"}`}
+            className={`rounded-xl p-4 items-center mb-4 ${
+              loading ? "bg-amber-400" : "bg-amber-800"
+            }`}
             onPress={handleRegister}
             disabled={loading}
           >
@@ -325,6 +293,7 @@ export default function RegisterScreen() {
           <TouchableOpacity
             className="items-center mb-8"
             onPress={() => router.replace("/login" as any)}
+            disabled={loading}
           >
             <Text className="text-amber-800 text-sm">
               ¿Ya tienes cuenta? Inicia sesión
@@ -332,6 +301,7 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
       <PreferencesModal
         visible={showPreferences}
         onClose={() => setShowPreferences(false)}

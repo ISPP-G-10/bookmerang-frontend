@@ -1,5 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -19,9 +19,11 @@ interface PreferencesModalProps {
   }) => void;
   onSkip?: () => void;
   initialPreferences?: {
-    distanceKm: number;
-    genres: string[];
-    bookLength: string[];
+    radioKm?: number;
+    distanceKm?: number;
+    genres?: string[];
+    genreIds?: number[];
+    extension?: string;
   };
   availableGenres?: Array<{ id: number; name: string }>;
   title?: string;
@@ -52,32 +54,69 @@ const BOOK_LENGTHS = [
   { label: "Largos (+400 pág.)", value: "400+" },
 ];
 
+function extensionToBookLength(extension?: string): string[] {
+  if (!extension) return [];
+  if (extension === "SHORT") return ["0-200"];
+  if (extension === "LONG") return ["400+"];
+  return ["0-200", "200-400", "400+"]; // MEDIUM
+}
+
 export default function PreferencesModal({
   visible,
   onClose,
   onSave,
   onSkip,
-  initialPreferences = { distanceKm: 10, genres: [], bookLength: [] },
+  initialPreferences,
   availableGenres,
   title = "Preferencias",
   error = "",
-  loading: isLoading = false,
+  loading: externalLoading = false,
 }: PreferencesModalProps) {
   const genreList =
     availableGenres && availableGenres.length > 0
       ? availableGenres.map((g) => g.name)
       : FALLBACK_GENRES;
 
-  const [distanceKm, setDistanceKm] = useState<string>(
-    String(initialPreferences.distanceKm || 10),
-  );
-  const [selectedGenres, setSelectedGenres] = useState<string[]>(
-    initialPreferences.genres || [],
-  );
-  const [selectedLengths, setSelectedLengths] = useState<string[]>(
-    initialPreferences.bookLength || [],
-  );
+  const [distanceKm, setDistanceKm] = useState("10");
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [selectedLengths, setSelectedLengths] = useState<string[]>([]);
   const [localLoading, setLocalLoading] = useState(false);
+
+  // 🔥 Inicializa correctamente cuando se abre el modal
+  useEffect(() => {
+    if (!visible) return;
+
+    const km =
+      initialPreferences?.radioKm ?? initialPreferences?.distanceKm ?? 10;
+
+    setDistanceKm(String(km));
+
+    // Géneros desde IDs
+    if (
+      initialPreferences?.genreIds &&
+      initialPreferences.genreIds.length > 0 &&
+      availableGenres
+    ) {
+      const names = availableGenres
+        .filter((g) => initialPreferences.genreIds!.includes(g.id))
+        .map((g) => g.name);
+
+      setSelectedGenres(names);
+    }
+    // Géneros directos
+    else if (initialPreferences?.genres) {
+      setSelectedGenres(initialPreferences.genres);
+    } else {
+      setSelectedGenres([]);
+    }
+
+    // Extensión
+    if (initialPreferences?.extension) {
+      setSelectedLengths(extensionToBookLength(initialPreferences.extension));
+    } else {
+      setSelectedLengths([]);
+    }
+  }, [visible, initialPreferences, availableGenres]);
 
   const toggleGenre = (genre: string) => {
     setSelectedGenres((prev) =>
@@ -111,11 +150,10 @@ export default function PreferencesModal({
     onClose();
   };
 
-  const loading = localLoading || isLoading;
+  const loading = localLoading || externalLoading;
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
-      {/* Fondo oscuro */}
       <View
         style={{
           flex: 1,
@@ -125,7 +163,6 @@ export default function PreferencesModal({
           padding: 16,
         }}
       >
-        {/* Tarjeta flotante */}
         <View
           style={{
             backgroundColor: "#fdfbf7",
@@ -135,7 +172,7 @@ export default function PreferencesModal({
             overflow: "hidden",
           }}
         >
-          {/* Header del modal */}
+          {/* Header */}
           <View
             style={{
               flexDirection: "row",
@@ -153,6 +190,7 @@ export default function PreferencesModal({
             </Text>
             <TouchableOpacity
               onPress={handleClose}
+              disabled={loading}
               style={{
                 width: 32,
                 height: 32,
@@ -167,12 +205,12 @@ export default function PreferencesModal({
             </TouchableOpacity>
           </View>
 
-          {/* Contenido scrollable */}
+          {/* Content */}
           <ScrollView
             contentContainerStyle={{ padding: 24, paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
           >
-            {/* Distancia */}
+            {/* Distance */}
             <Text
               style={{
                 fontSize: 11,
@@ -185,11 +223,11 @@ export default function PreferencesModal({
             >
               Distancia para intercambios
             </Text>
+
             <View
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 12,
                 marginBottom: 24,
               }}
             >
@@ -205,20 +243,23 @@ export default function PreferencesModal({
                   color: "#3e2723",
                 }}
                 keyboardType="numeric"
-                placeholder="Ej: 10"
-                placeholderTextColor="#c4a882"
                 value={distanceKm}
                 onChangeText={(v) => setDistanceKm(v.replace(/[^0-9]/g, ""))}
                 maxLength={4}
               />
               <Text
-                style={{ fontSize: 16, fontWeight: "600", color: "#8B7355" }}
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: "#8B7355",
+                  marginLeft: 8,
+                }}
               >
                 km
               </Text>
             </View>
 
-            {/* Géneros */}
+            {/* Genres */}
             <Text
               style={{
                 fontSize: 11,
@@ -231,6 +272,7 @@ export default function PreferencesModal({
             >
               Géneros de interés
             </Text>
+
             <View
               style={{
                 flexDirection: "row",
@@ -248,7 +290,6 @@ export default function PreferencesModal({
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
-                      gap: 6,
                       paddingHorizontal: 12,
                       paddingVertical: 8,
                       borderRadius: 999,
@@ -257,22 +298,6 @@ export default function PreferencesModal({
                       borderColor: selected ? "#e07a5f" : "#F3E9E0",
                     }}
                   >
-                    <View
-                      style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: 4,
-                        borderWidth: 1.5,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: selected ? "#ffffff" : "#fdfbf7",
-                        borderColor: selected ? "#ffffff" : "#c4a882",
-                      }}
-                    >
-                      {selected && (
-                        <FontAwesome name="check" size={9} color="#e07a5f" />
-                      )}
-                    </View>
                     <Text
                       style={{
                         fontSize: 13,
@@ -303,7 +328,7 @@ export default function PreferencesModal({
               </View>
             ) : null}
 
-            {/* Extensión del libro */}
+            {/* Book length */}
             <Text
               style={{
                 fontSize: 11,
@@ -316,56 +341,37 @@ export default function PreferencesModal({
             >
               Extensión del libro
             </Text>
-            <View style={{ gap: 8, marginBottom: 8 }}>
-              {BOOK_LENGTHS.map((length) => {
-                const selected = selectedLengths.includes(length.value);
-                return (
-                  <TouchableOpacity
-                    key={length.value}
-                    onPress={() => toggleLength(length.value)}
+
+            {BOOK_LENGTHS.map((length) => {
+              const selected = selectedLengths.includes(length.value);
+              return (
+                <TouchableOpacity
+                  key={length.value}
+                  onPress={() => toggleLength(length.value)}
+                  style={{
+                    padding: 14,
+                    borderRadius: 12,
+                    borderWidth: 1.5,
+                    backgroundColor: selected ? "#e07a5f" : "#ffffff",
+                    borderColor: selected ? "#e07a5f" : "#F3E9E0",
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      padding: 14,
-                      borderRadius: 12,
-                      borderWidth: 1.5,
-                      backgroundColor: selected ? "#e07a5f" : "#ffffff",
-                      borderColor: selected ? "#e07a5f" : "#F3E9E0",
+                      fontSize: 15,
+                      fontWeight: "700",
+                      color: selected ? "#ffffff" : "#3e2723",
                     }}
                   >
-                    <View
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: 10,
-                        borderWidth: 1.5,
-                        marginRight: 12,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: selected ? "#ffffff" : "#fdfbf7",
-                        borderColor: selected ? "#ffffff" : "#c4a882",
-                      }}
-                    >
-                      {selected && (
-                        <FontAwesome name="check" size={10} color="#e07a5f" />
-                      )}
-                    </View>
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "700",
-                        color: selected ? "#ffffff" : "#3e2723",
-                      }}
-                    >
-                      {length.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                    {length.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
-          {/* Footer con botones */}
+          {/* Footer */}
           <View
             style={{
               flexDirection: "row",
@@ -373,7 +379,6 @@ export default function PreferencesModal({
               padding: 24,
               borderTopWidth: 1,
               borderTopColor: "#F3E9E0",
-              backgroundColor: "#fdfbf7",
             }}
           >
             <TouchableOpacity
@@ -391,9 +396,10 @@ export default function PreferencesModal({
               <Text
                 style={{ color: "#e07a5f", fontWeight: "900", fontSize: 15 }}
               >
-                Cancelar
+                {onSkip ? "Más tarde" : "Cancelar"}
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
               onPress={handleSave}
               disabled={loading}
@@ -406,7 +412,11 @@ export default function PreferencesModal({
               }}
             >
               <Text
-                style={{ color: "#ffffff", fontWeight: "900", fontSize: 15 }}
+                style={{
+                  color: "#ffffff",
+                  fontWeight: "900",
+                  fontSize: 15,
+                }}
               >
                 {loading ? "Guardando..." : "Guardar"}
               </Text>
