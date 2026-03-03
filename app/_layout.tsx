@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import supabase from "../lib/supabase";
 import 'react-native-reanimated';
+import '../global.css';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 
