@@ -1,7 +1,7 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -10,62 +10,69 @@ import {
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
-import { CURRENT_USER_ID, mockChats } from '@/data/mockChats';
-import { ChatData } from '@/types/chat';
+import { useAuth } from '@/contexts/AuthContext';
+import { getMyChats, resolveUserIdFromChats } from '@/lib/chatApi';
+import { ChatDto } from '@/types/chat';
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
-  );
 
-  if (diffDays === 0) {
+  const today = now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today) {
     return date.toLocaleTimeString('es-ES', {
       hour: '2-digit',
       minute: '2-digit',
     });
-  } else if (diffDays === 1) {
+  } else if (date.toDateString() === yesterday.toDateString()) {
     return 'Ayer';
-  } else if (diffDays < 7) {
+  } else if (now.getTime() - date.getTime() < 7 * 24 * 60 * 60 * 1000) {
     return date.toLocaleDateString('es-ES', { weekday: 'short' });
   }
   return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
 }
 
-function ChatListItem({ chat }: { chat: ChatData }) {
+function ChatListItem({
+  chat,
+  currentUserId,
+}: {
+  chat: ChatDto;
+  currentUserId: string;
+}) {
   const router = useRouter();
-  const lastMessage = chat.messages[chat.messages.length - 1];
+  const lastMessage = chat.lastMessage;
 
   // Nombre a mostrar: en chats directos el otro usuario, en comunidad el nombre del grupo
   let displayName: string;
   let avatarUrl: string | null = null;
 
-  if (chat.type === 'COMMUNITY' && chat.community_chat) {
-    displayName = chat.community_chat.community.name;
+  const otherParticipant = chat.participants.find(
+    (p) => p.userId !== currentUserId
+  );
+
+  if (chat.type === 'COMMUNITY') {
+    // Usar el nombre del primer participante diferente como fallback
+    displayName = otherParticipant?.username ?? 'Comunidad';
   } else {
-    const otherParticipant = chat.participants.find(
-      (p) => p.user_id !== CURRENT_USER_ID
-    );
-    displayName = otherParticipant?.user.nombre ?? 'Usuario';
-    avatarUrl = otherParticipant?.user.foto_perfil_url ?? null;
+    displayName = otherParticipant?.username ?? 'Usuario';
+    avatarUrl = otherParticipant?.profilePhoto || null;
   }
 
   // Para mensajes de grupo, mostrar quién envió el último mensaje
   let lastMessagePreview = '';
   if (lastMessage) {
     if (chat.type === 'COMMUNITY') {
-      const sender = chat.participants.find(
-        (p) => p.user_id === lastMessage.sender_id
-      );
       const senderName =
-        lastMessage.sender_id === CURRENT_USER_ID
+        lastMessage.senderId === currentUserId
           ? 'Tú'
-          : sender?.user.nombre?.split(' ')[0] ?? 'Usuario';
+          : lastMessage.senderUsername?.split(' ')[0] ?? 'Usuario';
       lastMessagePreview = `${senderName}: ${lastMessage.body}`;
     } else {
       lastMessagePreview =
-        lastMessage.sender_id === CURRENT_USER_ID
+        lastMessage.senderId === currentUserId
           ? `Tú: ${lastMessage.body}`
           : lastMessage.body;
     }
@@ -77,9 +84,6 @@ function ChatListItem({ chat }: { chat: ChatData }) {
     .map((w) => w[0])
     .join('')
     .toUpperCase();
-
-  const isAccepted = chat.exchange?.status === 'ACCEPTED';
-  const isNegotiating = chat.exchange?.status === 'NEGOTIATING';
 
   return (
     <Pressable
@@ -108,7 +112,7 @@ function ChatListItem({ chat }: { chat: ChatData }) {
           </Text>
           {lastMessage && (
             <Text style={styles.chatTime}>
-              {formatTime(lastMessage.sent_at)}
+              {formatTime(lastMessage.sentAt)}
             </Text>
           )}
         </View>
@@ -118,46 +122,87 @@ function ChatListItem({ chat }: { chat: ChatData }) {
             {lastMessagePreview}
           </Text>
         )}
-
-        {chat.exchange && (
-          <RNView
-            style={[
-              styles.statusPill,
-              isAccepted ? styles.pillAccepted : styles.pillNegotiating,
-            ]}
-          >
-            <FontAwesome
-              name={isAccepted ? 'check-circle' : 'refresh'}
-              size={10}
-              color={isAccepted ? '#10B981' : '#F59E0B'}
-              style={{ marginRight: 4 }}
-            />
-            <Text
-              style={[
-                styles.statusPillText,
-                isAccepted ? styles.pillTextAccepted : styles.pillTextNegotiating,
-              ]}
-            >
-              {isAccepted ? 'Intercambio aceptado' : 'Negociando'}
-            </Text>
-          </RNView>
-        )}
       </View>
     </Pressable>
   );
 }
 
 export default function ChatListScreen() {
+  const { backendUserId, setBackendUserId } = useAuth();
+  const [chats, setChats] = useState<ChatDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchChats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await getMyChats();
+
+      // Si aún no conocemos el userId del backend, resolverlo desde los chats
+      if (!backendUserId) {
+        const resolved = resolveUserIdFromChats(data);
+        if (resolved) {
+          setBackendUserId(resolved);
+        }
+      }
+
+      // Ordenar por actividad más reciente
+      const sorted = [...data].sort((a, b) => {
+        const aTime = a.lastMessage?.sentAt ?? a.createdAt;
+        const bTime = b.lastMessage?.sentAt ?? b.createdAt;
+        return new Date(bTime).getTime() - new Date(aTime).getTime();
+      });
+
+      setChats(sorted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar chats');
+    } finally {
+      setLoading(false);
+    }
+  }, [backendUserId, setBackendUserId]);
+
+  useEffect(() => {
+    fetchChats();
+  }, [fetchChats]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#e4715f" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={{ color: '#6B7280', marginBottom: 12 }}>{error}</Text>
+        <Pressable onPress={fetchChats}>
+          <Text style={{ color: '#e4715f', fontWeight: '600' }}>Reintentar</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
-        data={mockChats}
+        data={chats}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => <ChatListItem chat={item} />}
+        renderItem={({ item }) => (
+          <ChatListItem chat={item} currentUserId={backendUserId ?? ''} />
+        )}
         ItemSeparatorComponent={() => (
           <RNView style={styles.separator} />
         )}
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={() => (
+          <View style={styles.centered}>
+            <Text style={{ color: '#6B7280' }}>No tienes chats todavía</Text>
+          </View>
+        )}
       />
     </View>
   );
@@ -233,29 +278,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     lineHeight: 18,
   },
-  statusPill: {
-    flexDirection: 'row',
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
-  },
-  pillAccepted: {
-    backgroundColor: '#D1FAE5',
-  },
-  pillNegotiating: {
-    backgroundColor: '#FEF3C7',
-  },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  pillTextAccepted: {
-    color: '#065F46',
-  },
-  pillTextNegotiating: {
-    color: '#92400E',
   },
   separator: {
     height: 1,

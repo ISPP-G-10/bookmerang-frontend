@@ -1,3 +1,42 @@
+// ===== API Response DTOs (coinciden con el backend) =====
+
+export interface ChatParticipantDto {
+  userId: string;
+  username: string;
+  profilePhoto: string;
+  joinedAt: string;
+}
+
+export interface MessageDto {
+  id: number;
+  chatId: number;
+  senderId: string;
+  senderUsername: string;
+  body: string;
+  sentAt: string;
+}
+
+export interface ChatDto {
+  id: number;
+  type: string;
+  createdAt: string;
+  participants: ChatParticipantDto[];
+  lastMessage: MessageDto | null;
+}
+
+// ===== API Request DTOs =====
+
+export interface SendMessageRequest {
+  body: string;
+}
+
+export interface CreateChatRequest {
+  type: string;
+  participantIds: string[];
+}
+
+// ===== Tipos legacy (usados por exchange/community) =====
+
 export interface ChatUser {
   id: number;
   email?: string;

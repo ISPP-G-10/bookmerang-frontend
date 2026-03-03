@@ -1,20 +1,26 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    StyleSheet,
+    TextInput,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
-import { CURRENT_USER_ID, mockChats } from '@/data/mockChats';
-import { ChatMessage } from '@/types/chat';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+    sendMessage as apiSendMessage,
+    getChat as fetchChat,
+    getMessages as fetchMessages,
+} from '@/lib/chatApi';
+import { ChatDto, ChatParticipantDto, MessageDto } from '@/types/chat';
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -43,69 +49,151 @@ function formatDateHeader(dateStr: string): string {
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const chatId = parseInt(id ?? '0', 10);
-  const chat = mockChats.find((c) => c.id === chatId);
+  const { backendUserId, setBackendUserId } = useAuth();
 
-  const [messages, setMessages] = useState<ChatMessage[]>(
-    chat?.messages ?? []
-  );
+  const [chat, setChat] = useState<ChatDto | null>(null);
+  const [messages, setMessages] = useState<MessageDto[]>([]);
   const [inputText, setInputText] = useState('');
-  const [exchangeExpanded, setExchangeExpanded] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Cargar chat y mensajes en paralelo
+      const [chatData, messagesData] = await Promise.all([
+        fetchChat(chatId),
+        fetchMessages(chatId),
+      ]);
+
+      setChat(chatData);
+      // Ordenar mensajes cronológicamente (más antiguos primero)
+      const sorted = [...messagesData].sort(
+        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+      setMessages(sorted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al cargar el chat');
+    } finally {
+      setLoading(false);
+    }
+  }, [chatId]);
+
+  // Polling: recargar mensajes cada 3 segundos para ver actualizaciones
+  const refreshMessages = useCallback(async () => {
+    try {
+      const messagesData = await fetchMessages(chatId);
+      const sorted = [...messagesData].sort(
+        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+      setMessages(sorted);
+    } catch {
+      // Silenciar errores de polling
+    }
+  }, [chatId]);
+
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () =>
-      setExchangeExpanded(false)
-    );
-    const hideSub = Keyboard.addListener('keyboardDidHide', () =>
-      setExchangeExpanded(true)
-    );
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const interval = setInterval(refreshMessages, 3000);
+    return () => clearInterval(interval);
+  }, [refreshMessages]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {});
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {});
     return () => {
       showSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  if (!chat) {
+  if (loading) {
     return (
       <View style={styles.centered}>
-        <Text>Chat no encontrado</Text>
+        <ActivityIndicator size="large" color="#e4715f" />
+      </View>
+    );
+  }
+
+  if (error || !chat) {
+    return (
+      <View style={styles.centered}>
+        <Text style={{ color: '#6B7280', marginBottom: 12 }}>
+          {error ?? 'Chat no encontrado'}
+        </Text>
+        <Pressable onPress={loadData}>
+          <Text style={{ color: '#e4715f', fontWeight: '600' }}>Reintentar</Text>
+        </Pressable>
       </View>
     );
   }
 
   // Título del header
   let headerTitle: string;
-  if (chat.type === 'COMMUNITY' && chat.community_chat) {
-    headerTitle = chat.community_chat.community.name;
+  if (chat.type === 'COMMUNITY') {
+    headerTitle = 'Comunidad';
   } else {
     const other = chat.participants.find(
-      (p) => p.user_id !== CURRENT_USER_ID
+      (p) => p.userId !== backendUserId
     );
-    headerTitle = other?.user.nombre ?? 'Chat';
+    headerTitle = other?.username ?? 'Chat';
   }
 
   // Buscar info del sender de un mensaje
-  const getSender = (senderId: number) =>
-    chat.participants.find((p) => p.user_id === senderId)?.user;
+  const getSender = (senderId: string): ChatParticipantDto | undefined =>
+    chat.participants.find((p) => p.userId === senderId);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed) return;
+    if (!trimmed || sending) return;
 
-    const newMessage: ChatMessage = {
+    // Mensaje optimista
+    const optimisticMessage: MessageDto = {
       id: Date.now(),
-      chat_id: chatId,
-      sender_id: CURRENT_USER_ID,
+      chatId: chatId,
+      senderId: backendUserId ?? '',
+      senderUsername: '',
       body: trimmed,
-      sent_at: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => [...prev, optimisticMessage]);
     setInputText('');
+    setSending(true);
 
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
+
+    try {
+      const sentMessage = await apiSendMessage(chatId, trimmed);
+      // Si no teníamos el userId, ahora lo sabemos por el senderId del mensaje enviado
+      if (!backendUserId && sentMessage.senderId) {
+        setBackendUserId(sentMessage.senderId);
+      }
+      // Reemplazar mensaje optimista con el real
+      setMessages((prev) =>
+        prev.map((m) => (m.id === optimisticMessage.id ? sentMessage : m))
+      );
+      // Forzar scroll al final tras enviar
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 150);
+    } catch {
+      // Remover mensaje optimista en caso de error
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== optimisticMessage.id)
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   // Agrupar mensajes por día para mostrar separadores de fecha
@@ -116,26 +204,27 @@ export default function ChatDetailScreen() {
     item,
     index,
   }: {
-    item: ChatMessage;
+    item: MessageDto;
     index: number;
   }) => {
-    const isOwn = item.sender_id === CURRENT_USER_ID;
-    const sender = getSender(item.sender_id);
-    const showSenderName =
-      chat.type === 'COMMUNITY' && !isOwn;
+    const isOwn =
+      (backendUserId && item.senderId === backendUserId) ||
+      (!backendUserId && item.id > 1_000_000_000_000); // optimistic messages use Date.now() as id
+    const sender = getSender(item.senderId);
+    const showSenderName = chat.type === 'COMMUNITY' && !isOwn;
 
     // Mostrar separador de fecha si es el primer mensaje del día
     const showDateHeader =
       index === 0 ||
-      getDateKey(item.sent_at) !==
-        getDateKey(messages[index - 1].sent_at);
+      getDateKey(item.sentAt) !==
+        getDateKey(messages[index - 1].sentAt);
 
     return (
       <>
         {showDateHeader && (
           <View style={styles.dateHeaderContainer}>
             <Text style={styles.dateHeaderText}>
-              {formatDateHeader(item.sent_at)}
+              {formatDateHeader(item.sentAt)}
             </Text>
           </View>
         )}
@@ -149,15 +238,15 @@ export default function ChatDetailScreen() {
           {/* Avatar solo para mensajes de otros en chats de comunidad */}
           {showSenderName && (
             <View style={styles.messageAvatarContainer}>
-              {sender?.foto_perfil_url ? (
+              {sender?.profilePhoto ? (
                 <Image
-                  source={{ uri: sender.foto_perfil_url }}
+                  source={{ uri: sender.profilePhoto }}
                   style={styles.messageAvatar}
                 />
               ) : (
                 <View style={styles.messageAvatarPlaceholder}>
                   <Text style={styles.messageAvatarText}>
-                    {sender?.nombre?.charAt(0) ?? '?'}
+                    {sender?.username?.charAt(0) ?? '?'}
                   </Text>
                 </View>
               )}
@@ -172,7 +261,7 @@ export default function ChatDetailScreen() {
           >
             {showSenderName && (
               <Text style={styles.senderName}>
-                {sender?.nombre ?? 'Usuario'}
+                {sender?.username ?? 'Usuario'}
               </Text>
             )}
             <Text
@@ -189,7 +278,7 @@ export default function ChatDetailScreen() {
                 isOwn ? styles.messageTimeOwn : styles.messageTimeOther,
               ]}
             >
-              {formatMessageTime(item.sent_at)}
+              {formatMessageTime(item.sentAt)}
             </Text>
           </View>
         </View>
@@ -210,101 +299,6 @@ export default function ChatDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={90}
       >
-        {/* Tarjeta del intercambio */}
-        {chat.exchange && (
-          <View style={styles.exchangeCard}>
-            {/* Header siempre visible – toca para desplegar/colapsar */}
-            <Pressable
-              style={styles.exchangeHeader}
-              onPress={() => setExchangeExpanded((v) => !v)}
-            >
-              <FontAwesome name="book" size={12} color="#e4715f" style={{ marginRight: 5 }} />
-              <Text style={styles.exchangeHeaderText} numberOfLines={1}>
-                {chat.exchange.book_1.titulo}
-              </Text>
-              <FontAwesome name="exchange" size={11} color="#9CA3AF" style={{ marginHorizontal: 6 }} />
-              <Text style={styles.exchangeHeaderText} numberOfLines={1}>
-                {chat.exchange.book_2.titulo}
-              </Text>
-              <FontAwesome
-                name={exchangeExpanded ? 'chevron-up' : 'chevron-down'}
-                size={12}
-                color="#9CA3AF"
-                style={{ marginLeft: 8 }}
-              />
-            </Pressable>
-
-            {/* Contenido desplegable */}
-            {exchangeExpanded && (
-              <>
-                <View style={styles.exchangeHeaderDivider} />
-                <View style={styles.exchangeBooks}>
-                  {/* Libro propio */}
-                  <View style={styles.bookItem}>
-                    <Text style={styles.bookLabel}>TU LIBRO</Text>
-                    <View style={styles.bookCover}>
-                      <FontAwesome name="book" size={16} color="#e4715f" />
-                    </View>
-                    <Text style={styles.bookTitle} numberOfLines={2}>
-                      {chat.exchange.book_1.titulo}
-                    </Text>
-                    <Text style={styles.bookAuthor} numberOfLines={1}>
-                      {chat.exchange.book_1.autor}
-                    </Text>
-                  </View>
-
-                  <View style={styles.exchangeArrow}>
-                    <FontAwesome name="exchange" size={14} color="#2b2c2d" />
-                  </View>
-
-                  {/* Libro de cambio */}
-                  <View style={styles.bookItem}>
-                    <Text style={styles.bookLabel}>LIBRO DE CAMBIO</Text>
-                    <View style={[styles.bookCover, styles.bookCoverAlt]}>
-                      <FontAwesome name="book" size={16} color="#10B981" />
-                    </View>
-                    <Text style={styles.bookTitle} numberOfLines={2}>
-                      {chat.exchange.book_2.titulo}
-                    </Text>
-                    <Text style={styles.bookAuthor} numberOfLines={1}>
-                      {chat.exchange.book_2.autor}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Acciones según estado */}
-                {chat.exchange.status === 'NEGOTIATING' ? (
-                  <View style={styles.exchangeActions}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.btnAccept,
-                        pressed && { opacity: 0.8 },
-                      ]}
-                    >
-                      <FontAwesome name="check" size={11} color="#fff" style={{ marginRight: 5 }} />
-                      <Text style={styles.btnAcceptText}>Aceptar</Text>
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.btnDecline,
-                        pressed && { opacity: 0.7 },
-                      ]}
-                    >
-                      <FontAwesome name="times" size={11} color="#6B7280" style={{ marginRight: 5 }} />
-                      <Text style={styles.btnDeclineText}>Desestimar</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.acceptedBanner}>
-                    <FontAwesome name="check-circle" size={12} color="#10B981" style={{ marginRight: 5 }} />
-                    <Text style={styles.acceptedBannerText}>Intercambio aceptado</Text>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
-        )}
-
         {/* Lista de mensajes */}
         <FlatList
           ref={flatListRef}
@@ -336,7 +330,7 @@ export default function ChatDetailScreen() {
               pressed && styles.sendButtonPressed,
             ]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || sending}
           >
             <FontAwesome
               name="send"
@@ -359,146 +353,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-
-  // ── Exchange card ─────────────────────────────────────
-  exchangeCard: {
-    backgroundColor: '#fbf7f4',
-    marginHorizontal: 14,
-    marginVertical: 6,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  exchangeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingVertical: 2,
-  },
-  exchangeHeaderText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  exchangeHeaderDivider: {
-    height: 1,
-    backgroundColor: '#E9EBF0',
-    marginTop: 8,
-    marginBottom: 2,
-  },
-  exchangeBooks: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    marginTop: 6,
-    backgroundColor: 'transparent',
-  },
-  bookItem: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  bookLabel: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#2b2c2d',
-    letterSpacing: 0.8,
-    marginBottom: 5,
-    textTransform: 'uppercase',
-  },
-  bookCover: {
-    width: 46,
-    height: 62,
-    borderRadius: 7,
-    backgroundColor: '#FBE9E7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 5,
-    shadowColor: '#e4715f',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  bookCoverAlt: {
-    backgroundColor: '#ECFDF5',
-    shadowColor: '#10B981',
-  },
-  bookTitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#2b2c2d',
-    textAlign: 'center',
-    lineHeight: 13,
-    paddingHorizontal: 4,
-  },
-  bookAuthor: {
-    fontSize: 9,
-    color: '#2b2c2d',
-    textAlign: 'center',
-    marginTop: 1,
-    paddingHorizontal: 4,
-  },
-  exchangeArrow: {
-    paddingHorizontal: 8,
-    paddingBottom: 36,
-    backgroundColor: 'transparent',
-  },
-  exchangeActions: {
-    flexDirection: 'row',
-    gap: 10,
-    backgroundColor: 'transparent',
-  },
-  btnAccept: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#10B981',
-    borderRadius: 10,
-    paddingVertical: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnAcceptText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  btnDecline: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
-    paddingVertical: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  btnDeclineText: {
-    color: '#6B7280',
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  acceptedBanner: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#D1FAE5',
-    borderRadius: 8,
-    paddingVertical: 6,
-  },
-  acceptedBannerText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#065F46',
   },
 
   // ── Messages ──────────────────────────────────────────
