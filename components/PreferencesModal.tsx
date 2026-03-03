@@ -24,6 +24,7 @@ interface PreferencesModalProps {
     genres?: string[];
     genreIds?: number[];
     extension?: string;
+    bookLength?: string[];
   };
   availableGenres?: Array<{ id: number; name: string }>;
   title?: string;
@@ -58,7 +59,8 @@ function extensionToBookLength(extension?: string): string[] {
   if (!extension) return [];
   if (extension === "SHORT") return ["0-200"];
   if (extension === "LONG") return ["400+"];
-  return ["0-200", "200-400", "400+"]; // MEDIUM
+  if (extension === "MEDIUM") return ["200-400"];
+  return [];
 }
 
 export default function PreferencesModal({
@@ -110,8 +112,12 @@ export default function PreferencesModal({
       setSelectedGenres([]);
     }
 
-    // Extensión
-    if (initialPreferences?.extension) {
+    // Extensión o bookLength
+    if (initialPreferences?.bookLength && Array.isArray(initialPreferences.bookLength)) {
+      // Si ya viene como array de bookLength, usarlo directamente
+      setSelectedLengths(initialPreferences.bookLength);
+    } else if (initialPreferences?.extension) {
+      // Si solo viene extension, convertir
       setSelectedLengths(extensionToBookLength(initialPreferences.extension));
     } else {
       setSelectedLengths([]);
@@ -125,11 +131,8 @@ export default function PreferencesModal({
   };
 
   const toggleLength = (length: string) => {
-    setSelectedLengths((prev) =>
-      prev.includes(length)
-        ? prev.filter((l) => l !== length)
-        : [...prev, length],
-    );
+    // Solo permitir seleccionar una opción
+    setSelectedLengths([length]);
   };
 
   const handleSave = async () => {

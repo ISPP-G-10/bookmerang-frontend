@@ -20,8 +20,8 @@ function bookLengthToExtension(
   bookLength: string[],
 ): "SHORT" | "MEDIUM" | "LONG" {
   if (!bookLength || bookLength.length === 0) return "MEDIUM";
-  if (bookLength.length === 3) return "MEDIUM";
   if (bookLength.includes("0-200")) return "SHORT";
+  if (bookLength.includes("200-400")) return "MEDIUM";
   if (bookLength.includes("400+")) return "LONG";
   return "MEDIUM";
 }
@@ -31,7 +31,10 @@ function mapGenresToIds(
   availableGenres: Genre[],
 ): number[] {
   return selectedNames
-    .map((name) => availableGenres.find((g) => g.name === name)?.id)
+    .map((name) => {
+      const normalized = name.toLowerCase().trim();
+      return availableGenres.find((g) => g.name.toLowerCase().trim() === normalized)?.id;
+    })
     .filter((id): id is number => id !== undefined);
 }
 
@@ -60,18 +63,52 @@ export default function RegisterScreen() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/genres`, {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/genres`, {
         headers: session?.access_token
           ? { Authorization: `Bearer ${session.access_token}` }
           : {},
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        setAvailableGenres([
+          { id: 1, name: "Ficción" },
+          { id: 2, name: "No ficción" },
+          { id: 3, name: "Fantasía" },
+          { id: 4, name: "Romance" },
+          { id: 5, name: "Misterio" },
+          { id: 6, name: "Ciencia ficción" },
+          { id: 7, name: "Biografía" },
+          { id: 8, name: "Historia" },
+          { id: 9, name: "Autoayuda" },
+          { id: 10, name: "Infantil" },
+          { id: 11, name: "Juvenil" },
+          { id: 12, name: "Terror" },
+          { id: 13, name: "Poesía" },
+          { id: 14, name: "Ensayo" },
+        ]);
+        return;
+      }
 
       const genres = await res.json();
       if (Array.isArray(genres)) setAvailableGenres(genres);
-    } catch {
-      // silencioso: si falla, el modal tiene fallback interno
+    } catch (err) {
+      // fallback: usar géneros por defecto
+      setAvailableGenres([
+        { id: 1, name: "Ficción" },
+        { id: 2, name: "No ficción" },
+        { id: 3, name: "Fantasía" },
+        { id: 4, name: "Romance" },
+        { id: 5, name: "Misterio" },
+        { id: 6, name: "Ciencia ficción" },
+        { id: 7, name: "Biografía" },
+        { id: 8, name: "Historia" },
+        { id: 9, name: "Autoayuda" },
+        { id: 10, name: "Infantil" },
+        { id: 11, name: "Juvenil" },
+        { id: 12, name: "Terror" },
+        { id: 13, name: "Poesía" },
+        { id: 14, name: "Ensayo" },
+      ]);
     }
   };
 
@@ -94,6 +131,13 @@ export default function RegisterScreen() {
     setLoading(true);
     setError("");
 
+    // Validar campos
+    if (!email || !password || !username || !name) {
+      setError("Todos los campos son obligatorios");
+      setLoading(false);
+      return;
+    }
+
     // 1) Crear cuenta en Supabase
     const { error: signUpError } = await supabase.auth.signUp({
       email,
@@ -111,7 +155,7 @@ export default function RegisterScreen() {
 
     // 2) Guardar en base_users (backend)
     try {
-      const response = await apiRequest("/api/auth/register", {
+      const response = await apiRequest("/Auth/register", {
         method: "POST",
         body: JSON.stringify({
           username,
@@ -169,6 +213,7 @@ export default function RegisterScreen() {
       const radioKm = preferences.distanceKm || 10;
 
       const genreIds = mapGenresToIds(preferences.genres, availableGenres);
+      
       if (preferences.genres.length > 0 && genreIds.length === 0) {
         setPreferencesError("Error mapeando géneros. Intenta de nuevo.");
         return;
@@ -176,7 +221,7 @@ export default function RegisterScreen() {
 
       const extension = bookLengthToExtension(preferences.bookLength);
 
-      const apiUrl = `${process.env.EXPO_PUBLIC_API_URL}/api/users/${session.user.id}/preferences`;
+      const apiUrl = `${process.env.EXPO_PUBLIC_API_URL}/users/${session.user.id}/preferences`;
 
       const res = await fetch(apiUrl, {
         method: "PUT",

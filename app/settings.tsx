@@ -1256,7 +1256,7 @@ export default function SettingsScreen() {
     try {
       // First: update backend app profile record
       try {
-        const patchRes = await apiRequest("/api/auth/perfil", {
+        const patchRes = await apiRequest("/Auth/perfil", {
           method: "PATCH",
           body: JSON.stringify({
             username: data.username,
@@ -1353,7 +1353,7 @@ export default function SettingsScreen() {
         const userId = session.session?.user.id;
         const accessToken = session.session?.access_token;
 
-        const res = await apiRequest("/auth/perfil", { method: "DELETE" });
+        const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           throw new Error(text || "Error borrando la cuenta en el servidor");
@@ -1387,7 +1387,7 @@ export default function SettingsScreen() {
               // Llama al backend para borrar el baseUser; el backend debe encargarse
               // de eliminar el usuario en Supabase de forma administrativa.
               try {
-                const res = await apiRequest("/auth/perfil", { method: "DELETE" });
+                const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
                 if (!res.ok) {
                   const text = await res.text().catch(() => "");
                   throw new Error(text || "Error borrando la cuenta en el servidor");

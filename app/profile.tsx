@@ -80,12 +80,14 @@ export default function ProfileScreen() {
         return router.replace("/login" as any);
       }
 
+      // 1️⃣ Cargar géneros PRIMERO
+      let loadedGenres: any[] = [];
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
         const genreRes = await fetch(
-          `${process.env.EXPO_PUBLIC_API_URL}/api/genres`,
+          `${process.env.EXPO_PUBLIC_API_URL}/genres`,
           {
             headers: session?.access_token
               ? { Authorization: `Bearer ${session.access_token}` }
@@ -94,7 +96,10 @@ export default function ProfileScreen() {
         );
         if (genreRes.ok) {
           const genres = await genreRes.json();
-          if (Array.isArray(genres)) setAvailableGenres(genres);
+          if (Array.isArray(genres)) {
+            loadedGenres = genres;
+            setAvailableGenres(genres);
+          }
         }
       } catch (err) {
         console.error("Error fetching genres:", err);
@@ -118,11 +123,61 @@ export default function ProfileScreen() {
       }
 
       try {
-        const res = await apiRequest("/api/auth/perfil", { method: "GET" });
+        const res = await apiRequest("/Auth/perfil", { method: "GET" });
         if (res.ok) {
           const json = await res.json();
           setProfile(json);
-          if (json.preferences) setPreferences(json.preferences);
+          
+          
+          // 2️⃣ Cargar preferencias DESPUÉS de tener los géneros
+          try {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (session) {
+              // Usar el ID del backend, NO el de Supabase
+              const userId = json.id ?? json.userId ?? json.user_id;
+              
+              if (!userId) {
+              } else {
+                const prefsRes = await fetch(
+                  `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${session.access_token}`,
+                    },
+                  },
+                );
+                
+                if (prefsRes.ok) {
+                  const prefs = await prefsRes.json();
+                  
+                  // Convertir extension a bookLength
+                  const bookLengths: string[] = [];
+                  if (prefs.extension === "SHORT") bookLengths.push("0-200");
+                  else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
+                  else if (prefs.extension === "LONG") bookLengths.push("400+");
+                  
+                  // Mapear genreIds a nombres usando los géneros cargados
+                  const genreNames: string[] = [];
+                  if (prefs.genreIds && Array.isArray(prefs.genreIds) && loadedGenres.length > 0) {
+                    prefs.genreIds.forEach((id: number) => {
+                      const genre = loadedGenres.find((g) => g.id === id);
+                      if (genre) genreNames.push(genre.name);
+                    });
+                  }
+                  
+                  setPreferences({
+                    distanceKm: prefs.radioKm || 10,
+                    genres: genreNames,
+                    bookLength: bookLengths,
+                  });
+                }
+              }
+            }
+          } catch (err) {
+          }
+          
           const maybeLat =
             json.latitud ??
             json.Latitud ??
@@ -206,12 +261,12 @@ export default function ProfileScreen() {
       let extension = "MEDIUM";
       if (newPreferences.bookLength.length > 0) {
         const lengths = newPreferences.bookLength;
-        if (lengths.length === 3) extension = "MEDIUM";
-        else if (lengths.includes("0-200")) extension = "SHORT";
-        else if (lengths.includes("+400")) extension = "LONG";
+        if (lengths.includes("0-200")) extension = "SHORT";
+        else if (lengths.includes("200-400")) extension = "MEDIUM";
+        else if (lengths.includes("400+")) extension = "LONG";
       }
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/api/users/${userId}/preferences`,
+        `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
         {
           method: "PUT",
           body: JSON.stringify({
