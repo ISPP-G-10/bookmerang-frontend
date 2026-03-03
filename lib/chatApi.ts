@@ -6,7 +6,7 @@ import {
   SendMessageRequest,
 } from '@/types/chat';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044';
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
 
 /**
  * Dado un array de chats del usuario, deduce cuál es su userId interno.
@@ -52,7 +52,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
  */
 export async function getMyChats(): Promise<ChatDto[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/api/chat`, { headers });
+  const res = await fetch(`${API_URL}/chat`, { headers });
 
   if (!res.ok) {
     throw new Error(`Error al obtener chats: ${res.status}`);
@@ -67,7 +67,7 @@ export async function getMyChats(): Promise<ChatDto[]> {
  */
 export async function getChat(chatId: number): Promise<ChatDto> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/api/chat/${chatId}`, { headers });
+  const res = await fetch(`${API_URL}/chat/${chatId}`, { headers });
 
   if (!res.ok) {
     throw new Error(`Error al obtener chat ${chatId}: ${res.status}`);
@@ -91,7 +91,7 @@ export async function getMessages(
     pageSize: pageSize.toString(),
   });
   const res = await fetch(
-    `${API_URL}/api/chat/${chatId}/messages?${params}`,
+    `${API_URL}/chat/${chatId}/messages?${params}`,
     { headers }
   );
 
@@ -115,7 +115,7 @@ export async function sendMessage(
   const headers = await getAuthHeaders();
   const request: SendMessageRequest = { body };
 
-  const res = await fetch(`${API_URL}/api/chat/${chatId}/messages`, {
+  const res = await fetch(`${API_URL}/chat/${chatId}/messages`, {
     method: 'POST',
     headers,
     body: JSON.stringify(request),
@@ -139,7 +139,7 @@ export async function createChat(
   const headers = await getAuthHeaders();
   const request: CreateChatRequest = { type, participantIds };
 
-  const res = await fetch(`${API_URL}/api/chat`, {
+  const res = await fetch(`${API_URL}/chat`, {
     method: 'POST',
     headers,
     body: JSON.stringify(request),

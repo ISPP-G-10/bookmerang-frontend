@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
-  Image,
-  Pressable,
-  View as RNView,
-  StyleSheet,
+    ActivityIndicator,
+    FlatList,
+    Image,
+    Pressable,
+    View as RNView,
+    StyleSheet,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
@@ -128,7 +128,7 @@ function ChatListItem({
 }
 
 export default function ChatListScreen() {
-  const { backendUserId, setBackendUserId } = useAuth();
+  const { currentUserId, backendUserId, setBackendUserId } = useAuth();
   const [chats, setChats] = useState<ChatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,7 +192,7 @@ export default function ChatListScreen() {
         data={chats}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
-          <ChatListItem chat={item} currentUserId={backendUserId ?? ''} />
+          <ChatListItem chat={item} currentUserId={currentUserId ?? ''} />
         )}
         ItemSeparatorComponent={() => (
           <RNView style={styles.separator} />

@@ -49,7 +49,7 @@ function formatDateHeader(dateStr: string): string {
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const chatId = parseInt(id ?? '0', 10);
-  const { backendUserId, setBackendUserId } = useAuth();
+  const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
   const [chat, setChat] = useState<ChatDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
@@ -141,7 +141,7 @@ export default function ChatDetailScreen() {
     headerTitle = 'Comunidad';
   } else {
     const other = chat.participants.find(
-      (p) => p.userId !== backendUserId
+      (p) => p.userId !== currentUserId
     );
     headerTitle = other?.username ?? 'Chat';
   }
@@ -158,7 +158,7 @@ export default function ChatDetailScreen() {
     const optimisticMessage: MessageDto = {
       id: Date.now(),
       chatId: chatId,
-      senderId: backendUserId ?? '',
+      senderId: currentUserId ?? '',
       senderUsername: '',
       body: trimmed,
       sentAt: new Date().toISOString(),
@@ -208,8 +208,8 @@ export default function ChatDetailScreen() {
     index: number;
   }) => {
     const isOwn =
-      (backendUserId && item.senderId === backendUserId) ||
-      (!backendUserId && item.id > 1_000_000_000_000); // optimistic messages use Date.now() as id
+      (currentUserId && item.senderId === currentUserId) ||
+      (!currentUserId && item.id > 1_000_000_000_000); // optimistic messages use Date.now() as id
     const sender = getSender(item.senderId);
     const showSenderName = chat.type === 'COMMUNITY' && !isOwn;
 
