@@ -1,6 +1,6 @@
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
-import TinderSwiper, { TinderSwiperRef } from '@/components/matcher/TinderSwiper';
+import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
 import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import { fetchFeed, sendSwipe, type SwipeResultDto } from '@/lib/matcherApi';
@@ -8,6 +8,7 @@ import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PAGE_SIZE = 20;
 
@@ -15,6 +16,7 @@ export default function MatcherScreen() {
   const swiperRef = useRef<TinderSwiperRef>(null);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const { deviceType, orientation, isMobile } = useDeviceType();
+  const insets = useSafeAreaInsets();
   const [selectedCard, setSelectedCard] = useState<MatcherCard | null>(null);
   const [matchInfo, setMatchInfo] = useState<MatchOverlayData | null>(null);
 
@@ -27,12 +29,14 @@ export default function MatcherScreen() {
   const [allSwiped, setAllSwiped] = useState(false);
   const loadingMore = useRef(false);
 
-  // ── Carga inicial ──
+  // ── Carga inicial con API real ──
   const loadFeed = useCallback(async (pageNum: number, append = false) => {
     try {
       if (!append) setLoading(true);
       setError(null);
+      
       const newCards = await fetchFeed(pageNum, PAGE_SIZE);
+      
       setCards((prev) => (append ? [...prev, ...newCards] : newCards));
       setHasMore(newCards.length === PAGE_SIZE);
       setPage(pageNum);
@@ -56,9 +60,9 @@ export default function MatcherScreen() {
     const cardWidth = SCREEN_WIDTH * sizeConfig.widthRatio;
     const cardHeight = cardWidth * sizeConfig.heightRatio;
     
-    // Para móvil usa porcentaje, para tablet/desktop usa offset fijo desde la carta
+    // Mantener tu cálculo mejorado del bottom para los botones
     const buttonBottom = isMobile 
-      ? SCREEN_HEIGHT * 0.03 
+      ? Math.max(insets.bottom - 10, SCREEN_HEIGHT * 0.02)
       : (SCREEN_HEIGHT - cardHeight) / 2 - layoutConfig.buttonOffsetFromCard;
 
     return StyleSheet.create({
@@ -93,7 +97,7 @@ export default function MatcherScreen() {
         backgroundColor: '#e07a5f',
       },
     });
-  }, [SCREEN_WIDTH, SCREEN_HEIGHT, deviceType, orientation, isMobile]);
+  }, [SCREEN_WIDTH, SCREEN_HEIGHT, deviceType, orientation, isMobile, insets]);
 
   const iconSize = useMemo(() => {
     const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
@@ -103,11 +107,9 @@ export default function MatcherScreen() {
     };
   }, [deviceType, orientation]);
 
-  // ── Cargar más cards al acercarse al final ──
   const maybeLoadMore = useCallback(
     (currentIndex: number) => {
       if (!hasMore || loadingMore.current) return;
-      // Cuando quedan 5 o menos por ver, cargar siguiente página
       if (cards.length - currentIndex <= 5) {
         loadingMore.current = true;
         loadFeed(page + 1, true);
@@ -116,7 +118,7 @@ export default function MatcherScreen() {
     [cards.length, hasMore, page, loadFeed],
   );
 
-  // ── Handlers de swipe ──
+  // ── Handlers de swipe con API real ──
   const handleSwipe = useCallback(
     async (card: MatcherCard, direction: 'LEFT' | 'RIGHT') => {
       maybeLoadMore(cards.indexOf(card) + 1);
@@ -124,6 +126,7 @@ export default function MatcherScreen() {
         console.log(`[SWIPE] Sending ${direction} on book ${card.book.id} (${card.book.titulo})`);
         const result: SwipeResultDto = await sendSwipe(card.book.id, direction);
         console.log(`[SWIPE] Result:`, JSON.stringify(result));
+        
         if (result.outcome === 'MatchCreated' && result.match) {
           console.log('[SWIPE] MATCH! Showing notification for', result.match.otherUsername);
           setMatchInfo({
@@ -164,10 +167,9 @@ export default function MatcherScreen() {
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
     setSelectedCard(null);
-    // Aquí iría la navegación al chat
+    // TODO: Aquí iría la navegación al chat cuando esté implementado
   };
 
-  // ── Estados de carga / error / vacío ──
   if (loading) {
     return (
       <View className="flex-1 bg-background-0 items-center justify-center">
@@ -257,14 +259,13 @@ export default function MatcherScreen() {
         onChat={handleChat}
       />
 
-      {/* ── Match overlay ── */}
       {matchInfo && (
         <MatchOverlay
           data={matchInfo}
           onClose={() => setMatchInfo(null)}
           onChat={() => {
             setMatchInfo(null);
-            // TODO: navegar al chat
+            // TODO: Navegar al chat cuando esté implementado
           }}
         />
       )}
