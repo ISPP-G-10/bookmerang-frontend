@@ -57,7 +57,6 @@ async function parseResponseBody(response: Response): Promise<any> {
 }
 
 export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
-<<<<<<< HEAD
   const endpoints = [
     `/books/my-library?page=1&pageSize=${pageSize}`,
     `/books/my-library?page=1&page_size=${pageSize}`,
@@ -90,18 +89,6 @@ export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
 
   throw new Error(`No se pudo cargar la biblioteca. Endpoints probados: ${failures.join(', ') || 'sin respuesta'}`);
 }
-=======
-  const response = await apiRequest(`/books/my-library?page=1&pageSize=${pageSize}`);
-  if (!response.ok) throw new Error('No se pudo cargar la biblioteca');
-  const data = await response.json();
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.books)) return data.books;
-  if (Array.isArray(data?.data?.items)) return data.data.items;
-  if (Array.isArray(data?.data?.books)) return data.data.books;
-
-  return [];}
->>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
 
 export async function getBookDetail(bookId: number): Promise<BookDetail> {
   const response = await apiRequest(`/books/${bookId}`);
