@@ -1,18 +1,53 @@
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
-import { MOCK_CARDS } from '@/components/matcher/mockData';
+import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
 import TinderSwiper, { TinderSwiperRef } from '@/components/matcher/TinderSwiper';
 import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
 import { useDeviceType } from '@/hooks/useDeviceType';
+import { fetchFeed, sendSwipe, type SwipeResultDto } from '@/lib/matcherApi';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+
+const PAGE_SIZE = 20;
 
 export default function MatcherScreen() {
   const swiperRef = useRef<TinderSwiperRef>(null);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const { deviceType, orientation, isMobile } = useDeviceType();
   const [selectedCard, setSelectedCard] = useState<MatcherCard | null>(null);
+  const [matchInfo, setMatchInfo] = useState<MatchOverlayData | null>(null);
+
+  // ── Estado del feed ──
+  const [cards, setCards] = useState<MatcherCard[]>([]);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [allSwiped, setAllSwiped] = useState(false);
+  const loadingMore = useRef(false);
+
+  // ── Carga inicial ──
+  const loadFeed = useCallback(async (pageNum: number, append = false) => {
+    try {
+      if (!append) setLoading(true);
+      setError(null);
+      const newCards = await fetchFeed(pageNum, PAGE_SIZE);
+      setCards((prev) => (append ? [...prev, ...newCards] : newCards));
+      setHasMore(newCards.length === PAGE_SIZE);
+      setPage(pageNum);
+      if (!append) setAllSwiped(false);
+    } catch (e: any) {
+      setError(e.message ?? 'Error al cargar el feed');
+    } finally {
+      setLoading(false);
+      loadingMore.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeed(0);
+  }, [loadFeed]);
 
   const styles = useMemo(() => {
     const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
@@ -68,13 +103,51 @@ export default function MatcherScreen() {
     };
   }, [deviceType, orientation]);
 
-  const handleSwipeLeft = (card: MatcherCard) => {
-    console.log('Dislike:', card.book.titulo);
-  };
+  // ── Cargar más cards al acercarse al final ──
+  const maybeLoadMore = useCallback(
+    (currentIndex: number) => {
+      if (!hasMore || loadingMore.current) return;
+      // Cuando quedan 5 o menos por ver, cargar siguiente página
+      if (cards.length - currentIndex <= 5) {
+        loadingMore.current = true;
+        loadFeed(page + 1, true);
+      }
+    },
+    [cards.length, hasMore, page, loadFeed],
+  );
 
-  const handleSwipeRight = (card: MatcherCard) => {
-    console.log('Like:', card.book.titulo);
-  };
+  // ── Handlers de swipe ──
+  const handleSwipe = useCallback(
+    async (card: MatcherCard, direction: 'LEFT' | 'RIGHT') => {
+      maybeLoadMore(cards.indexOf(card) + 1);
+      try {
+        console.log(`[SWIPE] Sending ${direction} on book ${card.book.id} (${card.book.titulo})`);
+        const result: SwipeResultDto = await sendSwipe(card.book.id, direction);
+        console.log(`[SWIPE] Result:`, JSON.stringify(result));
+        if (result.outcome === 'MatchCreated' && result.match) {
+          console.log('[SWIPE] MATCH! Showing notification for', result.match.otherUsername);
+          setMatchInfo({
+            otherUsername: result.match.otherUsername,
+            bookTitle: card.book.titulo,
+            bookCoverUrl: card.book.photos?.[0]?.url ?? null,
+          });
+        }
+      } catch (e: any) {
+        console.warn('Error al registrar swipe:', e.message);
+      }
+    },
+    [cards, maybeLoadMore],
+  );
+
+  const handleSwipeLeft = useCallback(
+    (card: MatcherCard) => handleSwipe(card, 'LEFT'),
+    [handleSwipe],
+  );
+
+  const handleSwipeRight = useCallback(
+    (card: MatcherCard) => handleSwipe(card, 'RIGHT'),
+    [handleSwipe],
+  );
 
   const handleTap = (card: MatcherCard) => {
     setSelectedCard(card);
@@ -84,20 +157,81 @@ export default function MatcherScreen() {
     setSelectedCard(null);
   };
 
+  const handleEmpty = useCallback(() => {
+    setAllSwiped(true);
+  }, []);
+
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
     setSelectedCard(null);
     // Aquí iría la navegación al chat
   };
 
+  // ── Estados de carga / error / vacío ──
+  if (loading) {
+    return (
+      <View className="flex-1 bg-background-0 items-center justify-center">
+        <ActivityIndicator size="large" color="#e07a5f" />
+        <Text style={{ marginTop: 12, color: '#8B7355' }}>Cargando libros…</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View className="flex-1 bg-background-0 items-center justify-center" style={{ padding: 32 }}>
+        <Ionicons name="alert-circle-outline" size={48} color="#e07a5f" />
+        <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
+          {error}
+        </Text>
+        <Pressable
+          onPress={() => loadFeed(0)}
+          style={{
+            marginTop: 16,
+            backgroundColor: '#e07a5f',
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            borderRadius: 12,
+          }}
+        >
+          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Reintentar</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (cards.length === 0 || allSwiped) {
+    return (
+      <View className="flex-1 bg-background-0 items-center justify-center" style={{ padding: 32 }}>
+        <Ionicons name="book-outline" size={48} color="#8B7355" />
+        <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
+          No hay más libros disponibles por ahora.
+        </Text>
+        <Pressable
+          onPress={() => loadFeed(0)}
+          style={{
+            marginTop: 16,
+            backgroundColor: '#e07a5f',
+            paddingHorizontal: 24,
+            paddingVertical: 10,
+            borderRadius: 12,
+          }}
+        >
+          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Refrescar</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 bg-background-0 items-center justify-center">
       <TinderSwiper
         ref={swiperRef}
-        cards={MOCK_CARDS}
+        cards={cards}
         onSwipeLeft={handleSwipeLeft}
         onSwipeRight={handleSwipeRight}
         onTap={handleTap}
+        onEmpty={handleEmpty}
       />
 
       <View style={styles.actionsContainer}>
@@ -122,6 +256,18 @@ export default function MatcherScreen() {
         onClose={handleCloseDetails}
         onChat={handleChat}
       />
+
+      {/* ── Match overlay ── */}
+      {matchInfo && (
+        <MatchOverlay
+          data={matchInfo}
+          onClose={() => setMatchInfo(null)}
+          onChat={() => {
+            setMatchInfo(null);
+            // TODO: navegar al chat
+          }}
+        />
+      )}
     </View>
   );
 }

@@ -1,16 +1,16 @@
 import type { MatcherCard } from '@/types/matcher';
 import { BlurView } from 'expo-blur';
-import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  interpolate,
-  interpolateColor,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+    interpolate,
+    interpolateColor,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming,
 } from 'react-native-reanimated';
 import BookCard from './BookCard';
 
@@ -22,6 +22,7 @@ interface TinderSwiperProps {
   onSwipeLeft?: (card: MatcherCard) => void;
   onSwipeRight?: (card: MatcherCard) => void;
   onTap?: (card: MatcherCard) => void;
+  onEmpty?: () => void;
 }
 
 export interface TinderSwiperRef {
@@ -30,7 +31,7 @@ export interface TinderSwiperRef {
 }
 
 const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
-  ({ cards, onSwipeLeft, onSwipeRight, onTap }, ref) => {
+  ({ cards, onSwipeLeft, onSwipeRight, onTap, onEmpty }, ref) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const { width: SCREEN_WIDTH } = useWindowDimensions();
 
@@ -42,7 +43,8 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
     const goToNext = useCallback(
       (direction: 'left' | 'right') => {
-        const card = cards[currentIndex % cards.length];
+        if (currentIndex >= cards.length) return;
+        const card = cards[currentIndex];
         if (!card) return;
 
         // Resetear inmediatamente los valores animados
@@ -65,6 +67,7 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
     const triggerSwipe = useCallback(
       (direction: 'left' | 'right') => {
+        if (currentIndex >= cards.length) return;
         const targetX =
           direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
 
@@ -77,7 +80,7 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
         });
         translateY.value = withTiming(0, { duration: 500 });
       },
-      [goToNext, nextCardBlurOpacity, translateX, translateY, SCREEN_WIDTH]
+      [currentIndex, cards.length, goToNext, nextCardBlurOpacity, translateX, translateY, SCREEN_WIDTH]
     );
 
     useImperativeHandle(ref, () => ({
@@ -113,7 +116,8 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       });
 
     const tapGesture = Gesture.Tap().onEnd(() => {
-      const card = cards[currentIndex % cards.length];
+      if (currentIndex >= cards.length) return;
+      const card = cards[currentIndex];
       if (card && onTap) {
         runOnJS(onTap)(card);
       }
@@ -199,29 +203,43 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
     });
 
     // Calcular índices de las cartas visibles
-    const topCardIndex = currentIndex % cards.length;
-    const nextCardIndex = (currentIndex + 1) % cards.length;
-    const thirdCardIndex = (currentIndex + 2) % cards.length;
+    const topCardIndex = currentIndex;
+    const nextCardIndex = currentIndex + 1;
+    const thirdCardIndex = currentIndex + 2;
+
+    const hasCards = topCardIndex < cards.length;
+
+    useEffect(() => {
+      if (!hasCards) {
+        onEmpty?.();
+      }
+    }, [hasCards, onEmpty]);
+
+    if (!hasCards) return null;
 
     return (
       <>
         {/* Third card (fondo del stack) */}
-        <Animated.View style={[styles.cardContainer, thirdCardStyle]} key={`third-${currentIndex}`}>
-          <View style={styles.blurContainer}>
-            <BookCard card={cards[thirdCardIndex]} />
-            <BlurView intensity={25} style={StyleSheet.absoluteFill} tint="light" />
-          </View>
-        </Animated.View>
+        {thirdCardIndex < cards.length && (
+          <Animated.View style={[styles.cardContainer, thirdCardStyle]} key={`third-${currentIndex}`}>
+            <View style={styles.blurContainer}>
+              <BookCard card={cards[thirdCardIndex]} />
+              <BlurView intensity={25} style={StyleSheet.absoluteFill} tint="light" />
+            </View>
+          </Animated.View>
+        )}
 
         {/* Next card (medio del stack) */}
-        <Animated.View style={[styles.cardContainer, nextCardStyle]} key={`next-${currentIndex}`}>
-          <View style={styles.blurContainer}>
-            <BookCard card={cards[nextCardIndex]} />
-            <Animated.View style={[StyleSheet.absoluteFill, nextCardBlurIntensity]}>
-              <BlurView intensity={15} style={StyleSheet.absoluteFill} tint="light" />
-            </Animated.View>
-          </View>
-        </Animated.View>
+        {nextCardIndex < cards.length && (
+          <Animated.View style={[styles.cardContainer, nextCardStyle]} key={`next-${currentIndex}`}>
+            <View style={styles.blurContainer}>
+              <BookCard card={cards[nextCardIndex]} />
+              <Animated.View style={[StyleSheet.absoluteFill, nextCardBlurIntensity]}>
+                <BlurView intensity={15} style={StyleSheet.absoluteFill} tint="light" />
+              </Animated.View>
+            </View>
+          </Animated.View>
+        )}
 
         {/* Top card (carta principal draggable) */}
         <GestureDetector gesture={composedGesture} key={`gesture-${currentIndex}`}>
