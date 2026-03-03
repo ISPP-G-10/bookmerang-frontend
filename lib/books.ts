@@ -25,8 +25,13 @@ export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
   const response = await apiRequest(`/books/my-library?page=1&pageSize=${pageSize}`);
   if (!response.ok) throw new Error('No se pudo cargar la biblioteca');
   const data = await response.json();
-  return data.items ?? [];
-}
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.books)) return data.books;
+  if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.books)) return data.data.books;
+
+  return [];}
 
 export async function getBookDetail(bookId: number): Promise<BookDetail> {
   const response = await apiRequest(`/books/${bookId}`);
