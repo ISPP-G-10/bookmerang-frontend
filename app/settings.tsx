@@ -3,15 +3,18 @@ import { Stack, useRouter } from "expo-router";
 import { ChevronLeft } from "lucide-react-native";
 import React from "react";
 import {
-    Image,
-    Modal,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
 
 // ── Switch custom ────────────────────────────────────────────────────
@@ -143,7 +146,7 @@ function PhotoPickerModal({
 }: {
   visible: boolean;
   onClose: () => void;
-}) {
+}) {  
   return (
     <FloatingModal visible={visible} onClose={onClose}>
       <View style={{ padding: 24 }}>
@@ -232,14 +235,12 @@ function EditProfileModal({
   onSave: (data: {
     name: string;
     username: string;
-    bio: string;
-    location: string;
+    avatar?: string | null;
   }) => void;
 }) {
   const [name, setName] = React.useState(profile?.name ?? "");
   const [username, setUsername] = React.useState(profile?.username ?? "");
-  const [bio, setBio] = React.useState(profile?.bio ?? "");
-  const [location, setLocation] = React.useState(profile?.location ?? "");
+  const [avatar, setAvatar] = React.useState<string | null>(profile?.avatar ?? null);
   const [photoModal, setPhotoModal] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
@@ -247,8 +248,7 @@ function EditProfileModal({
     if (visible) {
       setName(profile?.name ?? "");
       setUsername(profile?.username ?? "");
-      setBio(profile?.bio ?? "");
-      setLocation(profile?.location ?? "");
+      setAvatar(profile?.avatar ?? null);
     }
   }, [visible, profile]);
 
@@ -304,7 +304,7 @@ function EditProfileModal({
                   <Image
                     source={{ uri: profile.avatar }}
                     style={{ width: 96, height: 96 }}
-                  />
+                   />
                 ) : (
                   <View
                     style={{
@@ -355,23 +355,7 @@ function EditProfileModal({
             placeholderTextColor="#c4a882"
             autoCapitalize="none"
           />
-          <Text style={labelStyle}>Biografía</Text>
-          <TextInput
-            style={[inputStyle, { height: 90, textAlignVertical: "top" }]}
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Cuéntanos sobre ti"
-            placeholderTextColor="#c4a882"
-            multiline
-          />
-          <Text style={labelStyle}>Ubicación</Text>
-          <TextInput
-            style={inputStyle}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Tu ciudad"
-            placeholderTextColor="#c4a882"
-          />
+          {/* Removed Biografía and Ubicación fields as requested */}
 
           <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
             <TouchableOpacity
@@ -392,10 +376,10 @@ function EditProfileModal({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={async () => {
-                setSaving(true);
-                await onSave({ name, username, bio, location });
-                setSaving(false);
-              }}
+                  setSaving(true);
+                  await onSave({ name, username, avatar });
+                  setSaving(false);
+                }}
               disabled={saving}
               style={{
                 flex: 1,
@@ -1267,17 +1251,56 @@ export default function SettingsScreen() {
   const handleSaveProfile = async (data: {
     name: string;
     username: string;
-    bio: string;
-    location: string;
+    avatar?: string | null;
   }) => {
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: { name: data.name, username: data.username },
-      });
-      if (!error) {
-        setProfile({ ...profile, ...data });
-        setEditProfileOpen(false);
+      // First: update backend app profile record
+      try {
+        const patchRes = await apiRequest("/api/auth/perfil", {
+          method: "PATCH",
+          body: JSON.stringify({
+            username: data.username,
+            name: data.name,
+            profilePhoto: data.avatar ?? null,
+          }),
+        });
+        if (!patchRes.ok) {
+          const txt = await patchRes.text().catch(() => "");
+          throw new Error(txt || "Error actualizando perfil en el servidor");
+        }
+      } catch (err: any) {
+        console.error("Backend PATCH error:", err);
+        Alert.alert("Error", err?.message || "No se pudo actualizar el perfil en el servidor");
+        return;
       }
+
+      // Then: update Supabase auth user metadata
+      const updateData: any = { name: data.name, username: data.username };
+      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
+        updateData.avatar_url = data.avatar;
+      }
+
+      const res = await supabase.auth.updateUser({ data: updateData });
+      console.log("supabase.updateUser res:", res);
+      if (res.error) {
+        console.error("Error updating user in Supabase:", res.error);
+        Alert.alert("Error", res.error.message || "No se pudo actualizar el perfil en Supabase");
+        return;
+      }
+
+      // Update local state so Settings shows new values
+      const out: any = { ...profile };
+      out.name = data.name;
+      out.username = data.username;
+      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
+        out.avatar = data.avatar;
+      }
+      setProfile(out);
+      setEditProfileOpen(false);
+      showToast("Perfil actualizado correctamente");
+
+      // Navigate to profile page so the Profile screen reflects changes
+      router.replace("/profile" as any);
     } catch (e) {
       console.error(e);
     }
@@ -1312,6 +1335,79 @@ export default function SettingsScreen() {
     borderWidth: 1,
     borderColor: "#F3E9E0",
     overflow: "hidden" as const,
+  };
+
+  const handleDeleteAccount = async () => {
+    console.log('handleDeleteAccount invoked');
+
+    // On web, Alert.alert with multiple buttons doesn't behave like native alerts.
+    // Use window.confirm as a fallback so the user actually sees a confirmation dialog.
+    if (Platform.OS === "web") {
+      const ok = window.confirm(
+        "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer."
+      );
+      if (!ok) return;
+
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const userId = session.session?.user.id;
+        const accessToken = session.session?.access_token;
+
+        const res = await apiRequest("/auth/perfil", { method: "DELETE" });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "Error borrando la cuenta en el servidor");
+        }
+
+        await supabase.auth.signOut();
+        window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
+      } catch (e: any) {
+        console.error("Error borrando cuenta en backend:", e);
+        window.alert(e?.message ?? "No se pudo eliminar la cuenta en el servidor.");
+      }
+      return;
+    }
+
+    // Native mobile path: keep using Alert.alert with buttons
+    Alert.alert(
+      "Eliminar cuenta",
+      "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            console.log('Eliminar: confirm pressed');
+            try {
+              const { data: session } = await supabase.auth.getSession();
+              const userId = session.session?.user.id;
+              const accessToken = session.session?.access_token;
+
+              // Llama al backend para borrar el baseUser; el backend debe encargarse
+              // de eliminar el usuario en Supabase de forma administrativa.
+              try {
+                const res = await apiRequest("/auth/perfil", { method: "DELETE" });
+                if (!res.ok) {
+                  const text = await res.text().catch(() => "");
+                  throw new Error(text || "Error borrando la cuenta en el servidor");
+                }
+
+                // Si el backend respondió OK, cierra sesión y notifica.
+                await supabase.auth.signOut();
+                Alert.alert("Cuenta eliminada", "Tu cuenta ha sido eliminada correctamente.");
+              } catch (e: any) {
+                console.error("Error borrando cuenta en backend:", e);
+                Alert.alert("Error", e?.message ?? "No se pudo eliminar la cuenta en el servidor.");
+              }
+            } catch (error) {
+              console.error(error);
+              Alert.alert("Error", "No se pudo eliminar la cuenta.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -1453,7 +1549,9 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="trash"
             label="Eliminar cuenta"
-            onPress={() => {}}
+            onPress={() => {
+              handleDeleteAccount();
+            }}
             isLast
             danger
           />
