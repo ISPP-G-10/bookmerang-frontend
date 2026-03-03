@@ -21,11 +21,73 @@ export type BookDetail = {
   photos: { url?: string | null }[];
 };
 
+function extractLibraryItems(data: any): any[] {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.books)) return data.books;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.books)) return data.data.books;
+  if (Array.isArray(data?.data?.results)) return data.data.results;
+  return [];
+}
+
+function normalizeBookItem(raw: any): BookListItem {
+  return {
+    id: Number(raw?.id ?? raw?.bookId),
+    titulo: raw?.titulo ?? raw?.title,
+    autor: raw?.autor ?? raw?.author,
+    condition: raw?.condition ?? null,
+    thumbnailUrl: raw?.thumbnailUrl ?? raw?.imageUrl ?? raw?.coverUrl ?? null,
+  };
+}
+
+async function parseResponseBody(response: Response): Promise<any> {
+  if (response.status === 204) return [];
+
+  const text = await response.text();
+  if (!text) return [];
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return [];
+  }
+}
+
 export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
-  const response = await apiRequest(`/books/my-library?page=1&pageSize=${pageSize}`);
-  if (!response.ok) throw new Error('No se pudo cargar la biblioteca');
-  const data = await response.json();
-  return data.items ?? [];
+  const endpoints = [
+    `/books/my-library?page=1&pageSize=${pageSize}`,
+    `/books/my-library?page=1&page_size=${pageSize}`,
+    `/books/my-library?PageNumber=1&PageSize=${pageSize}`,
+    `/books/my-library?pageNumber=1&pageSize=${pageSize}`,
+    '/books/my-library',
+    '/books/my-books',
+    '/books/mine',
+    '/books/library/me',
+    '/books/me/library',
+  ];
+
+  const failures: string[] = [];
+
+  for (const endpoint of endpoints) {
+    const response = await apiRequest(endpoint);
+
+    if (!response.ok) {
+      failures.push(`${endpoint} -> ${response.status}`);
+      continue;
+    }
+
+    const data = await parseResponseBody(response);
+    const items = extractLibraryItems(data)
+      .map(normalizeBookItem)
+      .filter((book) => Number.isFinite(book.id));
+
+    return items;
+  }
+
+  throw new Error(`No se pudo cargar la biblioteca. Endpoints probados: ${failures.join(', ') || 'sin respuesta'}`);
 }
 
 export async function getBookDetail(bookId: number): Promise<BookDetail> {
