@@ -1,4 +1,5 @@
 import { useColorScheme } from "@/components/useColorScheme";
+import { Outfit_400Regular, Outfit_700Bold } from '@expo-google-fonts/outfit';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
   DarkTheme,
@@ -6,7 +7,6 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Outfit_400Regular, Outfit_700Bold } from '@expo-google-fonts/outfit';
 import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
@@ -76,6 +76,9 @@ function RootLayoutNav() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: "modal" }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
+        <Stack.Screen name="profile" options={{ headerShown: false }} />
+        <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
+        <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

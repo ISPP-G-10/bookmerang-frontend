@@ -1,12 +1,12 @@
-import { View, Text, TouchableOpacity, Image } from 'react-native';
-import { router } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { router } from 'expo-router';
+import { Text, TouchableOpacity, View } from 'react-native';
 
 export default function Header() {
   const handleProfilePress = () => {
     // TODO: Navegar al perfil cuando esté implementado
     // router.push('/profile');
-    console.log('Ir a perfil');
+    router.push('/profile' as any);
   };
 
   return (
