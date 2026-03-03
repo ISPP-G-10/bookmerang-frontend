@@ -1,3 +1,6 @@
+import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest } from "@/lib/api";
+import supabase from "@/lib/supabase";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -9,10 +12,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { apiRequest } from "../lib/api";
-import supabase from "../lib/supabase";
 
 export default function RegisterScreen() {
+  const { setBackendUserId } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -56,7 +58,17 @@ export default function RegisterScreen() {
       return;
     }
 
-    router.replace("/(tabs)/matcher" as any);
+    // Intentar capturar el ID interno del backend desde la respuesta
+    try {
+      const userData = await response.json();
+      if (userData?.id) {
+        setBackendUserId(userData.id);
+      }
+    } catch {
+      // La respuesta puede no ser JSON; no es crítico
+    }
+
+    router.replace("/(tabs)" as any);
   };
 
   return (

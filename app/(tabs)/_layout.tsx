@@ -1,6 +1,9 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Tabs } from 'expo-router';
+import { Link, Tabs } from 'expo-router';
+import React from 'react';
+import { Pressable } from 'react-native';
 
+import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 
@@ -38,7 +41,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="chats"
+        name="chat"
         options={{
           title: 'Chats',
           tabBarIcon: ({ color }) => <TabBarIcon name="comment" color={color} />,
