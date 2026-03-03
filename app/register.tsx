@@ -1,5 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import { useAuth } from "@/contexts/AuthContext";
+import { apiRequest } from "@/lib/api";
+import supabase from "@/lib/supabase";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -12,10 +15,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { apiRequest } from "../lib/api";
-import supabase from "../lib/supabase";
 
 export default function RegisterScreen() {
+  const { setBackendUserId } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -69,6 +71,16 @@ export default function RegisterScreen() {
     if (!response.ok) {
       setError("Error al guardar el perfil");
       return;
+    }
+
+    // Intentar capturar el ID interno del backend desde la respuesta
+    try {
+      const userData = await response.json();
+      if (userData?.id) {
+        setBackendUserId(userData.id);
+      }
+    } catch {
+      // La respuesta puede no ser JSON; no es crítico
     }
 
     router.replace("/(tabs)/matcher" as any);
