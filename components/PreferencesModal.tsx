@@ -1,7 +1,7 @@
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useState } from "react";
 import {
   Modal,
-  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -57,7 +57,7 @@ export default function PreferencesModal({
   onClose,
   onSave,
   onSkip,
-  initialPreferences = { distanceKm: 1, genres: [], bookLength: [] },
+  initialPreferences = { distanceKm: 10, genres: [], bookLength: [] },
   availableGenres,
   title = "Preferencias",
   error = "",
@@ -69,21 +69,19 @@ export default function PreferencesModal({
       : FALLBACK_GENRES;
 
   const [distanceKm, setDistanceKm] = useState<string>(
-    String(initialPreferences.distanceKm || 1)
+    String(initialPreferences.distanceKm || 10),
   );
   const [selectedGenres, setSelectedGenres] = useState<string[]>(
-    initialPreferences.genres || []
+    initialPreferences.genres || [],
   );
   const [selectedLengths, setSelectedLengths] = useState<string[]>(
-    initialPreferences.bookLength || []
+    initialPreferences.bookLength || [],
   );
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
 
   const toggleGenre = (genre: string) => {
     setSelectedGenres((prev) =>
-      prev.includes(genre)
-        ? prev.filter((g) => g !== genre)
-        : [...prev, genre]
+      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre],
     );
   };
 
@@ -91,178 +89,329 @@ export default function PreferencesModal({
     setSelectedLengths((prev) =>
       prev.includes(length)
         ? prev.filter((l) => l !== length)
-        : [...prev, length]
+        : [...prev, length],
     );
   };
 
   const handleSave = async () => {
-    setLoading(true);
+    setLocalLoading(true);
     try {
       await onSave({
-        distanceKm: parseInt(distanceKm, 10) || 1,
+        distanceKm: parseInt(distanceKm, 10) || 10,
         genres: selectedGenres,
         bookLength: selectedLengths,
       });
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
-  const handleSkip = () => {
+  const handleClose = () => {
     onSkip?.();
     onClose();
   };
 
-  return (
-    <Modal visible={visible} animationType="slide" transparent={false}>
-      <View className="flex-1 bg-amber-50">
-        {/* Header */}
-        <View className="bg-white px-6 pt-12 pb-4 border-b border-gray-200 flex-row justify-between items-center">
-          <Text className="text-2xl font-bold text-gray-800">{title}</Text>
-          <Pressable onPress={handleSkip}>
-            <Text className="text-2xl text-gray-400">✕</Text>
-          </Pressable>
-        </View>
+  const loading = localLoading || isLoading;
 
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ paddingBottom: 20 }}
+  return (
+    <Modal visible={visible} animationType="fade" transparent>
+      {/* Fondo oscuro */}
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 16,
+        }}
+      >
+        {/* Tarjeta flotante */}
+        <View
+          style={{
+            backgroundColor: "#fdfbf7",
+            borderRadius: 24,
+            width: "100%",
+            maxHeight: "85%",
+            overflow: "hidden",
+          }}
         >
-          {/* Distancia para Intercambios */}
-          <View className="px-6 pt-6">
-            <Text className="text-sm font-bold text-amber-800 mb-4 tracking-wider">
-              DISTANCIA PARA INTERCAMBIOS
+          {/* Header del modal */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingHorizontal: 24,
+              paddingTop: 24,
+              paddingBottom: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: "#F3E9E0",
+            }}
+          >
+            <Text style={{ fontSize: 20, fontWeight: "900", color: "#3e2723" }}>
+              {title}
             </Text>
-            <View className="flex-row items-center gap-3">
+            <TouchableOpacity
+              onPress={handleClose}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: "#8B7355",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <FontAwesome name="times" size={14} color="#8B7355" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Contenido scrollable */}
+          <ScrollView
+            contentContainerStyle={{ padding: 24, paddingBottom: 8 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Distancia */}
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "900",
+                letterSpacing: 1.5,
+                color: "#e07a5f",
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              Distancia para intercambios
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 24,
+              }}
+            >
               <TextInput
-                className="flex-1 border-2 border-gray-200 bg-white rounded-2xl p-4 text-gray-800 text-lg"
+                style={{
+                  flex: 1,
+                  borderWidth: 1.5,
+                  borderColor: "#F3E9E0",
+                  backgroundColor: "#ffffff",
+                  borderRadius: 12,
+                  padding: 14,
+                  fontSize: 16,
+                  color: "#3e2723",
+                }}
                 keyboardType="numeric"
-                placeholder="Ej: 25"
-                placeholderTextColor="#9ca3af"
+                placeholder="Ej: 10"
+                placeholderTextColor="#c4a882"
                 value={distanceKm}
                 onChangeText={(v) => setDistanceKm(v.replace(/[^0-9]/g, ""))}
                 maxLength={4}
               />
-              <Text className="text-gray-600 text-lg font-semibold">km</Text>
+              <Text
+                style={{ fontSize: 16, fontWeight: "600", color: "#8B7355" }}
+              >
+                km
+              </Text>
             </View>
-          </View>
 
-          {/* Géneros de Interés */}
-          <View className="px-6 pt-8">
-            <Text className="text-sm font-bold text-amber-800 mb-4 tracking-wider">
-              GÉNEROS DE INTERÉS
+            {/* Géneros */}
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "900",
+                letterSpacing: 1.5,
+                color: "#e07a5f",
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              Géneros de interés
             </Text>
-            <View className="flex-row flex-wrap gap-3">
-              {genreList.map((genre) => (
-                <TouchableOpacity
-                  key={genre}
-                  className={`px-4 py-3 rounded-full border-2 ${
-                    selectedGenres.includes(genre)
-                      ? "bg-amber-600 border-amber-600"
-                      : "bg-white border-gray-200"
-                  }`}
-                  onPress={() => toggleGenre(genre)}
-                >
-                  <View className="flex-row items-center gap-2">
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: 24,
+              }}
+            >
+              {genreList.map((genre) => {
+                const selected = selectedGenres.includes(genre);
+                return (
+                  <TouchableOpacity
+                    key={genre}
+                    onPress={() => toggleGenre(genre)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 999,
+                      borderWidth: 1.5,
+                      backgroundColor: selected ? "#e07a5f" : "#ffffff",
+                      borderColor: selected ? "#e07a5f" : "#F3E9E0",
+                    }}
+                  >
                     <View
-                      className={`w-5 h-5 rounded border-2 items-center justify-center ${
-                        selectedGenres.includes(genre)
-                          ? "bg-white border-white"
-                          : "border-gray-300"
-                      }`}
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: 4,
+                        borderWidth: 1.5,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: selected ? "#ffffff" : "#fdfbf7",
+                        borderColor: selected ? "#ffffff" : "#c4a882",
+                      }}
                     >
-                      {selectedGenres.includes(genre) && (
-                        <Text className="text-amber-600 font-bold text-xs">
-                          ✓
-                        </Text>
+                      {selected && (
+                        <FontAwesome name="check" size={9} color="#e07a5f" />
                       )}
                     </View>
                     <Text
-                      className={`font-semibold ${
-                        selectedGenres.includes(genre)
-                          ? "text-white"
-                          : "text-gray-700"
-                      }`}
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: selected ? "#ffffff" : "#8B7355",
+                      }}
                     >
                       {genre}
                     </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          </View>
 
-          {/* Error message */}
-          {error ? (
-            <View className="px-6 pt-6">
-              <View className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                <Text className="text-red-600 text-sm">{error}</Text>
+            {/* Error */}
+            {error ? (
+              <View
+                style={{
+                  backgroundColor: "#fff0f0",
+                  borderWidth: 1,
+                  borderColor: "#fca5a5",
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <Text style={{ color: "#dc2626", fontSize: 13 }}>{error}</Text>
               </View>
-            </View>
-          ) : null}
+            ) : null}
 
-          {/* Extensión del Libro */}
-          <View className="px-6 pt-8 pb-8">
-            <Text className="text-sm font-bold text-amber-800 mb-4 tracking-wider">
-              EXTENSIÓN DEL LIBRO
+            {/* Extensión del libro */}
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "900",
+                letterSpacing: 1.5,
+                color: "#e07a5f",
+                marginBottom: 12,
+                textTransform: "uppercase",
+              }}
+            >
+              Extensión del libro
             </Text>
-            <View className="gap-3">
-              {BOOK_LENGTHS.map((length) => (
-                <TouchableOpacity
-                  key={length.value}
-                  className={`rounded-2xl p-4 flex-row items-center border-2 ${
-                    selectedLengths.includes(length.value)
-                      ? "bg-amber-600 border-amber-600"
-                      : "bg-white border-gray-200"
-                  }`}
-                  onPress={() => toggleLength(length.value)}
-                >
-                  <View
-                    className={`w-6 h-6 rounded-full border-2 mr-3 items-center justify-center ${
-                      selectedLengths.includes(length.value)
-                        ? "bg-white border-white"
-                        : "border-gray-300"
-                    }`}
+            <View style={{ gap: 8, marginBottom: 8 }}>
+              {BOOK_LENGTHS.map((length) => {
+                const selected = selectedLengths.includes(length.value);
+                return (
+                  <TouchableOpacity
+                    key={length.value}
+                    onPress={() => toggleLength(length.value)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 14,
+                      borderRadius: 12,
+                      borderWidth: 1.5,
+                      backgroundColor: selected ? "#e07a5f" : "#ffffff",
+                      borderColor: selected ? "#e07a5f" : "#F3E9E0",
+                    }}
                   >
-                    {selectedLengths.includes(length.value) && (
-                      <Text className="text-amber-600 font-bold">✓</Text>
-                    )}
-                  </View>
-                  <Text
-                    className={`text-lg font-semibold ${
-                      selectedLengths.includes(length.value)
-                        ? "text-white"
-                        : "text-gray-700"
-                    }`}
-                  >
-                    {length.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <View
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: 10,
+                        borderWidth: 1.5,
+                        marginRight: 12,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: selected ? "#ffffff" : "#fdfbf7",
+                        borderColor: selected ? "#ffffff" : "#c4a882",
+                      }}
+                    >
+                      {selected && (
+                        <FontAwesome name="check" size={10} color="#e07a5f" />
+                      )}
+                    </View>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "700",
+                        color: selected ? "#ffffff" : "#3e2723",
+                      }}
+                    >
+                      {length.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+          </ScrollView>
+
+          {/* Footer con botones */}
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 12,
+              padding: 24,
+              borderTopWidth: 1,
+              borderTopColor: "#F3E9E0",
+              backgroundColor: "#fdfbf7",
+            }}
+          >
+            <TouchableOpacity
+              onPress={handleClose}
+              disabled={loading}
+              style={{
+                flex: 1,
+                borderWidth: 2,
+                borderColor: "#e07a5f",
+                borderRadius: 999,
+                padding: 14,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{ color: "#e07a5f", fontWeight: "900", fontSize: 15 }}
+              >
+                Cancelar
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={loading}
+              style={{
+                flex: 1,
+                borderRadius: 999,
+                padding: 14,
+                alignItems: "center",
+                backgroundColor: loading ? "#f4a896" : "#e07a5f",
+              }}
+            >
+              <Text
+                style={{ color: "#ffffff", fontWeight: "900", fontSize: 15 }}
+              >
+                {loading ? "Guardando..." : "Guardar"}
+              </Text>
+            </TouchableOpacity>
           </View>
-        </ScrollView>
-
-        {/* Footer Buttons */}
-        <View className="px-6 pb-8 pt-4 border-t border-gray-200 bg-white gap-3">
-          <TouchableOpacity
-            className="border-2 border-amber-600 rounded-full p-4 items-center"
-            onPress={handleSkip}
-            disabled={loading || isLoading}
-          >
-            <Text className="text-amber-600 font-bold text-lg">Más tarde</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            className={`rounded-full p-4 items-center ${
-              loading || isLoading ? "bg-amber-400" : "bg-amber-600"
-            }`}
-            onPress={handleSave}
-            disabled={loading || isLoading}
-          >
-            <Text className="text-white font-bold text-lg">
-              {loading || isLoading ? "Guardando..." : "Guardar"}
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
     </Modal>

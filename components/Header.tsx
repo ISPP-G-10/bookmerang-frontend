@@ -1,20 +1,30 @@
-import { View, Text, TouchableOpacity, Image } from 'react-native';
-import { router } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { router } from "expo-router";
+import { Text, TouchableOpacity, View } from "react-native";
 
-export default function Header() {
-  const handleProfilePress = () => {
-    // TODO: Navegar al perfil cuando esté implementado
-    // router.push('/profile');
-    console.log('Ir a perfil');
+interface HeaderProps {
+  showBack?: boolean;
+}
+
+export default function Header({ showBack = false }: HeaderProps) {
+  const handleLeftPress = () => {
+    if (showBack) {
+      router.back();
+    } else {
+      router.push("/profile");
+    }
   };
 
   return (
     <View className="bg-white border-b border-gray-200 px-4 py-3 flex-row items-center justify-between">
-      {/* Foto de perfil */}
-      <TouchableOpacity onPress={handleProfilePress}>
+      {/* Izquierda: flecha atrás o foto de perfil */}
+      <TouchableOpacity onPress={handleLeftPress}>
         <View className="w-10 h-10 rounded-full bg-[#e07a5f] items-center justify-center">
-          <FontAwesome name="user" size={20} color="#fdfbf7" />
+          <FontAwesome
+            name={showBack ? "arrow-left" : "user"}
+            size={20}
+            color="#fdfbf7"
+          />
         </View>
       </TouchableOpacity>
 
@@ -23,7 +33,13 @@ export default function Header() {
         <View className="bg-[#e07a5f] rounded-lg w-9 h-9 items-center justify-center mr-2">
           <FontAwesome name="book" size={18} color="#fdfbf7" />
         </View>
-        <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 20, color: '#e07a5f' }}>
+        <Text
+          style={{
+            fontFamily: "Outfit_700Bold",
+            fontSize: 20,
+            color: "#e07a5f",
+          }}
+        >
           Bookmerang
         </Text>
       </View>

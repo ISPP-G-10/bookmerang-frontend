@@ -55,7 +55,7 @@ export default function RegisterScreen() {
 
     // 2. Guardar en base_users
     try {
-      const response = await apiRequest("/auth/register", {
+      const response = await apiRequest("/api/auth/register", {
         method: "POST",
         body: JSON.stringify({
           username,
