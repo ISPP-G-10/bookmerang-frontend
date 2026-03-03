@@ -3,18 +3,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-  Easing,
-  FadeIn,
-  FadeInDown,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
+    Easing,
+    interpolate,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withRepeat,
+    withSequence,
+    withSpring,
+    withTiming
 } from 'react-native-reanimated';
 
 // ── Types ──
