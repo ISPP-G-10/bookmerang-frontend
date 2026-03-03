@@ -1,8 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -13,6 +16,7 @@ import supabase from "../lib/supabase";
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -35,72 +39,125 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-amber-50"
+      className="flex-1 bg-[#fdfbf7]"
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Parte superior decorativa */}
-      <View className="flex-1 bg-amber-800 rounded-b-[40px] items-center justify-center">
-        <Text className="text-6xl mb-4">📚</Text>
-        <Text className="text-white text-4xl font-bold">Bookmerang</Text>
-        <Text className="text-amber-200 text-base mt-2">
-          Intercambia libros con tu comunidad
-        </Text>
-      </View>
-
-      {/* Formulario */}
-      <View className="flex-1 px-8 pt-10">
-        <Text className="text-2xl font-bold text-gray-800 mb-6">
-          Iniciar sesión
-        </Text>
-
-        <Text className="text-gray-500 text-sm mb-1 ml-1">Email</Text>
-        <TextInput
-          className="border border-gray-200 bg-white rounded-xl p-4 mb-4 text-gray-800"
-          placeholder="tu@email.com"
-          placeholderTextColor="#9ca3af"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-
-        <Text className="text-gray-500 text-sm mb-1 ml-1">Contraseña</Text>
-        <TextInput
-          className="border border-gray-200 bg-white rounded-xl p-4 mb-2 text-gray-800"
-          placeholder="••••••••"
-          placeholderTextColor="#9ca3af"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-
-        {error ? (
-          <View className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-            <Text className="text-red-600 text-sm">{error}</Text>
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View className="items-center pt-14 pb-4 bg-[#fdfbf7]">
+          {/* Logo */}
+          <View className="flex-row items-center mb-6">
+            <View className="bg-[#e07a5f] rounded-lg p-1.5 mr-2">
+              <Ionicons name="book-outline" size={18} color="#ffffff" />
+            </View>
+            <Text className="text-2xl font-bold text-[#3d405b] tracking-wide">
+              Bookmerang
+            </Text>
           </View>
-        ) : (
-          <View className="mb-4" />
-        )}
 
-        <TouchableOpacity
-          className={`rounded-xl p-4 items-center ${loading ? "bg-amber-400" : "bg-amber-800"}`}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text className="text-white font-bold text-lg">
-            {loading ? "Cargando..." : "Entrar"}
-          </Text>
-        </TouchableOpacity>
+          {/* Imagen */}
+          <Image
+            source={require("../assets/images/fondo_bookmerang.png")}
+            style={{ width: "100%", height: 220 }}
+            resizeMode="cover"
+          />
+        </View>
 
-        <TouchableOpacity
-          className="items-center mt-4"
-          onPress={() => router.replace("/register" as any)}
-        >
-          <Text className="text-amber-800 text-sm">
-            ¿No tienes cuenta? Regístrate
+        {/* Formulario */}
+        <View className="flex-1 px-7 pt-2 pb-8 bg-[#fdfbf7]">
+          <Text className="text-3xl font-bold text-[#3d405b] mb-7 text-center">
+            Inicia sesión
           </Text>
-        </TouchableOpacity>
-      </View>
+
+          {/* Campo email */}
+          <View className="flex-row items-center bg-white border border-[#e8e4dc] rounded-xl px-4 mb-4 h-14">
+            <Ionicons
+              name="mail-outline"
+              size={18}
+              color="#b0adb8"
+              style={{ marginRight: 10 }}
+            />
+            <TextInput
+              className="flex-1 text-[15px] text-[#3d405b]"
+              placeholder="Correo electrónico"
+              placeholderTextColor="#b0adb8"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
+
+          {/* Campo contraseña */}
+          <View className="flex-row items-center bg-white border border-[#e8e4dc] rounded-xl px-4 mb-2.5 h-14">
+            <Ionicons
+              name="lock-closed-outline"
+              size={18}
+              color="#b0adb8"
+              style={{ marginRight: 10 }}
+            />
+            <TextInput
+              className="flex-1 text-[15px] text-[#3d405b]"
+              placeholder="Contraseña"
+              placeholderTextColor="#b0adb8"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons
+                name={showPassword ? "eye-off-outline" : "eye-outline"}
+                size={18}
+                color="#b0adb8"
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* ¿Olvidaste tu contraseña? */}
+          <TouchableOpacity className="self-end mb-5">
+            <Text className="text-[#e07a5f] text-sm font-medium">
+              ¿Olvidaste tu contraseña?
+            </Text>
+          </TouchableOpacity>
+
+          {/* Error */}
+          {error ? (
+            <View className="bg-[#fef2f0] border border-[#f8c4bb] rounded-xl p-3 mb-4">
+              <Text className="text-[#e07a5f] text-sm">{error}</Text>
+            </View>
+          ) : null}
+
+          {/* Botón principal */}
+          <TouchableOpacity
+            className={`rounded-full py-4 items-center mb-4 ${
+              loading ? "bg-[#f0a898]" : "bg-[#e07a5f]"
+            }`}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text className="text-white font-bold text-base">
+              {loading ? "Cargando..." : "Iniciar sesión"}
+            </Text>
+          </TouchableOpacity>
+
+          {/* registro */}
+          <View className="items-center mt-1">
+            <Text className="text-[#9e9aad] text-sm">
+              ¿No tienes cuenta?{" "}
+              <Text
+                className="text-[#e07a5f] font-bold underline"
+                onPress={() => router.replace("/register" as any)}
+              >
+                Regístrate
+              </Text>
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
