@@ -1,7 +1,12 @@
 import { getProfile as fetchProfile, getMyLibrary, toConditionLabel, type BookListItem, type UserProfile } from '@/lib/books';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+<<<<<<< HEAD
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
+=======
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+>>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
@@ -9,7 +14,10 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [books, setBooks] = useState<BookListItem[]>([]);
   const [libraryError, setLibraryError] = useState('');
+<<<<<<< HEAD
   const [isLoadingLibrary, setIsLoadingLibrary] = useState<boolean>(false);
+=======
+>>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
 
   const bannerText = useMemo(() => {
     if (params.message === 'updated') return 'Libro actualizado correctamente';
@@ -17,6 +25,7 @@ export default function ProfileScreen() {
     return '';
   }, [params.message]);
 
+<<<<<<< HEAD
   const loadData = useCallback(async () => {
     setLibraryError('');
     setIsLoadingLibrary(true);
@@ -42,6 +51,27 @@ export default function ProfileScreen() {
       loadData();
     }, [loadData])
   );
+=======
+  useEffect(() => {
+    const loadData = async () => {
+      setLibraryError('');
+
+      const [profileResult, booksResult] = await Promise.allSettled([fetchProfile(), getMyLibrary()]);
+
+      if (profileResult.status === 'fulfilled') {
+        setProfile(profileResult.value);
+      }
+
+      if (booksResult.status === 'fulfilled') {
+        setBooks(booksResult.value);
+      } else {
+        setLibraryError('No se pudo cargar tu biblioteca. Revisa backend/token e inténtalo de nuevo.');
+      }
+    };
+
+    loadData();
+  }, []);
+>>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
 
   return (
     <View style={styles.container}>
@@ -105,6 +135,7 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.sectionButton}><Text style={styles.sectionButtonText}>Tu Biblioteca</Text></TouchableOpacity>
 
         {libraryError ? <Text style={styles.errorText}>{libraryError}</Text> : null}
+<<<<<<< HEAD
         {!libraryError && !isLoadingLibrary && books.length === 0 ? (
           <Text style={styles.emptyText}>
             Aún no tienes libros en tu biblioteca. Sube uno y volverá a aparecer aquí al entrar de nuevo en tu perfil.
@@ -117,6 +148,9 @@ export default function ProfileScreen() {
             <Text style={styles.createBookButtonText}>Subir tu primer libro</Text>
           </TouchableOpacity>
         ) : null}
+=======
+
+>>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
         <View style={styles.grid}>
           {books.map((book) => (
             <TouchableOpacity key={book.id} style={styles.bookCard} onPress={() => router.push(`/books/${book.id}` as any)}>
@@ -175,9 +209,12 @@ const styles = StyleSheet.create({
   sectionButton: { width: '100%', maxWidth: 520, alignSelf: 'center', marginTop: 14, borderRadius: 999, borderWidth: 2, borderColor: '#e07a5f', backgroundColor: '#f5f3f0', paddingVertical: 12, alignItems: 'center' },
   sectionButtonText: { fontFamily: 'Outfit_700Bold', color: '#e07a5f', fontSize: 18 },
   errorText: { color: '#ff2f2f', paddingHorizontal: 22, marginTop: 14, fontSize: 14 },
+<<<<<<< HEAD
   emptyText: { color: '#8c6a53', paddingHorizontal: 22, marginTop: 14, fontSize: 14 },
   createBookButton: { width: '100%', maxWidth: 520, alignSelf: 'center', marginTop: 14, borderRadius: 999, backgroundColor: '#e07a5f', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   createBookButtonText: { fontFamily: 'Outfit_700Bold', color: '#fdfbf7', fontSize: 18 },
+=======
+>>>>>>> 74955fa07932b8d36cf4afc83c60f2f1ad1799e2
   grid: { paddingHorizontal: 20, marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   bookCard: { width: '48%', marginBottom: 14, borderRadius: 14, overflow: 'hidden', backgroundColor: '#fdfbf7', borderWidth: 1, borderColor: '#ece6df' },
   bookImageWrap: { height: 220, backgroundColor: '#f2cc8f' },
