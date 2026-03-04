@@ -1,10 +1,10 @@
 import { useColorScheme } from "@/components/useColorScheme";
-import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
+import { Outfit_400Regular, Outfit_700Bold } from '@expo-google-fonts/outfit';
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-    DarkTheme,
-    DefaultTheme,
-    ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -16,8 +16,8 @@ import '../global.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export {
-    // Catch any errors thrown by the Layout component.
-    ErrorBoundary
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -66,6 +66,8 @@ function RootLayoutNav() {
           <Stack.Screen name="modal" options={{ presentation: "modal" }} />
           <Stack.Screen name="register" options={{ headerShown: false }} />
           <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
           <Stack.Screen
             name="chat/[id]"
             options={{
