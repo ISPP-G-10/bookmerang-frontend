@@ -1,20 +1,30 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { router } from 'expo-router';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function Header() {
-  const handleProfilePress = () => {
-    // TODO: Navegar al perfil cuando esté implementado
-    // router.push('/profile');
-    console.log('Ir a perfil');
+interface HeaderProps {
+  showBack?: boolean;
+}
+
+export default function Header({ showBack = false }: HeaderProps) {
+  const handleLeftPress = () => {
+    if (showBack) {
+      router.back();
+    } else {
+      router.push("/profile");
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Foto de perfil */}
-      <TouchableOpacity onPress={handleProfilePress}>
+      {/* Izquierda: flecha atrás o foto de perfil */}
+      <TouchableOpacity onPress={handleLeftPress}>
         <View style={styles.profileButton}>
-          <FontAwesome name="user" size={20} color="#fdfbf7" />
+          <FontAwesome
+            name={showBack ? "arrow-left" : "user"}
+            size={20}
+            color="#fdfbf7"
+          />
         </View>
       </TouchableOpacity>
 

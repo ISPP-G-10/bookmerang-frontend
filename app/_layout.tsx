@@ -1,19 +1,16 @@
 import { useColorScheme } from "@/components/useColorScheme";
-import { Outfit_400Regular, Outfit_700Bold } from '@expo-google-fonts/outfit';
+import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
+    DarkTheme,
+    DefaultTheme,
+    ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
-import supabase from "../lib/supabase";
-import 'react-native-reanimated';
 import '../global.css';
 
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -62,15 +59,18 @@ function RootLayoutNav() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
           <Stack.Screen
             name="chat/[id]"
             options={{
               headerShown: true,
-              title: 'Chat',
+              title: "Chat",
             }}
           />
         </Stack>
