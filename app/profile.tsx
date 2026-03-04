@@ -1,15 +1,8 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
+import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import {
-  Award,
-  Droplet,
-  Flame,
-  MapPin,
-  Settings,
-  TrendingUp,
-} from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -347,7 +340,7 @@ export default function ProfileScreen() {
               onPress={() => router.push("/settings" as any)}
               style={{ padding: 6 }}
             >
-              <Settings size={22} color="#8B7355" />
+              <FontAwesome name="cog" size={22} color="#8B7355" />
             </TouchableOpacity>
           </View>
 
@@ -417,7 +410,7 @@ export default function ProfileScreen() {
               marginTop: 6,
             }}
           >
-            <MapPin size={14} color="#e07a5f" />
+            <FontAwesome name="map-marker" size={14} color="#e07a5f" />
             <Text style={{ fontSize: 14, color: "#8B7355" }}>
               {locationLabel ?? profile?.location ?? "Madrid, España"}
             </Text>
@@ -453,7 +446,7 @@ export default function ProfileScreen() {
                 marginBottom: 4,
               }}
             >
-              <Award size={20} color="#CD7F32" />
+              <FontAwesome name="trophy" size={20} color="#CD7F32" />
               <Text
                 style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
               >
@@ -494,7 +487,7 @@ export default function ProfileScreen() {
                 marginBottom: 4,
               }}
             >
-              <Droplet size={20} color="#e07a5f" fill="#e07a5f" />
+              <FontAwesome name="tint" size={20} color="#e07a5f" />
               <Text
                 style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
               >
@@ -550,7 +543,7 @@ export default function ProfileScreen() {
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <TrendingUp size={16} color="#e07a5f" />
+              <FontAwesome name="arrow-up" size={16} color="#e07a5f" />
               <Text
                 style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}
               >
@@ -620,7 +613,7 @@ export default function ProfileScreen() {
                 justifyContent: "center",
               }}
             >
-              <Flame size={24} color="#ffffff" />
+              <FontAwesome name="fire" size={24} color="#ffffff" />
             </View>
             <View>
               <Text style={{ fontWeight: "900", color: "#3e2723" }}>
