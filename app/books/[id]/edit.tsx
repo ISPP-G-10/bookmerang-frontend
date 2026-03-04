@@ -98,15 +98,16 @@ export default function EditBookScreen() {
       ) : (
         <>
           <ScrollView
-            contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 120, alignItems: 'center' }}
           >
+            <View className="w-full max-w-sm">
             {error ? <Text className="text-red-500 mb-3">{error}</Text> : null}
 
             {book?.photos?.[0]?.url ? (
               <View className="w-full items-center mb-4">
                 <Image
                   source={{ uri: book.photos[0].url }}
-                  className="h-80 w-56 rounded-3xl"
+                  className="h-48 w-32 rounded-3xl"
                 />
               </View>
             ) : null}
@@ -136,20 +137,24 @@ export default function EditBookScreen() {
               onChangeText={setDescription}
               multiline
             />
+            </View>
           </ScrollView>
 
-          <View className="absolute bottom-0 left-0 right-0 border-t border-[#f2cc8f] bg-white p-4">
-            <TouchableOpacity
-              className="bg-[#e07a5f] rounded-full py-4 items-center"
-              onPress={handleSave}
-            >
-              <Text
-                style={{ fontFamily: "Outfit_700Bold" }}
-                className="text-white text-xl"
+          <View className="absolute bottom-0 left-0 right-0 border-t border-[#f2cc8f] bg-white p-4 items-center">
+            <View className="w-full max-w-sm">
+              <TouchableOpacity
+                className="bg-[#e07a5f] rounded-full py-3 items-center flex-row justify-center gap-2"
+                onPress={handleSave}
               >
-                💾 Guardar cambios
-              </Text>
-            </TouchableOpacity>
+                <FontAwesome name="save" size={18} color="white" />
+                <Text
+                  style={{ fontFamily: "Outfit_700Bold" }}
+                  className="text-white text-lg"
+                >
+                  Guardar cambios
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </>
       )}

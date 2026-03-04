@@ -79,20 +79,22 @@ export default function BookDetailScreen() {
       {!loading && book ? (
         <>
           <ScrollView
-            contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 120, alignItems: 'center' }}
           >
-            <View className="h-96 rounded-3xl overflow-hidden bg-[#f2cc8f]">
-              {book.photos?.[0]?.url ? (
-                <Image
-                  source={{ uri: book.photos[0].url }}
-                  className="w-full h-full"
-                />
-              ) : null}
-            </View>
-            <View className="absolute right-10 top-9 rounded-full bg-[#ea7b5e] px-4 py-2">
-              <Text className="text-white font-semibold">
-                {toConditionLabel(book.condition)}
-              </Text>
+            <View className="w-full max-w-sm relative">
+              <View className="h-96 rounded-3xl overflow-hidden bg-[#f2cc8f]">
+                {book.photos?.[0]?.url ? (
+                  <Image
+                    source={{ uri: book.photos[0].url }}
+                    className="w-full h-full"
+                  />
+                ) : null}
+              </View>
+              <View className="absolute top-4 right-4 rounded-full bg-[#ea7b5e] px-4 py-2">
+                <Text className="text-white font-semibold">
+                  {toConditionLabel(book.condition)}
+                </Text>
+              </View>
             </View>
 
             <Text
@@ -108,7 +110,7 @@ export default function BookDetailScreen() {
               por {book.autor}
             </Text>
 
-            <View className="rounded-2xl border border-[#f2cc8f] bg-white p-4 mt-5">
+            <View className="w-full max-w-sm rounded-2xl border border-[#f2cc8f] bg-white p-4 mt-5">
               <Row
                 label="Idioma"
                 value={book.languages?.[0] ?? "No especificado"}
@@ -118,7 +120,7 @@ export default function BookDetailScreen() {
               <Row label="Estado" value={toConditionLabel(book.condition)} />
             </View>
 
-            <View className="rounded-2xl border border-[#f2cc8f] bg-white p-4 mt-4">
+            <View className="w-full max-w-sm rounded-2xl border border-[#f2cc8f] bg-white p-4 mt-4">
               <Text
                 style={{ fontFamily: "Outfit_700Bold" }}
                 className="text-[#3e2723] text-xl"
@@ -131,67 +133,71 @@ export default function BookDetailScreen() {
             </View>
           </ScrollView>
 
-          <View className="absolute bottom-0 left-0 right-0 border-t border-[#f2cc8f] bg-white p-4 flex-row gap-3">
-            <TouchableOpacity
-              className="flex-1 border-2 border-[#ea7b5e] rounded-full py-4 items-center"
-              onPress={() => router.push(`/books/${id}/edit` as any)}
-            >
-              <Text
-                style={{ fontFamily: "Outfit_700Bold" }}
-                className="text-[#ea7b5e] text-xl"
+          <View className="absolute bottom-0 left-0 right-0 border-t border-[#f2cc8f] bg-white p-4 items-center">
+            <View className="w-full max-w-sm flex-row gap-3">
+              <TouchableOpacity
+                className="flex-1 border-2 border-[#ea7b5e] rounded-full py-3 items-center flex-row justify-center gap-2"
+                onPress={() => router.push(`/books/${id}/edit` as any)}
               >
-                ✎ Editar
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              className="flex-1 bg-[#ff2a3d] rounded-full py-4 items-center"
-              onPress={() => setShowDeleteModal(true)}
-            >
-              <Text
-                style={{ fontFamily: "Outfit_700Bold" }}
-                className="text-white text-xl"
+                <FontAwesome name="pencil" size={18} color="#ea7b5e" />
+                <Text
+                  style={{ fontFamily: "Outfit_700Bold" }}
+                  className="text-[#ea7b5e] text-lg"
+                >
+                  Editar
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                className="flex-1 bg-[#ea7b5e] rounded-full py-3 items-center flex-row justify-center gap-2"
+                onPress={() => setShowDeleteModal(true)}
               >
-                🗑 Eliminar
-              </Text>
-            </TouchableOpacity>
+                <FontAwesome name="trash-o" size={18} color="white" />
+                <Text
+                  style={{ fontFamily: "Outfit_700Bold" }}
+                  className="text-white text-lg"
+                >
+                  Eliminar
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <Modal visible={showDeleteModal} transparent animationType="fade">
             <View className="flex-1 bg-black/50 justify-center px-6">
-              <View className="bg-white rounded-3xl p-6">
-                <View className="w-20 h-20 rounded-full bg-[#ffe6e6] items-center justify-center self-center mb-3">
-                  <FontAwesome name="trash-o" size={34} color="#ff2a3d" />
+              <View className="bg-white rounded-2xl p-4 max-w-sm self-center">
+                <View className="w-14 h-14 rounded-full bg-[#ffe6e6] items-center justify-center self-center mb-3">
+                  <FontAwesome name="trash-o" size={24} color="#ea7b5e" />
                 </View>
 
                 <Text
                   style={{ fontFamily: "Outfit_700Bold" }}
-                  className="text-[#3e2723] text-4xl text-center"
+                  className="text-[#3e2723] text-2xl text-center"
                 >
                   ¿Eliminar libro?
                 </Text>
-                <Text className="text-[#8B7355] text-xl text-center mt-3">
+                <Text className="text-[#8B7355] text-base text-center mt-2">
                   Esta acción no se puede deshacer. El libro "{book.titulo}" se
-                  eliminará permanentemente de tu biblioteca.
+                  eliminará permanentemente.
                 </Text>
-                <View className="flex-row gap-3 mt-6">
+                <View className="flex-row gap-3 mt-4">
                   <TouchableOpacity
-                    className="flex-1 rounded-full bg-[#f6f2ed] py-4 items-center"
+                    className="flex-1 rounded-full bg-[#f6f2ed] py-3 items-center"
                     onPress={() => setShowDeleteModal(false)}
                   >
                     <Text
                       style={{ fontFamily: "Outfit_700Bold" }}
-                      className="text-[#8B7355] text-xl"
+                      className="text-[#8B7355] text-lg"
                     >
                       Cancelar
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    className="flex-1 rounded-full bg-[#ff2a3d] py-4 items-center"
+                    className="flex-1 rounded-full bg-[#ea7b5e] py-3 items-center"
                     onPress={handleDelete}
                   >
                     <Text
                       style={{ fontFamily: "Outfit_700Bold" }}
-                      className="text-white text-xl"
+                      className="text-white text-lg"
                     >
                       Eliminar
                     </Text>

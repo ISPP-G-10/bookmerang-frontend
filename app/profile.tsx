@@ -11,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
@@ -42,12 +43,17 @@ const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
   const { message } = useLocalSearchParams<{ message?: string }>();
   const [libraryBooks, setLibraryBooks] = useState<BookListItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+
+  // Calcular números de columnas basado en ancho de pantalla
+  const numColumns = width >= 768 ? 4 : 3;
+  const bookWidth = `${(100 / numColumns) - 1}%`;
 
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [preferences, setPreferences] = useState<{
@@ -803,7 +809,7 @@ export default function ProfileScreen() {
                 key={book.id}
                 onPress={() => router.push(`/books/${book.id}` as any)}
                 style={{
-                  width: "47%",
+                  width: bookWidth,
                   backgroundColor: "#ffffff",
                   borderRadius: 16,
                   overflow: "hidden",
