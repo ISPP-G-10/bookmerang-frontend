@@ -2,8 +2,8 @@ import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -13,10 +13,39 @@ import {
   View,
 } from "react-native";
 import { apiRequest } from "../lib/api";
+import {
+  getMyLibrary,
+  toConditionLabel,
+  type BookListItem,
+} from "../lib/books";
 import supabase from "../lib/supabase";
+
+const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
+  if (!Array.isArray(books)) return [];
+
+  return books
+    .map((book) => ({
+      id: Number(book?.id ?? book?.bookId),
+      titulo: book?.titulo ?? book?.title,
+      autor: book?.autor ?? book?.author,
+      condition: book?.condition ?? null,
+      thumbnailUrl:
+        book?.thumbnailUrl ??
+        book?.image ??
+        book?.imageUrl ??
+        book?.coverUrl ??
+        book?.photoUrl ??
+        null,
+    }))
+    .filter((book) => Number.isFinite(book.id));
+};
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { message } = useLocalSearchParams<{ message?: string }>();
+  const [libraryBooks, setLibraryBooks] = useState<BookListItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
 
@@ -61,6 +90,29 @@ export default function ProfileScreen() {
   const reverseGeocodeAndSet = async (lat: number, lon: number) => {
     const label = await reverseGeocode(lat, lon);
     if (label) setLocationLabel(label);
+  };
+
+  const loadLibrary = async (profileData?: any) => {
+    setLibraryLoading(true);
+    setLibraryError("");
+    try {
+      const books = await getMyLibrary();
+      setLibraryBooks(books);
+    } catch (error: any) {
+      const fallbackBooks = mapProfileBooksToLibraryItems(
+        profileData?.books ?? profile?.books,
+      );
+
+      if (fallbackBooks.length > 0) {
+        setLibraryBooks(fallbackBooks);
+        setLibraryError("");
+      } else {
+        setLibraryBooks([]);
+        setLibraryError("");
+      }
+    } finally {
+      setLibraryLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -121,7 +173,7 @@ export default function ProfileScreen() {
           const json = await res.json();
           setProfile(json);
           
-          
+          await loadLibrary(json);
           // 2️⃣ Cargar preferencias DESPUÉS de tener los géneros
           try {
             const {
@@ -148,12 +200,17 @@ export default function ProfileScreen() {
                   // Convertir extension a bookLength
                   const bookLengths: string[] = [];
                   if (prefs.extension === "SHORT") bookLengths.push("0-200");
-                  else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
+                  else if (prefs.extension === "MEDIUM")
+                    bookLengths.push("200-400");
                   else if (prefs.extension === "LONG") bookLengths.push("400+");
-                  
+              
                   // Mapear genreIds a nombres usando los géneros cargados
                   const genreNames: string[] = [];
-                  if (prefs.genreIds && Array.isArray(prefs.genreIds) && loadedGenres.length > 0) {
+                  if (
+                    prefs.genreIds &&
+                    Array.isArray(prefs.genreIds) &&
+                    loadedGenres.length > 0
+                  ) {
                     prefs.genreIds.forEach((id: number) => {
                       const genre = loadedGenres.find((g) => g.id === id);
                       if (genre) genreNames.push(genre.name);
@@ -168,8 +225,7 @@ export default function ProfileScreen() {
                 }
               }
             }
-          } catch (err) {
-          }
+          } catch (err) {}
           
           const maybeLat =
             json.latitud ??
@@ -216,10 +272,15 @@ export default function ProfileScreen() {
           username: u?.user_metadata?.username ?? "",
         });
       }
-
+      await loadLibrary();
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (!message) return;
+    loadLibrary();
+  }, [message]);
 
   const handleSavePreferences = async (newPreferences: {
     distanceKm: number;
@@ -664,6 +725,7 @@ export default function ProfileScreen() {
             alignItems: "center",
             backgroundColor: "#ffffff",
           }}
+          onPress={loadLibrary}
         >
           <Text style={{ color: "#e07a5f", fontWeight: "900", fontSize: 15 }}>
             Tu Biblioteca
@@ -671,7 +733,62 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         {/* ── Libros ── */}
-        {profile?.books && profile.books.length > 0 && (
+        {(message === "updated" || message === "deleted") && (
+          <View
+            style={{
+              marginHorizontal: 20,
+              marginBottom: 16,
+              backgroundColor: "#d9f6e5",
+              borderWidth: 1,
+              borderColor: "#a9ebcb",
+              borderRadius: 12,
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+            }}
+          >
+            <Text style={{ color: "#0f8d4b", fontWeight: "700", fontSize: 16 }}>
+              {message === "updated"
+                ? "✅ Libro actualizado correctamente"
+                : message === "deleted"
+                  ? "✅ Libro eliminado de tu biblioteca"
+                  : ""}
+            </Text>
+          </View>
+        )}
+
+        {libraryLoading && (
+          <View style={{ marginTop: 8, marginBottom: 16 }}>
+            <ActivityIndicator color="#e07a5f" />
+          </View>
+        )}
+
+        {!!libraryError && !libraryLoading && (
+          <Text
+            style={{
+              marginHorizontal: 20,
+              marginBottom: 16,
+              color: "#d62828",
+              fontWeight: "600",
+            }}
+          >
+            {libraryError}
+          </Text>
+        )}
+
+        {!libraryLoading && libraryBooks.length === 0 && !libraryError && (
+          <Text
+            style={{
+              marginHorizontal: 20,
+              marginBottom: 20,
+              color: "#8B7355",
+              textAlign: "center",
+            }}
+          >
+            Aún no tienes libros activos en tu biblioteca.
+          </Text>
+        )}
+
+        {libraryBooks.length > 0 && (
           <View
             style={{
               flexDirection: "row",
@@ -681,9 +798,10 @@ export default function ProfileScreen() {
               marginBottom: 24,
             }}
           >
-            {profile.books.map((book: any, index: number) => (
+            {libraryBooks.map((book) => (
               <TouchableOpacity
-                key={index}
+                key={book.id}
+                onPress={() => router.push(`/books/${book.id}` as any)}
                 style={{
                   width: "47%",
                   backgroundColor: "#ffffff",
@@ -696,9 +814,9 @@ export default function ProfileScreen() {
                 <View
                   style={{ aspectRatio: 3 / 4, backgroundColor: "#e5e5e5" }}
                 >
-                  {book.image ? (
+                  {book.thumbnailUrl ? (
                     <Image
-                      source={{ uri: book.image }}
+                      source={{ uri: book.thumbnailUrl }}
                       style={{ width: "100%", height: "100%" }}
                       resizeMode="cover"
                     />
@@ -731,7 +849,7 @@ export default function ProfileScreen() {
                         fontWeight: "700",
                       }}
                     >
-                      {book.condition || "Bueno"}
+                      {toConditionLabel(book.condition)}
                     </Text>
                   </View>
                 </View>
@@ -750,7 +868,7 @@ export default function ProfileScreen() {
                     style={{ fontSize: 11, color: "#8B7355" }}
                     numberOfLines={1}
                   >
-                    {book.author}
+                    {book.titulo ?? book.title ?? "Sin título"}
                   </Text>
                 </View>
               </TouchableOpacity>
