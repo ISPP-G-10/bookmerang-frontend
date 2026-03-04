@@ -509,7 +509,7 @@ export type UserProfile = {
 };
 
 export async function getProfile(): Promise<UserProfile> {
-  const response = await apiRequest("/auth/perfil");
+  const response = await apiRequest("/Auth/perfil");
   if (!response.ok) throw new Error("No se pudo cargar el perfil");
   return response.json();
 }
