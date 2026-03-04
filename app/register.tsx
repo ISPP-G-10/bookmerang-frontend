@@ -1,9 +1,9 @@
 import PreferencesModal from "@/components/PreferencesModal";
-import { Ionicons } from "@expo/vector-icons";
-import * as Location from "expo-location";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/api";
 import supabase from "@/lib/supabase";
+import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
