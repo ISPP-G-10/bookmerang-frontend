@@ -7,20 +7,25 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import "react-native-reanimated";
-import supabase from "../lib/supabase";
+import '../global.css';
 
-import "../global.css";
+import { AuthProvider } from '@/contexts/AuthContext';
 
-export { ErrorBoundary } from "expo-router";
+export {
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary
+} from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: "(tabs)",
+  // Ensure that reloading on `/modal` keeps a back button present.
+  initialRouteName: '(tabs)',
 };
 
+// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -31,6 +36,7 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
+  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -41,7 +47,9 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  if (!loaded) return null;
+  if (!loaded) {
+    return null;
+  }
 
   return <RootLayoutNav />;
 }
@@ -49,37 +57,26 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
-  useEffect(() => {
-    // Comprobar sesión inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace("/login" as any);
-      }
-    });
-
-    // Escuchar cambios de sesión
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/login" as any);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-        <Stack.Screen name="register" options={{ headerShown: false }} />
-        <Stack.Screen name="profile" options={{ headerShown: false }} />
-        <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
-        <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
-      </Stack>
-    </ThemeProvider>
+    <AuthProvider>
+      <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="chat/[id]"
+            options={{
+              headerShown: true,
+              title: "Chat",
+            }}
+          />
+        </Stack>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }
