@@ -68,6 +68,8 @@ function RootLayoutNav() {
           <Stack.Screen name="profile" options={{ headerShown: false }} />
           <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
           <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
+          <Stack.Screen name="books/create/[id]/datos" options={{ headerShown: false }} />
+          <Stack.Screen name="books/create/[id]/estado" options={{ headerShown: false }} />
           <Stack.Screen
             name="chat/[id]"
             options={{

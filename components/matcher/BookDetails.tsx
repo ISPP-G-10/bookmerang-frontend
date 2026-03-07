@@ -29,6 +29,9 @@ interface BookDetailsScreenProps {
   card: MatcherCard | null;
   onClose: () => void;
   onChat?: (card: MatcherCard) => void;
+  onPrimaryAction?: (card: MatcherCard) => void;
+  primaryActionLabel?: string;
+  primaryActionIcon?: React.ComponentProps<typeof Ionicons>["name"];
 }
 
 export function BookDetailsScreen({
@@ -36,6 +39,9 @@ export function BookDetailsScreen({
   card,
   onClose,
   onChat,
+  onPrimaryAction,
+  primaryActionLabel = 'Solicitar intercambio',
+  primaryActionIcon = 'chatbubble-outline',
 }: BookDetailsScreenProps) {
   const [showReportMenu, setShowReportMenu] = useState(false);
   const colorScheme = useColorScheme();
@@ -49,6 +55,7 @@ export function BookDetailsScreen({
 
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;
+  const handlePrimaryAction = onPrimaryAction ?? onChat;
 
   const handleReport = (reason: string) => {
     setShowReportMenu(false);
@@ -497,7 +504,7 @@ export function BookDetailsScreen({
           ]}
         >
           <Pressable
-            onPress={() => onChat?.(card)}
+            onPress={() => handlePrimaryAction?.(card)}
             style={[
               styles.actionButton,
               {
@@ -508,13 +515,13 @@ export function BookDetailsScreen({
             ]}
           >
             <Ionicons
-              name="chatbubble-outline"
+              name={primaryActionIcon}
               size={22}
               color="#fdfbf7"
               style={{ marginRight: 8 }}
             />
             <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>
-              Solicitar intercambio
+              {primaryActionLabel}
             </Text>
           </Pressable>
         </View>
