@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  DimensionValue,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
@@ -53,7 +54,7 @@ export default function ProfileScreen() {
 
   // Calcular números de columnas basado en ancho de pantalla
   const numColumns = width >= 768 ? 4 : 3;
-  const bookWidth = `${(100 / numColumns) - 1}%`;
+  const bookWidth = `${(100 / numColumns) - 1}%` as DimensionValue;
 
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [preferences, setPreferences] = useState<{
