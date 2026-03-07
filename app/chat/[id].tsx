@@ -14,13 +14,17 @@ import {
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     sendMessage as apiSendMessage,
     getChat as fetchChat,
     getMessages as fetchMessages,
+    startTyping,
+    stopTyping,
+    getTypingUsers,
 } from '@/lib/chatApi';
-import { ChatDto, ChatParticipantDto, MessageDto } from '@/types/chat';
+import { ChatDto, ChatParticipantDto, MessageDto, TypingUserDto } from '@/types/chat';
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -54,10 +58,13 @@ export default function ChatDetailScreen() {
   const [chat, setChat] = useState<ChatDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
   const [inputText, setInputText] = useState('');
+  const [typingUsers, setTypingUsers] = useState<TypingUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -96,14 +103,39 @@ export default function ChatDetailScreen() {
     }
   }, [chatId]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const refreshTyping = useCallback(async () => {
+    try {
+      const users = await getTypingUsers(chatId);
+      // Filter out our own user
+      setTypingUsers(users.filter(u => u.userId !== backendUserId && u.userId !== currentUserId));
+    } catch {
+      // Silenciar errores de polling de typing
+    }
+  }, [chatId, backendUserId, currentUserId]);
 
   useEffect(() => {
-    const interval = setInterval(refreshMessages, 3000);
+    loadData();
+    refreshTyping();
+  }, [loadData, refreshTyping]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshMessages();
+      refreshTyping();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [refreshMessages]);
+  }, [refreshMessages, refreshTyping]);
+
+  useEffect(() => {
+    return () => {
+      if (isTypingRef.current) {
+        stopTyping(chatId).catch(() => {});
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [chatId]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {});
@@ -150,9 +182,40 @@ export default function ChatDetailScreen() {
   const getSender = (senderId: string): ChatParticipantDto | undefined =>
     chat.participants.find((p) => p.userId === senderId);
 
+  const handleInputChange = (text: string) => {
+    setInputText(text);
+
+    if (!isTypingRef.current && text.trim().length > 0) {
+      isTypingRef.current = true;
+      startTyping(chatId).catch(() => {});
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (text.trim().length === 0) {
+      if (isTypingRef.current) {
+        isTypingRef.current = false;
+        stopTyping(chatId).catch(() => {});
+      }
+    } else {
+      typingTimeoutRef.current = setTimeout(() => {
+        isTypingRef.current = false;
+        stopTyping(chatId).catch(() => {});
+      }, 3000);
+    }
+  };
+
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if (!trimmed || sending) return;
+
+    if (isTypingRef.current) {
+      isTypingRef.current = false;
+      stopTyping(chatId).catch(() => {});
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    }
 
     // Mensaje optimista
     const optimisticMessage: MessageDto = {
@@ -311,12 +374,73 @@ export default function ChatDetailScreen() {
           }
         />
 
+        {/* Typing Indicator */}
+        {typingUsers.length > 0 && (
+          <View style={styles.typingContainer}>
+            {chat?.type === 'COMMUNITY' ? (
+              <View style={styles.typingAvatarsContainer}>
+                {typingUsers.slice(0, 3).map((user, index) => {
+                  const participant = getSender(user.userId);
+                  return (
+                    <View
+                      key={user.userId}
+                      style={[
+                        styles.typingAvatarWrapper,
+                        { zIndex: 10 - index },
+                        index > 0 && { marginLeft: -10 },
+                      ]}
+                    >
+                      {participant?.profilePhoto ? (
+                        <Image
+                          source={{ uri: participant.profilePhoto }}
+                          style={styles.typingAvatar}
+                        />
+                      ) : (
+                        <View style={styles.typingAvatarPlaceholder}>
+                          <Text style={styles.typingAvatarText}>
+                            {user.username?.charAt(0) ?? '?'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+                {typingUsers.length > 3 && (
+                  <View
+                    style={[
+                      styles.typingAvatarPlaceholder,
+                      styles.typingAvatarWrapper,
+                      { marginLeft: -10, zIndex: 1, backgroundColor: '#E9EBF0' },
+                    ]}
+                  >
+                    <Text style={[styles.typingAvatarText, { color: '#6B7280' }]}>
+                      +{typingUsers.length - 3}
+                    </Text>
+                  </View>
+                )}
+                <View style={{ marginLeft: 8 }}>
+                  <Spinner variant="dots" size="sm" color="#888" speed="normal" />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.typingTextContainer}>
+                <Text style={styles.typingText}>
+                  {typingUsers.length === 1
+                    ? `${typingUsers[0].username} `
+                    : `${typingUsers.length} personas `}
+                </Text>
+                <Spinner variant="dots" size="sm" color="#888" speed="normal" />
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Input de texto */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             placeholder="Escribe un mensaje..."
             placeholderTextColor="#999"
             multiline
@@ -457,6 +581,52 @@ const styles = StyleSheet.create({
   },
   messageTimeOther: {
     color: '#C4C9D4',
+  },
+
+  // ── Typing Indicator ──────────────────────────────────
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingTop: 4,
+    paddingBottom: 4,
+    backgroundColor: '#fbf7f4',
+  },
+  typingTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typingAvatarsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typingAvatarWrapper: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#fbf7f4',
+    overflow: 'hidden',
+  },
+  typingAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  typingAvatarPlaceholder: {
+    flex: 1,
+    backgroundColor: '#e76541',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typingAvatarText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#888',
+    fontStyle: 'italic',
   },
 
   // ── Input ─────────────────────────────────────────────

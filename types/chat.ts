@@ -24,6 +24,11 @@ export interface ChatDto {
   lastMessage: MessageDto | null;
 }
 
+export interface TypingUserDto {
+  userId: string;
+  username: string;
+}
+
 // ===== API Request DTOs =====
 
 export interface SendMessageRequest {
