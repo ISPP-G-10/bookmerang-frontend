@@ -2,12 +2,15 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface HeaderProps {
   showBack?: boolean;
 }
 
 export default function Header({ showBack = false }: HeaderProps) {
+  const insets = useSafeAreaInsets();
+
   const handleLeftPress = () => {
     if (showBack) {
       router.back();
@@ -17,7 +20,7 @@ export default function Header({ showBack = false }: HeaderProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       {/* Izquierda: flecha atrás o foto de perfil */}
       <TouchableOpacity onPress={handleLeftPress}>
         <View style={styles.profileButton}>
@@ -51,7 +54,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
