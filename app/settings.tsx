@@ -1,6 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Stack, useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
 import React from "react";
 import {
   Alert,
@@ -14,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
 
@@ -877,261 +877,6 @@ function ChangePasswordModal({
   );
 }
 
-// ── Modal: Idioma ────────────────────────────────────────────────────
-const LANGUAGES = [
-  { code: "es", label: "Español", flag: "🇪🇸" },
-  { code: "en", label: "English", flag: "🇬🇧" },
-  { code: "fr", label: "Français", flag: "🇫🇷" },
-  { code: "de", label: "Deutsch", flag: "🇩🇪" },
-  { code: "it", label: "Italiano", flag: "🇮🇹" },
-  { code: "pt", label: "Português", flag: "🇵🇹" },
-];
-
-function LanguageModal({
-  visible,
-  onClose,
-  selected,
-  onSelect,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  selected: string;
-  onSelect: (code: string) => void;
-}) {
-  return (
-    <FloatingModal visible={visible} onClose={onClose}>
-      <View style={{ padding: 24 }}>
-        <Text
-          style={{
-            fontSize: 20,
-            fontWeight: "900",
-            color: "#3e2723",
-            marginBottom: 16,
-          }}
-        >
-          Seleccionar Idioma
-        </Text>
-        {LANGUAGES.map((lang) => {
-          const isSelected = selected === lang.code;
-          return (
-            <TouchableOpacity
-              key={lang.code}
-              onPress={() => onSelect(lang.code)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                borderRadius: 14,
-                padding: 16,
-                marginBottom: 8,
-                borderWidth: 1.5,
-                backgroundColor: isSelected ? "#FFF0EB" : "#fdfbf7",
-                borderColor: isSelected ? "#e07a5f" : "#F3E9E0",
-              }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
-                <Text style={{ fontSize: 24 }}>{lang.flag}</Text>
-                <Text
-                  style={{ fontSize: 15, fontWeight: "900", color: "#3e2723" }}
-                >
-                  {lang.label}
-                </Text>
-              </View>
-              {isSelected && (
-                <FontAwesome name="check" size={16} color="#e07a5f" />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-        <TouchableOpacity
-          onPress={onClose}
-          style={{
-            backgroundColor: "#fdfbf7",
-            borderRadius: 999,
-            padding: 14,
-            alignItems: "center",
-            marginTop: 4,
-          }}
-        >
-          <Text style={{ fontSize: 15, fontWeight: "900", color: "#8B7355" }}>
-            Cancelar
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </FloatingModal>
-  );
-}
-
-// ── Modal: Privacidad ────────────────────────────────────────────────
-function PrivacyModal({
-  visible,
-  onClose,
-}: {
-  visible: boolean;
-  onClose: () => void;
-}) {
-  const [visibility, setVisibility] = React.useState<
-    "public" | "connections" | "private"
-  >("public");
-  const [showLocation, setShowLocation] = React.useState(true);
-  const [showLibrary, setShowLibrary] = React.useState(true);
-
-  const options = [
-    {
-      key: "public" as const,
-      label: "Público",
-      desc: "Todo el mundo puede ver tu perfil",
-    },
-    {
-      key: "connections" as const,
-      label: "Solo conexiones",
-      desc: "Solo tus matches pueden ver tu perfil",
-    },
-    {
-      key: "private" as const,
-      label: "Privado",
-      desc: "Solo tú puedes ver tu perfil",
-    },
-  ];
-
-  return (
-    <FloatingModal visible={visible} onClose={onClose}>
-      <View style={{ padding: 24 }}>
-        <Text
-          style={{
-            fontSize: 20,
-            fontWeight: "900",
-            color: "#3e2723",
-            marginBottom: 16,
-          }}
-        >
-          Privacidad
-        </Text>
-        <Text
-          style={{
-            fontSize: 14,
-            fontWeight: "900",
-            color: "#3e2723",
-            marginBottom: 12,
-          }}
-        >
-          Visibilidad del perfil
-        </Text>
-
-        {options.map((opt) => {
-          const selected = visibility === opt.key;
-          return (
-            <TouchableOpacity
-              key={opt.key}
-              onPress={() => setVisibility(opt.key)}
-              style={{
-                borderRadius: 12,
-                padding: 14,
-                marginBottom: 8,
-                borderWidth: 1.5,
-                backgroundColor: selected ? "#FFF0EB" : "#fdfbf7",
-                borderColor: selected ? "#e07a5f" : "#F3E9E0",
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <View>
-                <Text
-                  style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}
-                >
-                  {opt.label}
-                </Text>
-                <Text style={{ fontSize: 12, color: "#8B7355", marginTop: 2 }}>
-                  {opt.desc}
-                </Text>
-              </View>
-              {selected && (
-                <FontAwesome name="check" size={16} color="#e07a5f" />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-
-        <View style={{ marginTop: 8 }}>
-          {[
-            {
-              label: "Mostrar ubicación",
-              desc: "Otros pueden ver tu ciudad",
-              value: showLocation,
-              set: setShowLocation,
-            },
-            {
-              label: "Mostrar biblioteca",
-              desc: "Otros pueden ver tus libros",
-              value: showLibrary,
-              set: setShowLibrary,
-            },
-          ].map((item) => (
-            <View
-              key={item.label}
-              style={{
-                backgroundColor: "#fdfbf7",
-                borderRadius: 12,
-                padding: 14,
-                marginBottom: 8,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <View>
-                <Text
-                  style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}
-                >
-                  {item.label}
-                </Text>
-                <Text style={{ fontSize: 12, color: "#8B7355", marginTop: 2 }}>
-                  {item.desc}
-                </Text>
-              </View>
-              <CustomSwitch value={item.value} onValueChange={item.set} />
-            </View>
-          ))}
-        </View>
-
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
-          <TouchableOpacity
-            onPress={onClose}
-            style={{
-              flex: 1,
-              backgroundColor: "#fdfbf7",
-              borderRadius: 999,
-              padding: 14,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ fontSize: 15, fontWeight: "900", color: "#8B7355" }}>
-              Cancelar
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onClose}
-            style={{
-              flex: 1,
-              backgroundColor: "#e07a5f",
-              borderRadius: 999,
-              padding: 14,
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ fontSize: 15, fontWeight: "900", color: "#ffffff" }}>
-              Guardar
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </FloatingModal>
-  );
-}
-
 // ── Fila de ajuste ───────────────────────────────────────────────────
 function SettingsRow({
   icon,
@@ -1206,15 +951,14 @@ function SettingsRow({
 // ── Pantalla principal Ajustes ───────────────────────────────────────
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
-  const [privacyOpen, setPrivacyOpen] = React.useState(false);
   const [languageOpen, setLanguageOpen] = React.useState(false);
   const [profile, setProfile] = React.useState<any>(null);
   const [currentEmail, setCurrentEmail] = React.useState("");
   const [pushNotif, setPushNotif] = React.useState(true);
-  const [emailNotif, setEmailNotif] = React.useState(true);
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
 
@@ -1228,9 +972,6 @@ export default function SettingsScreen() {
     setLanguageOpen(false);
     showToast("Idioma actualizado correctamente");
   };
-
-  const currentLanguageLabel =
-    LANGUAGES.find((l) => l.code === selectedLanguage)?.label ?? "Español";
 
   React.useEffect(() => {
     (async () => {
@@ -1460,23 +1201,31 @@ export default function SettingsScreen() {
           flexDirection: "row",
           alignItems: "center",
           paddingHorizontal: 20,
-          paddingTop: 56,
+          paddingTop: insets.top + 8,
           paddingBottom: 16,
           backgroundColor: "#fdfbf7",
         }}
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          style={{ marginRight: 12 }}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: "#e07a5f",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: 12,
+          }}
         >
-          <ChevronLeft size={24} color="#3e2723" />
+          <FontAwesome name="arrow-left" size={18} color="#fdfbf7" />
         </TouchableOpacity>
         <Text style={{ fontSize: 22, fontWeight: "900", color: "#3e2723" }}>
           Ajustes
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
         {sectionLabel("Cuenta")}
         <View style={card}>
           <SettingsRow
@@ -1509,32 +1258,6 @@ export default function SettingsScreen() {
             right={
               <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
             }
-          />
-          <SettingsRow
-            icon="envelope"
-            label="Notificaciones por email"
-            subtitle="Recibe novedades por correo"
-            isLast
-            right={
-              <CustomSwitch value={emailNotif} onValueChange={setEmailNotif} />
-            }
-          />
-        </View>
-
-        {sectionLabel("Privacidad")}
-        <View style={card}>
-          <SettingsRow
-            icon="eye"
-            label="Privacidad"
-            subtitle="Controla quién puede ver tu perfil"
-            onPress={() => setPrivacyOpen(true)}
-          />
-          <SettingsRow
-            icon="globe"
-            label="Idioma"
-            subtitle={currentLanguageLabel}
-            onPress={() => setLanguageOpen(true)}
-            isLast
           />
         </View>
 
@@ -1582,16 +1305,6 @@ export default function SettingsScreen() {
         visible={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}
         currentEmail={currentEmail}
-      />
-      <PrivacyModal
-        visible={privacyOpen}
-        onClose={() => setPrivacyOpen(false)}
-      />
-      <LanguageModal
-        visible={languageOpen}
-        onClose={() => setLanguageOpen(false)}
-        selected={selectedLanguage}
-        onSelect={handleSelectLanguage}
       />
     </View>
   );

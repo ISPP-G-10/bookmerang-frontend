@@ -202,9 +202,6 @@ export default function ChatListScreen() {
         renderItem={({ item }) => (
           <ChatListItem chat={item} currentUserId={currentUserId ?? ''} />
         )}
-        ItemSeparatorComponent={() => (
-          <RNView style={styles.separator} />
-        )}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={() => (
           <View style={styles.centered}>
@@ -222,17 +219,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbf7f4',
   },
   listContent: {
-    paddingVertical: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   chatItem: {
     flexDirection: 'row',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: '#fbf7f4',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   chatItemPressed: {
-    backgroundColor: '#e8af9f',
+    backgroundColor: '#fef5f2',
   },
   avatarWrapper: {
     marginRight: 14,
@@ -290,10 +295,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginLeft: 86,
   },
 });

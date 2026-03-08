@@ -510,9 +510,16 @@ export default function ProfileScreen() {
             {/* Engranaje → navega a /settings */}
             <TouchableOpacity
               onPress={() => router.push("/settings" as any)}
-              style={{ padding: 6 }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: "#e07a5f",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <FontAwesome name="cog" size={22} color="#8B7355" />
+              <FontAwesome name="cog" size={18} color="#ffffff" />
             </TouchableOpacity>
           </View>
 
