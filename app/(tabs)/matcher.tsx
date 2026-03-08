@@ -1,3 +1,4 @@
+import Header from '@/components/Header';
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
 import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
@@ -8,7 +9,8 @@ import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 
 const PAGE_SIZE = 20;
 
@@ -172,84 +174,96 @@ export default function MatcherScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 bg-background-0 items-center justify-center">
-        <ActivityIndicator size="large" color="#e07a5f" />
-        <Text style={{ marginTop: 12, color: '#8B7355' }}>Cargando libros…</Text>
-      </View>
+      <SafeAreaView className="flex-1 bg-background-0">
+        <Header />
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#e07a5f" />
+          <Text style={{ marginTop: 12, color: '#8B7355' }}>Cargando libros…</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error) {
     return (
-      <View className="flex-1 bg-background-0 items-center justify-center" style={{ padding: 32 }}>
-        <Ionicons name="alert-circle-outline" size={48} color="#e07a5f" />
-        <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
-          {error}
-        </Text>
-        <Pressable
-          onPress={() => loadFeed(0)}
-          style={{
-            marginTop: 16,
-            backgroundColor: '#e07a5f',
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            borderRadius: 12,
-          }}
-        >
-          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Reintentar</Text>
-        </Pressable>
-      </View>
+      <SafeAreaView className="flex-1 bg-background-0">
+        <Header />
+        <View className="flex-1 items-center justify-center" style={{ padding: 32 }}>
+          <Ionicons name="alert-circle-outline" size={48} color="#e07a5f" />
+          <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
+            {error}
+          </Text>
+          <Pressable
+            onPress={() => loadFeed(0)}
+            style={{
+              marginTop: 16,
+              backgroundColor: '#e07a5f',
+              paddingHorizontal: 24,
+              paddingVertical: 10,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Reintentar</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (cards.length === 0 || allSwiped) {
     return (
-      <View className="flex-1 bg-background-0 items-center justify-center" style={{ padding: 32 }}>
-        <Ionicons name="book-outline" size={48} color="#8B7355" />
-        <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
-          No hay más libros disponibles por ahora.
-        </Text>
-        <Pressable
-          onPress={() => loadFeed(0)}
-          style={{
-            marginTop: 16,
-            backgroundColor: '#e07a5f',
-            paddingHorizontal: 24,
-            paddingVertical: 10,
-            borderRadius: 12,
-          }}
-        >
-          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Refrescar</Text>
-        </Pressable>
-      </View>
+      <SafeAreaView className="flex-1 bg-background-0">
+        <Header />
+        <View className="flex-1 items-center justify-center" style={{ padding: 32 }}>
+          <Ionicons name="book-outline" size={48} color="#8B7355" />
+          <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
+            No hay más libros disponibles por ahora.
+          </Text>
+          <Pressable
+            onPress={() => loadFeed(0)}
+            style={{
+              marginTop: 16,
+              backgroundColor: '#e07a5f',
+              paddingHorizontal: 24,
+              paddingVertical: 10,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Refrescar</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 bg-background-0 items-center justify-center">
-      <TinderSwiper
-        ref={swiperRef}
-        cards={cards}
-        onSwipeLeft={handleSwipeLeft}
-        onSwipeRight={handleSwipeRight}
-        onTap={handleTap}
-        onEmpty={handleEmpty}
-      />
+    <SafeAreaView className="flex-1 bg-background-0">
+      <Header />
+      <View className="flex-1 items-center justify-center overflow-hidden">
+        <TinderSwiper
+          ref={swiperRef}
+          cards={cards}
+          onSwipeLeft={handleSwipeLeft}
+          onSwipeRight={handleSwipeRight}
+          onTap={handleTap}
+          onEmpty={handleEmpty}
+        />
 
-      <View style={styles.actionsContainer}>
-        <Pressable
-          onPress={() => swiperRef.current?.swipeLeft()}
-          style={[styles.actionButton, styles.dislikeButton]}
-        >
-          <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
-        </Pressable>
+        <View style={styles.actionsContainer}>
+          <Pressable
+            onPress={() => swiperRef.current?.swipeLeft()}
+            style={[styles.actionButton, styles.dislikeButton]}
+          >
+            <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
+          </Pressable>
 
-        <Pressable
-          onPress={() => swiperRef.current?.swipeRight()}
-          style={[styles.actionButton, styles.likeButton]}
-        >
-          <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
-        </Pressable>
+          <Pressable
+            onPress={() => swiperRef.current?.swipeRight()}
+            style={[styles.actionButton, styles.likeButton]}
+          >
+            <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
+          </Pressable>
+        </View>
       </View>
 
       <BookDetailsScreen
@@ -269,6 +283,6 @@ export default function MatcherScreen() {
           }}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
