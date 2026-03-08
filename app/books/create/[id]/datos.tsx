@@ -21,12 +21,18 @@ import {
 } from "@/lib/bookUploadValidation";
 import { markUploadFlowResetNeeded } from "@/lib/uploadFlowState";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import {
+  Camera,
+  CameraView,
+  type BarcodeScanningResult,
+} from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -79,6 +85,41 @@ function mapCoverToApi(selection: CoverSelection | null): BookDetail["cover"] | 
   return selection === "Hardcover" ? "Hardcover" : "Paperback";
 }
 
+function normalizeIsbnInput(value: string): string {
+  return value.replace(/[^0-9xX]/g, "").toUpperCase();
+}
+
+function isValidIsbn10(isbn: string): boolean {
+  if (!/^\d{9}[\dX]$/.test(isbn)) return false;
+
+  const checksum = isbn.split("").reduce((sum, char, index) => {
+    const value = char === "X" ? 10 : Number(char);
+    return sum + value * (10 - index);
+  }, 0);
+
+  return checksum % 11 === 0;
+}
+
+function isValidIsbn13(isbn: string): boolean {
+  if (!/^\d{13}$/.test(isbn)) return false;
+  if (!isbn.startsWith("978") && !isbn.startsWith("979")) return false;
+
+  const checksumBase = isbn
+    .slice(0, 12)
+    .split("")
+    .reduce((sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+
+  const checksum = (10 - (checksumBase % 10)) % 10;
+  return checksum === Number(isbn[12]);
+}
+
+function parseScannedIsbn(rawValue: string): string | null {
+  const normalized = normalizeIsbnInput(rawValue);
+  if (normalized.length === 13 && isValidIsbn13(normalized)) return normalized;
+  if (normalized.length === 10 && isValidIsbn10(normalized)) return normalized;
+  return null;
+}
+
 export default function UploadDataScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
@@ -105,6 +146,8 @@ export default function UploadDataScreen() {
   const [cover, setCover] = useState<CoverSelection | null>(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
   const [photoCount, setPhotoCount] = useState(0);
+  const [showIsbnScanner, setShowIsbnScanner] = useState(false);
+  const [scannerLocked, setScannerLocked] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -388,6 +431,56 @@ export default function UploadDataScreen() {
     router.replace(`/subir?draftId=${bookId}` as any);
   };
 
+  const closeIsbnScanner = () => {
+    setShowIsbnScanner(false);
+    setScannerLocked(false);
+  };
+
+  const handleOpenIsbnScanner = async () => {
+    const permission = await Camera.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Permiso de cámara necesario",
+        "Para escanear el ISBN debes permitir el acceso a la cámara.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Abrir ajustes",
+            onPress: () => {
+              Linking.openSettings().catch(() => undefined);
+            },
+          },
+        ],
+      );
+      return;
+    }
+
+    setScannerLocked(false);
+    setShowIsbnScanner(true);
+  };
+
+  const handleIsbnScanned = ({ data }: BarcodeScanningResult) => {
+    if (scannerLocked) return;
+    setScannerLocked(true);
+
+    const parsedIsbn = parseScannedIsbn(data);
+
+    if (!parsedIsbn) {
+      closeIsbnScanner();
+      setInfoModal({
+        title: "ISBN no válido",
+        message:
+          "El código detectado no corresponde a un ISBN válido. Prueba a escanear de nuevo la tapa del libro.",
+      });
+      return;
+    }
+
+    setIsbn(parsedIsbn);
+    setError(null);
+    setFeedback("ISBN detectado correctamente desde el escáner.");
+    closeIsbnScanner();
+  };
+
   return (
     <View style={styles.container}>
       <Header />
@@ -434,13 +527,21 @@ export default function UploadDataScreen() {
 
             <View style={styles.fieldBlock}>
               <Text style={styles.fieldLabel}>ISBN <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                value={isbn}
-                onChangeText={setIsbn}
-                placeholder="ISBN"
-                placeholderTextColor="#a79a89"
-                style={styles.input}
-              />
+              <View style={styles.isbnRow}>
+                <TextInput
+                  value={isbn}
+                  onChangeText={setIsbn}
+                  placeholder="ISBN"
+                  placeholderTextColor="#a79a89"
+                  style={[styles.input, styles.isbnInput]}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity style={styles.scanIsbnButton} onPress={handleOpenIsbnScanner}>
+                  <FontAwesome name="barcode" size={16} color="#fff" />
+                  <Text style={styles.scanIsbnButtonText}>Escanear</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.fieldBlock}>
@@ -619,6 +720,39 @@ export default function UploadDataScreen() {
         onPrimaryPress={closeInfoModal}
       />
 
+      <Modal
+        visible={showIsbnScanner}
+        animationType="slide"
+        onRequestClose={closeIsbnScanner}
+      >
+        <View style={styles.scannerModalContainer}>
+          <CameraView
+            style={styles.scannerPreview}
+            facing="back"
+            onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
+            barcodeScannerSettings={{
+              barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
+            }}
+          />
+          <View pointerEvents="none" style={styles.scannerFrameWrapper}>
+            <View style={styles.scannerFrame} />
+          </View>
+
+          <View style={styles.scannerTopBar}>
+            <TouchableOpacity style={styles.scannerCloseButton} onPress={closeIsbnScanner}>
+              <FontAwesome name="times" size={18} color="#fff" />
+              <Text style={styles.scannerCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.scannerBottomBar}>
+            <Text style={styles.scannerHintText}>
+              Enfoca el código de barras de la tapa trasera para completar el ISBN.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <FlowInfoModal
         visible={showSaveDraftModal}
         title="Guardar borrador"
@@ -691,6 +825,30 @@ const styles = StyleSheet.create({
     color: "#3d352d",
     fontFamily: "Outfit_400Regular",
     fontSize: 17,
+  },
+  isbnRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  isbnInput: {
+    flex: 1,
+    marginTop: 0,
+  },
+  scanIsbnButton: {
+    minHeight: 52,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    backgroundColor: "#d5785f",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  scanIsbnButtonText: {
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
   },
   chipsWrap: {
     marginTop: 8,
@@ -920,5 +1078,67 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     color: "#9e9283",
     fontSize: 13,
+  },
+  scannerModalContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  scannerPreview: {
+    flex: 1,
+  },
+  scannerFrameWrapper: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scannerFrame: {
+    width: 250,
+    height: 150,
+    borderWidth: 2,
+    borderColor: "#fff",
+    borderRadius: 16,
+    backgroundColor: "transparent",
+  },
+  scannerTopBar: {
+    position: "absolute",
+    top: 48,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  scannerCloseButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  scannerCloseText: {
+    color: "#fff",
+    fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+  },
+  scannerBottomBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 30,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  scannerHintText: {
+    color: "#fff",
+    fontFamily: "Outfit_400Regular",
+    fontSize: 14,
+    textAlign: "center",
   },
 });

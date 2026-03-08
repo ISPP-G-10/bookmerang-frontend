@@ -52,42 +52,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [backendUserId, setBackendUserIdState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const safeGetStorageItem = useCallback(async (key: string): Promise<string | null> => {
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch (error) {
+      console.warn('[AuthContext] AsyncStorage.getItem failed:', error);
+      return null;
+    }
+  }, []);
+
+  const safeSetStorageItem = useCallback(async (key: string, value: string): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (error) {
+      console.warn('[AuthContext] AsyncStorage.setItem failed:', error);
+    }
+  }, []);
+
+  const safeRemoveStorageItem = useCallback(async (key: string): Promise<void> => {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch (error) {
+      console.warn('[AuthContext] AsyncStorage.removeItem failed:', error);
+    }
+  }, []);
+
   const setBackendUserId = useCallback((id: string) => {
     setBackendUserIdState(id);
     // Persistir para sobrevivir reinicios de app
-    supabase.auth.getSession().then(({ data }: { data: any }) => {
+    void supabase.auth.getSession().then(({ data }: { data: any }) => {
       const supabaseId = data?.session?.user?.id;
       if (supabaseId) {
-        AsyncStorage.setItem(storageKey(supabaseId), id);
+        return safeSetStorageItem(storageKey(supabaseId), id);
       }
+      return Promise.resolve();
     });
-  }, []);
+  }, [safeSetStorageItem]);
 
   const signOut = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     const supabaseId = data?.session?.user?.id;
     if (supabaseId) {
-      await AsyncStorage.removeItem(storageKey(supabaseId));
+      await safeRemoveStorageItem(storageKey(supabaseId));
     }
     setBackendUserIdState(null);
     await supabase.auth.signOut();
-  }, []);
+  }, [safeRemoveStorageItem]);
 
   // Intenta resolver el backendUserId desde el backend o desde AsyncStorage
   const resolveBackendUserId = useCallback(async (supabaseId: string) => {
     // Primero intentar desde AsyncStorage
-    const stored = await AsyncStorage.getItem(storageKey(supabaseId));
+    const stored = await safeGetStorageItem(storageKey(supabaseId));
     if (stored) {
       setBackendUserIdState(stored);
       return;
     }
     // Si no hay almacenado, intentar llamar al backend
-    const resolved = await fetchMyBackendUserId();
+    let resolved: string | null = null;
+    try {
+      resolved = await fetchMyBackendUserId();
+    } catch (error) {
+      console.warn('[AuthContext] fetchMyBackendUserId failed:', error);
+    }
+
     if (resolved) {
       setBackendUserIdState(resolved);
-      AsyncStorage.setItem(storageKey(supabaseId), resolved);
+      await safeSetStorageItem(storageKey(supabaseId), resolved);
     }
-  }, []);
+  }, [safeGetStorageItem, safeSetStorageItem]);
 
   useEffect(() => {
     // 1. Obtener sesión inicial y restaurar backendUserId persistido
@@ -100,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         const supabaseId = session.user?.id;
         if (supabaseId) {
-          resolveBackendUserId(supabaseId);
+          void resolveBackendUserId(supabaseId);
         }
       }
     });
@@ -119,13 +151,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Al iniciar sesión, resolver backendUserId
         const supabaseId = session.user?.id;
         if (supabaseId) {
-          resolveBackendUserId(supabaseId);
+          void resolveBackendUserId(supabaseId);
         }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [resolveBackendUserId]);
 
   // ID utilizable: backendUserId si existe, si no el UUID de Supabase
   const currentUserId = backendUserId ?? session?.user?.id ?? null;

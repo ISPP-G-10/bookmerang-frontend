@@ -17,10 +17,11 @@ import {
   markUploadFlowResetNeeded,
 } from "@/lib/uploadFlowState";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -99,6 +100,10 @@ export default function SubirScreen() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<InfoModalState | null>(null);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const cameraRef = useRef<CameraView | null>(null);
 
   const canAddMorePhotos = photos.length < MAX_BOOK_PHOTOS;
   const canProceedToData = photos.length === MAX_BOOK_PHOTOS;
@@ -244,7 +249,7 @@ export default function SubirScreen() {
   };
 
   const handleTakePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    const permission = await Camera.requestCameraPermissionsAsync();
     if (!permission.granted) {
       setInfoModal({
         title: "Permiso de cámara necesario",
@@ -259,13 +264,56 @@ export default function SubirScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: "images",
-      quality: 0.8,
-      cameraType: ImagePicker.CameraType.back,
-    });
+    setShowCameraModal(true);
+  };
 
-    if (!result.canceled) appendAssets(result.assets);
+  const toggleCameraFacing = () => {
+    setCameraFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
+  const closeCameraModal = () => {
+    if (capturingPhoto) return;
+    setShowCameraModal(false);
+  };
+
+  const handleCapturePhoto = async () => {
+    if (!cameraRef.current || capturingPhoto) return;
+    if (!canAddMorePhotos) {
+      setInfoModal({
+        title: "Límite alcanzado",
+        message: `Solo puedes añadir ${MAX_BOOK_PHOTOS} fotos.`,
+      });
+      return;
+    }
+
+    setCapturingPhoto(true);
+
+    try {
+      const captured = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+      });
+
+      if (captured?.uri) {
+        const newPhoto: LocalPhoto = {
+          id: buildPhotoId(),
+          uri: captured.uri,
+          mimeType: "image/jpeg",
+        };
+
+        setPhotos((current) => [...current, newPhoto]);
+        setError(null);
+        setFeedback(null);
+      }
+
+      setShowCameraModal(false);
+    } catch (err) {
+      setInfoModal({
+        title: "Error al tomar la foto",
+        message: errorMessage(err),
+      });
+    } finally {
+      setCapturingPhoto(false);
+    }
   };
 
   const handleRemovePhoto = (id: string) => {
@@ -683,6 +731,52 @@ export default function SubirScreen() {
         onSecondaryPress={infoModal?.onSecondaryPress}
       />
 
+      <Modal
+        visible={showCameraModal}
+        animationType="slide"
+        onRequestClose={closeCameraModal}
+      >
+        <View style={styles.cameraModalContainer}>
+          <CameraView
+            ref={cameraRef}
+            style={styles.cameraPreview}
+            facing={cameraFacing}
+          />
+
+          <View style={styles.cameraTopBar}>
+            <TouchableOpacity style={styles.cameraTopButton} onPress={closeCameraModal}>
+              <FontAwesome name="times" size={20} color="#fff" />
+              <Text style={styles.cameraTopButtonText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.cameraBottomBar}>
+            <TouchableOpacity style={styles.cameraSecondaryButton} onPress={toggleCameraFacing}>
+              <FontAwesome name="refresh" size={18} color="#fff" />
+              <Text style={styles.cameraSecondaryButtonText}>Girar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.cameraCaptureButton,
+                (capturingPhoto || !canAddMorePhotos) && styles.cameraCaptureButtonDisabled,
+              ]}
+              onPress={handleCapturePhoto}
+              disabled={capturingPhoto || !canAddMorePhotos}
+            >
+              {capturingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <FontAwesome name="camera" size={20} color="#fff" />
+                  <Text style={styles.cameraCaptureButtonText}>Capturar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <FlowInfoModal
         visible={showSaveDraftModal}
         title="Guardar borrador"
@@ -1071,5 +1165,75 @@ const styles = StyleSheet.create({
     fontFamily: "Outfit_400Regular",
     color: "#9e9283",
     fontSize: 13,
+  },
+  cameraModalContainer: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
+  cameraPreview: {
+    flex: 1,
+  },
+  cameraTopBar: {
+    position: "absolute",
+    top: 48,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  cameraTopButton: {
+    minHeight: 40,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.48)",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cameraTopButtonText: {
+    fontFamily: "Outfit_700Bold",
+    color: "#fff",
+    fontSize: 15,
+  },
+  cameraBottomBar: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  cameraSecondaryButton: {
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(0,0,0,0.48)",
+  },
+  cameraSecondaryButtonText: {
+    fontFamily: "Outfit_700Bold",
+    color: "#fff",
+    fontSize: 16,
+  },
+  cameraCaptureButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: "#d5785f",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  cameraCaptureButtonDisabled: {
+    opacity: 0.6,
+  },
+  cameraCaptureButtonText: {
+    fontFamily: "Outfit_700Bold",
+    color: "#fff",
+    fontSize: 17,
   },
 });
