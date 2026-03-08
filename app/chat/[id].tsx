@@ -419,17 +419,14 @@ export default function ChatDetailScreen() {
                   </View>
                 )}
                 <View style={{ marginLeft: 8 }}>
-                  <Spinner variant="dots" size="sm" color="#888" speed="normal" />
+                  <Spinner variant="dots" size="sm" color="#e4715f" speed="normal" />
                 </View>
               </View>
             ) : (
-              <View style={styles.typingTextContainer}>
-                <Text style={styles.typingText}>
-                  {typingUsers.length === 1
-                    ? `${typingUsers[0].username} `
-                    : `${typingUsers.length} personas `}
-                </Text>
-                <Spinner variant="dots" size="sm" color="#888" speed="normal" />
+              <View style={styles.typingBubbleContainer}>
+                <View style={styles.typingBubble}>
+                  <Spinner variant="dots" size="sm" color="#e4715f" speed="normal" />
+                </View>
               </View>
             )}
           </View>
@@ -592,9 +589,23 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     backgroundColor: '#fbf7f4',
   },
-  typingTextContainer: {
+  typingBubbleContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingLeft: 0,
+    backgroundColor: 'transparent',
+  },
+  typingBubble: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderBottomLeftRadius: 5,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   typingAvatarsContainer: {
     flexDirection: 'row',
@@ -622,11 +633,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '700',
-  },
-  typingText: {
-    fontSize: 12,
-    color: '#888',
-    fontStyle: 'italic',
   },
 
   // ── Input ─────────────────────────────────────────────
