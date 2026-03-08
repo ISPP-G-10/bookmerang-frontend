@@ -861,11 +861,11 @@ export default function ProfileScreen() {
           >
             <Text style={{ color: "#0f8d4b", fontWeight: "700", fontSize: 16 }}>
               {message === "updated"
-                ? "✅ Libro actualizado correctamente"
+                ? "Libro actualizado correctamente"
                 : message === "deleted"
-                  ? "✅ Libro eliminado de tu biblioteca"
+                  ? "Libro eliminado de tu biblioteca"
                   : message === "published"
-                    ? "✅ Libro publicado y añadido a tu biblioteca"
+                    ? "Libro publicado y añadido a tu biblioteca"
                     : ""}
             </Text>
           </View>
