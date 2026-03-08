@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
   scanIsbnButton: {
     minHeight: 52,
     borderRadius: 14,
-    paddingHorizontal: 14,
+    paddingHorizontal: 6,
     backgroundColor: "#d5785f",
     flexDirection: "row",
     alignItems: "center",
