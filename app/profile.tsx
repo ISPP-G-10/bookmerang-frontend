@@ -1,9 +1,10 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
+import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -16,16 +17,25 @@ import {
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
+  getBookDetail,
   getMyLibrary,
   toConditionLabel,
+  type BookDetail,
   type BookListItem,
 } from "../lib/books";
 import supabase from "../lib/supabase";
+import type { MatcherCard } from "../types/matcher";
 
 const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
   if (!Array.isArray(books)) return [];
 
   return books
+    .filter((book) => {
+      const status = book?.status ?? book?.bookStatus ?? book?.estado;
+      if (typeof status !== "string") return false;
+      const normalized = status.toLowerCase().replace(/[\s-]+/g, "_");
+      return normalized === "published";
+    })
     .map((book) => ({
       id: Number(book?.id ?? book?.bookId),
       titulo: book?.titulo ?? book?.title,
@@ -42,6 +52,74 @@ const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
     .filter((book) => Number.isFinite(book.id));
 };
 
+const detailConditionToMatcher: Record<
+  NonNullable<BookDetail["condition"]>,
+  NonNullable<MatcherCard["book"]["condition"]>
+> = {
+  LikeNew: "LIKE_NEW",
+  VeryGood: "VERY_GOOD",
+  Good: "GOOD",
+  Acceptable: "ACCEPTABLE",
+  Poor: "POOR",
+};
+
+function buildLibraryMatcherCard(
+  detail: BookDetail,
+  profile: any,
+): MatcherCard {
+  const now = new Date().toISOString();
+
+  return {
+    book: {
+      id: detail.id,
+      ownerId: 0,
+      isbn: detail.isbn ?? null,
+      titulo: detail.titulo ?? null,
+      autor: detail.autor ?? null,
+      editorial: detail.editorial ?? null,
+      numPaginas: detail.numPaginas ?? null,
+      cover:
+        detail.cover === "Hardcover"
+          ? "HARDCOVER"
+          : detail.cover === "Paperback"
+            ? "PAPERBACK"
+            : null,
+      condition: detail.condition
+        ? detailConditionToMatcher[detail.condition]
+        : null,
+      observaciones: detail.observaciones ?? null,
+      status: "PUBLISHED",
+      createdAt: now,
+      updatedAt: now,
+      genres: (detail.genres ?? []).map((name, index) => ({ id: index + 1, name })),
+      languages: (detail.languages ?? []).map((language, index) => ({
+        id: index + 1,
+        language,
+      })),
+      photos: (detail.photos ?? [])
+        .filter((photo) => typeof photo?.url === "string" && photo.url.trim().length > 0)
+        .map((photo, index) => ({
+          id: index + 1,
+          bookId: detail.id,
+          url: photo.url as string,
+          orden: photo.order ?? index,
+        })),
+    },
+    owner: {
+      id: 0,
+      username: profile?.username ?? profile?.name ?? "usuario",
+      nombre: profile?.name ?? profile?.username ?? "Usuario",
+      fotoPerfilUrl: profile?.profilePhoto ?? null,
+      plan: "FREE",
+      ratingMean: 0,
+      finishedExchanges: 0,
+      xpTotal: 0,
+    },
+    distanceKm: 0,
+    score: 0,
+  };
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -51,6 +129,11 @@ export default function ProfileScreen() {
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+  const [selectedLibraryCard, setSelectedLibraryCard] =
+    useState<MatcherCard | null>(null);
+  const [openingLibraryBookId, setOpeningLibraryBookId] = useState<number | null>(
+    null,
+  );
 
   // Calcular números de columnas basado en ancho de pantalla
   const numColumns = width >= 768 ? 4 : 3;
@@ -121,6 +204,27 @@ export default function ProfileScreen() {
       setLibraryLoading(false);
     }
   };
+
+  const handleOpenLibraryBook = useCallback(
+    async (bookId: number) => {
+      if (!Number.isFinite(bookId) || bookId <= 0) return;
+
+      setOpeningLibraryBookId(bookId);
+      try {
+        const detail = await getBookDetail(bookId);
+        setSelectedLibraryCard(buildLibraryMatcherCard(detail, profile));
+      } catch {
+        setLibraryError("No se pudo abrir el detalle de este libro.");
+      } finally {
+        setOpeningLibraryBookId(null);
+      }
+    },
+    [profile],
+  );
+
+  const handleCloseLibraryBook = useCallback(() => {
+    setSelectedLibraryCard(null);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -740,7 +844,9 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         {/* ── Libros ── */}
-        {(message === "updated" || message === "deleted") && (
+        {(message === "updated" ||
+          message === "deleted" ||
+          message === "published") && (
           <View
             style={{
               marginHorizontal: 20,
@@ -755,10 +861,12 @@ export default function ProfileScreen() {
           >
             <Text style={{ color: "#0f8d4b", fontWeight: "700", fontSize: 16 }}>
               {message === "updated"
-                ? "✅ Libro actualizado correctamente"
+                ? "Libro actualizado correctamente"
                 : message === "deleted"
-                  ? "✅ Libro eliminado de tu biblioteca"
-                  : ""}
+                  ? "Libro eliminado de tu biblioteca"
+                  : message === "published"
+                    ? "Libro publicado y añadido a tu biblioteca"
+                    : ""}
             </Text>
           </View>
         )}
@@ -808,7 +916,7 @@ export default function ProfileScreen() {
             {libraryBooks.map((book) => (
               <TouchableOpacity
                 key={book.id}
-                onPress={() => router.push(`/books/${book.id}` as any)}
+                onPress={() => handleOpenLibraryBook(book.id)}
                 style={{
                   width: bookWidth,
                   backgroundColor: "#ffffff",
@@ -836,6 +944,23 @@ export default function ProfileScreen() {
                       }}
                     >
                       <Text style={{ fontSize: 40 }}>📚</Text>
+                    </View>
+                  )}
+
+                  {openingLibraryBookId === book.id && (
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        left: 0,
+                        backgroundColor: "rgba(0,0,0,0.18)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <ActivityIndicator color="#ffffff" />
                     </View>
                   )}
                   <View
@@ -883,6 +1008,18 @@ export default function ProfileScreen() {
           </View>
         )}
       </ScrollView>
+
+      <BookDetailsScreen
+        visible={!!selectedLibraryCard}
+        card={selectedLibraryCard}
+        onClose={handleCloseLibraryBook}
+        primaryActionLabel="Editar libro"
+        primaryActionIcon="create-outline"
+        onPrimaryAction={(card) => {
+          handleCloseLibraryBook();
+          router.push(`/books/${card.book.id}/edit` as any);
+        }}
+      />
 
       <PreferencesModal
         visible={preferencesOpen}

@@ -1,6 +1,8 @@
 import { apiRequest } from "./api";
 import supabase from "./supabase";
 
+export const MAX_BOOK_PHOTOS = 5;
+
 export type BookListItem = {
   id: number;
   titulo?: string;
@@ -13,15 +15,35 @@ export type BookListItem = {
 
 export type BookDetail = {
   id: number;
+  isbn?: string | null;
   titulo?: string;
   autor?: string;
+  editorial?: string | null;
   numPaginas?: number | null;
   cover?: "Hardcover" | "Paperback" | null;
   condition?: "LikeNew" | "VeryGood" | "Good" | "Acceptable" | "Poor" | null;
   observaciones?: string | null;
   languages: string[];
   genres: string[];
-  photos: { url?: string | null }[];
+  photos: { url?: string | null; order?: number | null }[];
+};
+
+export type BookDraftSummary = {
+  id: number;
+  titulo?: string;
+  autor?: string;
+  thumbnailUrl?: string | null;
+  updatedAt?: string | null;
+};
+
+export type GenreOption = {
+  id: number;
+  name: string;
+};
+
+export type LanguageOption = {
+  id: number;
+  name: string;
 };
 
 function extractLibraryItems(data: any): any[] {
@@ -60,17 +82,17 @@ function normalizeBookItem(raw: any): BookListItem {
 function normalizeCondition(value: string | null): BookListItem["condition"] {
   if (!value) return null;
 
-  const normalized = String(value).toLowerCase();
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, "_");
   if (
     normalized === "likenew" ||
     normalized === "like_new" ||
-    normalized === "como nuevo"
+    normalized === "como_nuevo"
   )
     return "LikeNew";
   if (
     normalized === "verygood" ||
     normalized === "very_good" ||
-    normalized === "muy bueno"
+    normalized === "muy_bueno"
   )
     return "VeryGood";
   if (normalized === "good" || normalized === "bueno") return "Good";
@@ -81,12 +103,25 @@ function normalizeCondition(value: string | null): BookListItem["condition"] {
   return null;
 }
 
+function toDetailCondition(
+  value: string | null,
+): BookDetail["condition"] {
+  const normalized = normalizeCondition(value);
+  return normalized;
+}
+
 function normalizeCover(value: string | null): BookDetail["cover"] {
   if (!value) return null;
-  const normalized = String(value).toLowerCase();
-  if (normalized === "hardcover" || normalized === "hard_cover")
+  const normalized = String(value).toLowerCase().replace(/[\s-]+/g, "_");
+  if (
+    normalized === "hardcover" ||
+    normalized === "hard_cover"
+  )
     return "Hardcover";
-  if (normalized === "paperback" || normalized === "paper_back")
+  if (
+    normalized === "paperback" ||
+    normalized === "paper_back"
+  )
     return "Paperback";
   return null;
 }
@@ -117,6 +152,29 @@ async function getCurrentUserId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
+function normalizeDraftItem(raw: any): BookDraftSummary {
+  return {
+    id: Number(raw?.id ?? raw?.bookId),
+    titulo: raw?.titulo ?? raw?.title,
+    autor: raw?.autor ?? raw?.author,
+    thumbnailUrl:
+      raw?.thumbnailUrl ??
+      raw?.imageUrl ??
+      raw?.coverUrl ??
+      raw?.photoUrl ??
+      raw?.image ??
+      raw?.photos?.[0]?.url ??
+      null,
+    updatedAt: raw?.updatedAt ?? raw?.updated_at ?? null,
+  };
+}
+
+function isPublishedStatus(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+  return normalized === "published";
+}
+
 function mapSupabaseBookDetail(
   book: any,
   photos: any[] = [],
@@ -126,19 +184,50 @@ function mapSupabaseBookDetail(
   const normalizedPhotos = Array.isArray(photos)
     ? [...photos]
         .sort((a, b) => (a?.orden ?? 0) - (b?.orden ?? 0))
-        .map((photo) => ({ url: photo?.url ?? null }))
+        .map((photo) => ({
+          url: photo?.url ?? null,
+          order: photo?.orden ?? null,
+        }))
     : [];
 
   return {
     id: Number(book?.id),
+    isbn: book?.isbn ?? null,
     titulo: book?.titulo ?? "",
     autor: book?.autor ?? "",
+    editorial: book?.editorial ?? null,
     numPaginas: book?.num_paginas ?? null,
     cover: normalizeCover(book?.cover ?? null),
     condition: normalizeCondition(book?.condition ?? null),
     observaciones: book?.observaciones ?? null,
     languages,
     genres,
+    photos: normalizedPhotos,
+  };
+}
+
+function mapApiBookDetail(raw: any): BookDetail {
+  const normalizedPhotos = Array.isArray(raw?.photos)
+    ? [...raw.photos]
+        .sort((a: any, b: any) => (a?.order ?? 0) - (b?.order ?? 0))
+        .map((photo: any) => ({
+          url: photo?.url ?? null,
+          order: photo?.order ?? null,
+        }))
+    : [];
+
+  return {
+    id: Number(raw?.id),
+    isbn: raw?.isbn ?? null,
+    titulo: raw?.titulo ?? "",
+    autor: raw?.autor ?? "",
+    editorial: raw?.editorial ?? null,
+    numPaginas: raw?.numPaginas ?? null,
+    cover: normalizeCover(raw?.cover ?? null),
+    condition: toDetailCondition(raw?.condition ?? null),
+    observaciones: raw?.observaciones ?? null,
+    languages: Array.isArray(raw?.languages) ? raw.languages : [],
+    genres: Array.isArray(raw?.genres) ? raw.genres : [],
     photos: normalizedPhotos,
   };
 }
@@ -189,7 +278,7 @@ async function getBookDetailFromSupabase(
   if (!userId) return null;
 
   const baseSelect =
-    "id, titulo, autor, num_paginas, cover, condition, observaciones, owner_id, status";
+    "id, isbn, titulo, autor, editorial, num_paginas, cover, condition, observaciones, owner_id, status";
 
   let bookData: any = null;
 
@@ -281,12 +370,40 @@ async function parseResponseBody(response: Response): Promise<any> {
   }
 }
 
+async function parseApiError(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  try {
+    const text = await response.text();
+    if (!text) return fallbackMessage;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed?.error === "string" && parsed.error.trim().length > 0)
+        return parsed.error;
+      if (
+        typeof parsed?.message === "string" &&
+        parsed.message.trim().length > 0
+      )
+        return parsed.message;
+    } catch {
+      // Si no es JSON devolvemos el texto tal cual.
+    }
+
+    return text;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
   const endpoints = [
-    `/books/my-library?page=1&pageSize=${pageSize}`,
-    `/books/my-library?page=1&page_size=${pageSize}`,
-    `/books/my-library?PageNumber=1&PageSize=${pageSize}`,
-    `/books/my-library?pageNumber=1&pageSize=${pageSize}`,
+    `/books/my-library?page=1&pageSize=${pageSize}&status=Published`,
+    `/books/my-library?page=1&pageSize=${pageSize}&status=PUBLISHED`,
+    `/books/my-library?page=1&page_size=${pageSize}&status=Published`,
+    `/books/my-library?PageNumber=1&PageSize=${pageSize}&status=Published`,
+    `/books/my-library?pageNumber=1&pageSize=${pageSize}&status=Published`,
     "/books/my-library",
     "/books/my-books",
     "/books/mine",
@@ -305,7 +422,24 @@ export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
     }
 
     const data = await parseResponseBody(response);
-    const items = extractLibraryItems(data)
+    const extracted = extractLibraryItems(data);
+    const hasStatusField = extracted.some(
+      (raw) =>
+        raw &&
+        (Object.prototype.hasOwnProperty.call(raw, "status") ||
+          Object.prototype.hasOwnProperty.call(raw, "estado") ||
+          Object.prototype.hasOwnProperty.call(raw, "bookStatus") ||
+          Object.prototype.hasOwnProperty.call(raw, "book_status")),
+    );
+    const sourceItems = hasStatusField
+      ? extracted.filter((raw) =>
+          isPublishedStatus(
+            raw?.status ?? raw?.estado ?? raw?.bookStatus ?? raw?.book_status,
+          ),
+        )
+      : extracted;
+
+    const items = sourceItems
       .map(normalizeBookItem)
       .filter((book) => Number.isFinite(book.id));
 
@@ -320,14 +454,250 @@ export async function getMyLibrary(pageSize = 50): Promise<BookListItem[]> {
   throw new Error("No se pudo cargar tu biblioteca.");
 }
 
+export async function getMyDrafts(pageSize = 20): Promise<BookDraftSummary[]> {
+  const endpoints = [
+    `/books/my-drafts?page=1&pageSize=${pageSize}`,
+    `/books/my-drafts?page=1&page_size=${pageSize}`,
+    `/books/my-drafts?PageNumber=1&PageSize=${pageSize}`,
+    "/books/my-drafts",
+  ];
+
+  const failures: string[] = [];
+
+  for (const endpoint of endpoints) {
+    const response = await apiRequest(endpoint);
+    if (!response.ok) {
+      failures.push(`${endpoint} -> ${response.status}`);
+      continue;
+    }
+
+    const data = await parseResponseBody(response);
+    return extractLibraryItems(data)
+      .map(normalizeDraftItem)
+      .filter((draft) => Number.isFinite(draft.id));
+  }
+
+  console.warn("Error cargando borradores en API", failures);
+  throw new Error("No se pudieron cargar tus borradores.");
+}
+
+export async function getGenres(): Promise<GenreOption[]> {
+  const response = await apiRequest("/genres");
+  if (response.ok) {
+    const data = await parseResponseBody(response);
+    if (Array.isArray(data)) {
+      return data
+        .map((raw) => ({
+          id: Number(raw?.id),
+          name: String(raw?.name ?? raw?.nombre ?? ""),
+        }))
+        .filter((genre) => Number.isFinite(genre.id) && genre.name.length > 0);
+    }
+  }
+
+  const { data } = await supabase.from("genres").select("id, name").order("id");
+  return (data ?? [])
+    .map((raw: any) => ({
+      id: Number(raw?.id),
+      name: String(raw?.name ?? ""),
+    }))
+    .filter((genre: GenreOption) => Number.isFinite(genre.id) && genre.name.length > 0);
+}
+
+const defaultLanguages: LanguageOption[] = [
+  { id: 1, name: "Español" },
+  { id: 2, name: "English" },
+  { id: 3, name: "Français" },
+  { id: 4, name: "Deutsch" },
+  { id: 5, name: "Italiano" },
+  { id: 6, name: "Português" },
+];
+
+export async function getLanguages(): Promise<LanguageOption[]> {
+  const { data, error } = await supabase
+    .from("languages")
+    .select("id, language")
+    .order("id");
+
+  if (!error && Array.isArray(data) && data.length > 0) {
+    return data
+      .map((raw: any) => ({
+        id: Number(raw?.id),
+        name: String(raw?.language ?? ""),
+      }))
+      .filter((language: LanguageOption) => Number.isFinite(language.id) && language.name.length > 0);
+  }
+
+  return defaultLanguages;
+}
+
 export async function getBookDetail(bookId: number): Promise<BookDetail> {
   const response = await apiRequest(`/books/${bookId}`);
-  if (response.ok) return response.json();
+  if (response.ok) {
+    const raw = await response.json();
+    return mapApiBookDetail(raw);
+  }
 
   const supabaseBook = await getBookDetailFromSupabase(bookId);
   if (supabaseBook) return supabaseBook;
 
   throw new Error("No se pudo cargar el libro");
+}
+
+type CreateBookDraftPayload = {
+  isbn?: string;
+  titulo?: string;
+  autor?: string;
+  editorial?: string;
+  numPaginas?: number | null;
+  cover?: BookDetail["cover"];
+  condition?: BookDetail["condition"];
+  observaciones?: string;
+  genreIds?: number[];
+  languageIds?: number[];
+};
+
+export async function createBookDraft(
+  payload: CreateBookDraftPayload = {},
+): Promise<BookDetail> {
+  const response = await apiRequest("/books/draft", {
+    method: "POST",
+    body: JSON.stringify({
+      isbn: payload.isbn,
+      titulo: payload.titulo,
+      autor: payload.autor,
+      editorial: payload.editorial,
+      numPaginas: payload.numPaginas ?? null,
+      cover: payload.cover ? toDbCover(payload.cover) : null,
+      condition: payload.condition ? toDbCondition(payload.condition) : null,
+      observaciones: payload.observaciones,
+      genreIds: payload.genreIds ?? [],
+      languageIds: payload.languageIds ?? [],
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(
+      response,
+      "No se pudo crear el borrador.",
+    );
+    throw new Error(message);
+  }
+
+  const raw = await response.json();
+  return mapApiBookDetail(raw);
+}
+
+export async function upsertBookPhotos(
+  bookId: number,
+  photoUrls: string[],
+): Promise<void> {
+  if (photoUrls.length > MAX_BOOK_PHOTOS) {
+    throw new Error(`Solo puedes subir hasta ${MAX_BOOK_PHOTOS} fotos.`);
+  }
+
+  const response = await apiRequest(`/books/${bookId}/photos`, {
+    method: "PUT",
+    body: JSON.stringify({
+      // Endpoint REPLACE: enviamos la lista final completa con su orden.
+      photos: photoUrls.map((url, index) => ({
+        url,
+        order: index,
+      })),
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(
+      response,
+      "No se pudieron guardar las fotos del libro.",
+    );
+    throw new Error(message);
+  }
+}
+
+type UpdateBookDataPayload = {
+  isbn?: string | null;
+  titulo?: string | null;
+  autor?: string | null;
+  editorial?: string | null;
+  numPaginas?: number | null;
+  cover?: BookDetail["cover"] | null;
+  genreIds?: number[];
+  languageIds?: number[];
+};
+
+export async function updateBookDataStep(
+  bookId: number,
+  payload: UpdateBookDataPayload,
+): Promise<BookDetail> {
+  const response = await apiRequest(`/books/${bookId}/data`, {
+    method: "PUT",
+    body: JSON.stringify({
+      isbn: payload.isbn ?? null,
+      titulo: payload.titulo ?? null,
+      autor: payload.autor ?? null,
+      editorial: payload.editorial ?? null,
+      numPaginas: payload.numPaginas ?? null,
+      cover: toDbCover(payload.cover ?? null),
+      genreIds: payload.genreIds ?? [],
+      languageIds: payload.languageIds ?? [],
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(
+      response,
+      "No se pudieron guardar los datos del libro.",
+    );
+    throw new Error(message);
+  }
+
+  return mapApiBookDetail(await response.json());
+}
+
+type UpdateBookDetailsPayload = {
+  condition?: BookDetail["condition"] | null;
+  observaciones?: string | null;
+};
+
+export async function updateBookDetailsStep(
+  bookId: number,
+  payload: UpdateBookDetailsPayload,
+): Promise<BookDetail> {
+  const response = await apiRequest(`/books/${bookId}/details`, {
+    method: "PUT",
+    body: JSON.stringify({
+      condition: toDbCondition(payload.condition ?? null),
+      observaciones: payload.observaciones ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(
+      response,
+      "No se pudo guardar el estado del libro.",
+    );
+    throw new Error(message);
+  }
+
+  return mapApiBookDetail(await response.json());
+}
+
+export async function publishBook(bookId: number): Promise<BookDetail> {
+  const response = await apiRequest(`/books/${bookId}/publish`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const message = await parseApiError(
+      response,
+      "No se pudo publicar el libro.",
+    );
+    throw new Error(message);
+  }
+
+  return mapApiBookDetail(await response.json());
 }
 
 export async function deleteBook(bookId: number): Promise<void> {
@@ -400,7 +770,7 @@ export async function updateBook(book: BookDetail): Promise<void> {
       titulo: book.titulo,
       autor: book.autor,
       numPaginas: book.numPaginas,
-      cover: book.cover,
+      cover: toDbCover(book.cover),
       languageIds: apiLanguageIds,
       genreIds: apiGenreIds,
     }),
@@ -409,7 +779,7 @@ export async function updateBook(book: BookDetail): Promise<void> {
   const detailsResponse = await apiRequest(`/books/${book.id}/details`, {
     method: "PUT",
     body: JSON.stringify({
-      condition: book.condition,
+      condition: toDbCondition(book.condition),
       observaciones: book.observaciones,
     }),
   });
