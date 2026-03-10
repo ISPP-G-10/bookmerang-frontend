@@ -9,14 +9,8 @@ import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-<<<<<<< Updated upstream
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
-=======
 import { ActivityIndicator, Pressable, Image as RNImage, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
->>>>>>> Stashed changes
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PAGE_SIZE = 20;
 
@@ -314,15 +308,6 @@ export default function MatcherScreen() {
             <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
           </Pressable>
 
-<<<<<<< Updated upstream
-          <Pressable
-            onPress={() => swiperRef.current?.swipeRight()}
-            style={[styles.actionButton, styles.likeButton]}
-          >
-            <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
-          </Pressable>
-        </View>
-=======
         {/* Botón Undo */}
         <Pressable
           onPress={handleUndo}
@@ -346,7 +331,6 @@ export default function MatcherScreen() {
         >
           <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
         </Pressable>
->>>>>>> Stashed changes
       </View>
 
       <BookDetailsScreen
@@ -367,15 +351,12 @@ export default function MatcherScreen() {
             setMatchInfo(null);
             // Fix audit #11: navegar al chat usando el chatId del match
             if (matchResult?.chatId) {
-              router.push(`/chat/${matchResult.chatId}`);
+              router.push(`/chat/${matchResult.chatId}` as any);
             }
             setMatchResult(null);
           }}
         />
       )}
-<<<<<<< Updated upstream
-    </SafeAreaView>
-=======
 
       {/* Fix audit #10: mostrar error de swipe al usuario */}
       {swipeError && (
@@ -393,6 +374,6 @@ export default function MatcherScreen() {
         </View>
       )}
     </View>
->>>>>>> Stashed changes
+    </SafeAreaView>
   );
 }
