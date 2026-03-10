@@ -4,23 +4,34 @@ import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchO
 import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
 import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
 import { useDeviceType } from '@/hooks/useDeviceType';
-import { fetchFeed, sendSwipe, type SwipeResultDto } from '@/lib/matcherApi';
+import { fetchFeed, sendSwipe, undoLastSwipe, type SwipeResultDto } from '@/lib/matcherApi';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+<<<<<<< Updated upstream
 import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+=======
+import { ActivityIndicator, Pressable, Image as RNImage, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+>>>>>>> Stashed changes
 
 const PAGE_SIZE = 20;
 
 export default function MatcherScreen() {
+  const router = useRouter();
   const swiperRef = useRef<TinderSwiperRef>(null);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const { deviceType, orientation, isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
   const [selectedCard, setSelectedCard] = useState<MatcherCard | null>(null);
   const [matchInfo, setMatchInfo] = useState<MatchOverlayData | null>(null);
+  const [matchResult, setMatchResult] = useState<SwipeResultDto['match'] | null>(null);
+  const [swipeError, setSwipeError] = useState<string | null>(null);
+  const isSwiping = useRef(false);
+  const [canUndo, setCanUndo] = useState(false);
 
   // ── Estado del feed ──
   const [cards, setCards] = useState<MatcherCard[]>([]);
@@ -37,10 +48,10 @@ export default function MatcherScreen() {
       if (!append) setLoading(true);
       setError(null);
       
-      const newCards = await fetchFeed(pageNum, PAGE_SIZE);
+      const result = await fetchFeed(pageNum, PAGE_SIZE);
       
-      setCards((prev) => (append ? [...prev, ...newCards] : newCards));
-      setHasMore(newCards.length === PAGE_SIZE);
+      setCards((prev) => (append ? [...prev, ...result.cards] : result.cards));
+      setHasMore(result.hasMore);
       setPage(pageNum);
       if (!append) setAllSwiped(false);
     } catch (e: any) {
@@ -54,6 +65,23 @@ export default function MatcherScreen() {
   useEffect(() => {
     loadFeed(0);
   }, [loadFeed]);
+
+  // ── Prefetch de imágenes de las próximas cartas ──
+  // Precargamos las fotos de las siguientes 3 cartas para que no aparezcan en blanco
+  const prefetchedRef = useRef(new Set<string>());
+  useEffect(() => {
+    // Tomamos las primeras 3 cartas no vistas (el TinderSwiper usa currentIndex internamente,
+    // pero como las cartas se van eliminando conceptualmente, precargamos las primeras disponibles)
+    const upcoming = cards.slice(0, 5);
+    for (const card of upcoming) {
+      for (const photo of card.book.photos) {
+        if (photo.url && !prefetchedRef.current.has(photo.url)) {
+          prefetchedRef.current.add(photo.url);
+          RNImage.prefetch(photo.url).catch(() => {});
+        }
+      }
+    }
+  }, [cards]);
 
   const styles = useMemo(() => {
     const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
@@ -120,10 +148,17 @@ export default function MatcherScreen() {
     [cards.length, hasMore, page, loadFeed],
   );
 
-  // ── Handlers de swipe con API real ──
+  // ── Handlers de swipe con API real (optimista) ──
   const handleSwipe = useCallback(
     async (card: MatcherCard, direction: 'LEFT' | 'RIGHT') => {
+      // Prevenir doble swipe mientras hay uno en vuelo
+      if (isSwiping.current) return;
+      isSwiping.current = true;
+
       maybeLoadMore(cards.indexOf(card) + 1);
+
+      // Swipe optimista: la carta ya se quitó visualmente por TinderSwiper
+      // Registramos en background
       try {
         console.log(`[SWIPE] Sending ${direction} on book ${card.book.id} (${card.book.titulo})`);
         const result: SwipeResultDto = await sendSwipe(card.book.id, direction);
@@ -131,14 +166,24 @@ export default function MatcherScreen() {
         
         if (result.outcome === 'MatchCreated' && result.match) {
           console.log('[SWIPE] MATCH! Showing notification for', result.match.otherUsername);
+          setMatchResult(result.match);
           setMatchInfo({
             otherUsername: result.match.otherUsername,
             bookTitle: card.book.titulo,
             bookCoverUrl: card.book.photos?.[0]?.url ?? null,
           });
+          setCanUndo(false); // No se puede deshacer un match
+        } else {
+          setCanUndo(true); // Se puede deshacer el último swipe
         }
+        setSwipeError(null);
       } catch (e: any) {
         console.warn('Error al registrar swipe:', e.message);
+        setSwipeError(e.message ?? 'Error al registrar el swipe');
+        setTimeout(() => setSwipeError(null), 3000);
+        setCanUndo(false);
+      } finally {
+        isSwiping.current = false;
       }
     },
     [cards, maybeLoadMore],
@@ -165,6 +210,18 @@ export default function MatcherScreen() {
   const handleEmpty = useCallback(() => {
     setAllSwiped(true);
   }, []);
+
+  const handleUndo = useCallback(async () => {
+    try {
+      await undoLastSwipe();
+      setCanUndo(false);
+      // Recargar el feed para que el libro deshecho vuelva a aparecer
+      await loadFeed(0);
+    } catch (e: any) {
+      setSwipeError(e.message ?? 'No se pudo deshacer el swipe');
+      setTimeout(() => setSwipeError(null), 3000);
+    }
+  }, [loadFeed]);
 
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
@@ -257,6 +314,7 @@ export default function MatcherScreen() {
             <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
           </Pressable>
 
+<<<<<<< Updated upstream
           <Pressable
             onPress={() => swiperRef.current?.swipeRight()}
             style={[styles.actionButton, styles.likeButton]}
@@ -264,6 +322,31 @@ export default function MatcherScreen() {
             <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
           </Pressable>
         </View>
+=======
+        {/* Botón Undo */}
+        <Pressable
+          onPress={handleUndo}
+          disabled={!canUndo}
+          style={[
+            styles.actionButton,
+            {
+              width: 40,
+              height: 40,
+              backgroundColor: canUndo ? '#f5e6d3' : '#e8e8e8',
+              opacity: canUndo ? 1 : 0.4,
+            },
+          ]}
+        >
+          <Ionicons name="arrow-undo" size={20} color={canUndo ? '#8B7355' : '#bbb'} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => swiperRef.current?.swipeRight()}
+          style={[styles.actionButton, styles.likeButton]}
+        >
+          <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
+        </Pressable>
+>>>>>>> Stashed changes
       </View>
 
       <BookDetailsScreen
@@ -276,13 +359,40 @@ export default function MatcherScreen() {
       {matchInfo && (
         <MatchOverlay
           data={matchInfo}
-          onClose={() => setMatchInfo(null)}
+          onClose={() => {
+            setMatchInfo(null);
+            setMatchResult(null);
+          }}
           onChat={() => {
             setMatchInfo(null);
-            // TODO: Navegar al chat cuando esté implementado
+            // Fix audit #11: navegar al chat usando el chatId del match
+            if (matchResult?.chatId) {
+              router.push(`/chat/${matchResult.chatId}`);
+            }
+            setMatchResult(null);
           }}
         />
       )}
+<<<<<<< Updated upstream
     </SafeAreaView>
+=======
+
+      {/* Fix audit #10: mostrar error de swipe al usuario */}
+      {swipeError && (
+        <View style={{
+          position: 'absolute',
+          bottom: 100,
+          left: 20,
+          right: 20,
+          backgroundColor: '#e07a5f',
+          padding: 12,
+          borderRadius: 8,
+          alignItems: 'center',
+        }}>
+          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>{swipeError}</Text>
+        </View>
+      )}
+    </View>
+>>>>>>> Stashed changes
   );
 }
