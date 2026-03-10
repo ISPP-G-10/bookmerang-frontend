@@ -25,6 +25,15 @@ import {
     getTypingUsers,
 } from '@/lib/chatApi';
 import { ChatDto, ChatParticipantDto, MessageDto, TypingUserDto } from '@/types/chat';
+import { ExchangeMeetingDto, ExchangeWithMatchDto } from '@/types/exchange';
+import {
+    getExchangeByChatIdWithMatch,
+    acceptExchange, 
+    rejectExchange
+} from '@/lib/exchangeApi';
+import {
+    getBookDetail, BookDetail
+} from '@/lib/books';
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -65,6 +74,13 @@ export default function ChatDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exchange, setExchange] = useState<ExchangeWithMatchDto | null>(null);
+  const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
+  const [disabledAccept, setDisabledAccept] = useState<boolean>(false);
+  // banner de intercambio commet
+  const [myBook, setMyBook] = useState<BookDetail | null>(null);
+  const [otherBook, setOtherBook] = useState<BookDetail | null>(null);
+  const [otherUsername, setOtherUsername] = useState<string>(''); // para “Libro de Carlos”
 
   const loadData = useCallback(async () => {
     try {
@@ -78,6 +94,10 @@ export default function ChatDetailScreen() {
       ]);
 
       setChat(chatData);
+
+      const exchangeData = await getExchangeByChatIdWithMatch(chatId);
+      setExchange(exchangeData);
+      
       // Ordenar mensajes cronológicamente (más antiguos primero)
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
@@ -113,6 +133,13 @@ export default function ChatDetailScreen() {
     }
   }, [chatId, backendUserId, currentUserId]);
 
+  // Hook para inicializar estado del boton accept
+  const initializeAcceptState = useCallback(() => {
+    if (!exchange || !backendUserId) return;
+    const isAlreadyAccepted = checkUserAcceptance();
+    setDisabledAccept(isAlreadyAccepted);
+  }, [exchange, backendUserId]);
+
   useEffect(() => {
     loadData();
     refreshTyping();
@@ -145,6 +172,43 @@ export default function ChatDetailScreen() {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+  const loadExchangeBooks = async () => {
+    if (!exchange || !backendUserId) return;
+
+    try {
+      // Determinar si soy user1 o user2
+      const isUser1 = backendUserId === exchange.user1Id;
+
+      const myBookId = isUser1 ? exchange.book1Id : exchange.book2Id;
+      const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
+
+      const [myBookData, otherBookData] = await Promise.all([
+        getBookDetail(myBookId),
+        getBookDetail(otherBookId),
+      ]);
+
+      setMyBook(myBookData);
+      setOtherBook(otherBookData);
+
+      // Sacar nombre del otro usuario del chat
+      const otherParticipant = chat?.participants.find(
+        (p) => p.userId !== backendUserId
+      );
+      setOtherUsername(otherParticipant?.username ?? 'la otra persona');
+    } catch (e) {
+      console.error('Error cargando libros del intercambio', e);
+    }
+  };
+
+  loadExchangeBooks();
+}, [exchange, backendUserId, chat]);
+
+  
+  useEffect(() => {
+    initializeAcceptState();
+  }, [initializeAcceptState]);
 
   if (loading) {
     return (
@@ -349,6 +413,57 @@ export default function ChatDetailScreen() {
     );
   };
 
+  // Acepta el intercambio por parte del usuario actual
+  const handleAcceptExchange = async () => {
+  if (!exchange?.exchangeId) return;
+  setError(null);
+  try {
+    const updated = await acceptExchange(exchange.exchangeId);
+    setExchange(updated);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error al aceptar el intercambio';
+    setError(msg);
+  }
+  };
+
+  // Función auxiliar para calcular si se puede aceptar o no
+  const checkUserAcceptance = (): boolean => {
+    // Si sigue negociando, el usuario todavía puede aceptar
+    if (exchange?.status === "NEGOTIATING") return false;
+    
+    if (
+      exchange?.status === "ACCEPTED_BY_1" &&
+      exchange?.user1Id === backendUserId
+    ) {
+      return true;
+    }
+
+    if (
+      exchange?.status === "ACCEPTED_BY_2" &&
+      exchange?.user2Id === backendUserId
+    ) {
+      return true;
+    }
+
+    if(exchange?.status === "REJECTED" || exchange?.status === "ACCEPTED") return true;
+
+    return false;
+  };
+  
+  // Desestima el intercambio
+  const handleRejectExchange = async () => {
+  if (!exchange?.exchangeId) return;
+  setError(null);
+  try {
+    const updated = await rejectExchange(exchange.exchangeId);
+    setExchange(updated);
+    setDisabledAccept(true);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Error al desestimar el intercambio';
+    setError(msg);
+  }
+  };
+
   return (
     <>
       <Stack.Screen
@@ -362,6 +477,131 @@ export default function ChatDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={90}
       >
+        {/* Banner de error de intercambio */}
+        {error && (
+          <View style={styles.exchangeErrorBanner}>
+            <Text style={styles.exchangeErrorText}>{error}</Text>
+            <Pressable onPress={() => setError(null)}>
+              <FontAwesome name="times" size={16} color="#fff" />
+            </Pressable>
+          </View>
+        )}
+        
+        {/* Banner de intercambio */}
+        {exchange && myBook && otherBook && (
+          <View style={styles.exchangeBanner}>
+            <View style={styles.exchangeBannerRow}>
+              {/* Columna izquierda: tu libro */}
+              <View style={styles.exchangeBannerColumn}>
+                <Text style={styles.exchangeBannerLabel}>TU LIBRO</Text>
+                <View style={styles.exchangeBookCard}>
+                  {/* Foto o icono */}
+                  {myBook.photos[0]?.url ? (
+                    <Image
+                      source={{ uri: myBook.photos[0].url }}
+                      style={styles.exchangeBookCover}
+                    />
+                  ) : (
+                    <View style={styles.exchangeBookIcon} />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.exchangeBookTitle} numberOfLines={2}>
+                      {myBook.titulo ?? 'Libro sin título'}
+                    </Text>
+                    {myBook.autor && (
+                      <Text style={styles.exchangeBookAuthor} numberOfLines={1}>
+                        {myBook.autor}
+                      </Text>
+                    )}
+                    <Text style={styles.exchangeBookMeta} numberOfLines={1}>
+                      {myBook.cover === 'Hardcover' ? 'Tapa dura' :
+                      myBook.cover === 'Paperback' ? 'Tapa blanda' : ''}
+                      {myBook.condition
+                        ? ` · ${myBook.condition}`
+                        : ''}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Icono de intercambio */}
+              <View style={styles.exchangeCenterIcon}>
+                <FontAwesome name="exchange" size={20} color="#e4715f" />
+              </View>
+
+              {/* Columna derecha: libro del otro */}
+              <View style={styles.exchangeBannerColumn}>
+                <Text style={styles.exchangeBannerLabel}>
+                  LIBRO DE {otherUsername.toUpperCase()}
+                </Text>
+                <View style={styles.exchangeBookCard}>
+                  {otherBook.photos[0]?.url ? (
+                    <Image
+                      source={{ uri: otherBook.photos[0].url }}
+                      style={[styles.exchangeBookCover, { backgroundColor: '#2b3a55' }]}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.exchangeBookIcon,
+                        { backgroundColor: '#2b3a55' },
+                      ]}
+                    />
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.exchangeBookTitle} numberOfLines={2}>
+                      {otherBook.titulo ?? 'Libro sin título'}
+                    </Text>
+                    {otherBook.autor && (
+                      <Text style={styles.exchangeBookAuthor} numberOfLines={1}>
+                        {otherBook.autor}
+                      </Text>
+                    )}
+                    <Text style={styles.exchangeBookMeta} numberOfLines={1}>
+                      {otherBook.cover === 'Hardcover' ? 'Tapa dura' :
+                      otherBook.cover === 'Paperback' ? 'Tapa blanda' : ''}
+                      {otherBook.condition
+                        ? ` · ${otherBook.condition}`
+                        : ''}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Botones de aceptar y desestimar */}
+        <View style={styles.AcceptRejectContainer}>
+          {/* Botón Aceptar */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.Exchangebutton,
+              styles.acceptButton,
+              disabledAccept && styles.buttonDisabled,
+              pressed && !disabledAccept && styles.buttonPressed,
+            ]}
+            onPress={handleAcceptExchange}
+            disabled={disabledAccept}
+          >
+            <FontAwesome name="thumbs-up" size={18} color="#fff" />
+            <Text style={styles.acceptText}>Aceptar</Text>
+          </Pressable>
+
+          {/* Botón Desestimar (mitad derecha) */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.Exchangebutton,
+              styles.rejectButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={handleRejectExchange}
+          >
+            <FontAwesome name="times" size={18} color="#6B7280" />
+            <Text style={styles.rejectText}>Desestimar</Text>
+          </Pressable>
+        </View>
+
         {/* Lista de mensajes */}
         <FlatList
           ref={flatListRef}
@@ -680,4 +920,153 @@ const styles = StyleSheet.create({
   sendButtonPressed: {
     opacity: 0.75,
   },
+  // ── Intercambio ─────────────────────────────────────────────
+  AcceptRejectContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: '#fbf7f4',
+    marginTop: "0.5%"
+  },
+  Exchangebutton: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 44,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: "0.2%",
+    marginLeft: "0.2%",
+  },
+  acceptButton: {
+    backgroundColor: '#e76541',
+    shadowColor: '#e4715f',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  rejectButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  buttonPressed: {
+    opacity: 0.75,
+  },
+  acceptText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  rejectText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  // cuando solo hay botón desestimar ocupa todo el ancho
+  rejectButtonSingle: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  //── Banner de errores ─────────────────────────────────────────────
+  exchangeErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#DC2626', // rojo error
+    borderRadius: 8,
+  },
+  exchangeErrorText: {
+    color: '#fff',
+    fontSize: 13,
+    flex: 1,
+    marginRight: 8,
+  },
+
+  // ── Banner de intercambio ─────────────────────────────
+  exchangeBanner: {
+    backgroundColor: '#fff',
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  exchangeBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  exchangeBannerColumn: {
+    flex: 1,
+  },
+  exchangeBannerLabel: {
+    fontSize: 10,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  exchangeBookCard: {
+    backgroundColor: '#fbf7f4',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  exchangeBookIcon: {
+    width: 26,
+    height: 34,
+    borderRadius: 6,
+    backgroundColor: '#b87333',
+    marginRight: 8,
+  },
+  exchangeBookCover: {
+    width: 26,
+    height: 34,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: '#b87333',
+  },
+  exchangeBookTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  exchangeBookAuthor: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  exchangeBookMeta: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  exchangeCenterIcon: {
+    width: 32,
+    alignItems: 'center',
+  },
+
+
 });
