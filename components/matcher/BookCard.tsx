@@ -56,7 +56,6 @@ export default function BookCard({ card, onTap }: BookCardProps) {
       style={{ 
         width: cardWidth, 
         height: cardHeight,
-        marginTop: cardMarginTop,
         borderWidth: 1,
         borderColor: isDark ? '#3e2723' : '#fdfbf7',
       }}

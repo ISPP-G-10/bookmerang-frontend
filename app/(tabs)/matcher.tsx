@@ -9,8 +9,8 @@ import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Image as RNImage, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, Image as RNImage, StatusBar, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PAGE_SIZE = 20;
 
@@ -90,6 +90,10 @@ export default function MatcherScreen() {
       : (SCREEN_HEIGHT - cardHeight) / 2 - layoutConfig.buttonOffsetFromCard;
 
     return StyleSheet.create({
+      container: {
+        flex: 1,
+        backgroundColor: '#fdfbf7',
+      },
       actionsContainer: {
         position: 'absolute',
         bottom: buttonBottom,
@@ -225,21 +229,23 @@ export default function MatcherScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-background-0">
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
         <Header />
-        <View className="flex-1 items-center justify-center">
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color="#e07a5f" />
           <Text style={{ marginTop: 12, color: '#8B7355' }}>Cargando libros…</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView className="flex-1 bg-background-0">
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
         <Header />
-        <View className="flex-1 items-center justify-center" style={{ padding: 32 }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
           <Ionicons name="alert-circle-outline" size={48} color="#e07a5f" />
           <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
             {error}
@@ -257,15 +263,16 @@ export default function MatcherScreen() {
             <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Reintentar</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (cards.length === 0 || allSwiped) {
     return (
-      <SafeAreaView className="flex-1 bg-background-0">
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" />
         <Header />
-        <View className="flex-1 items-center justify-center" style={{ padding: 32 }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
           <Ionicons name="book-outline" size={48} color="#8B7355" />
           <Text style={{ marginTop: 12, color: '#3e2723', fontSize: 16, textAlign: 'center' }}>
             No hay más libros disponibles por ahora.
@@ -283,14 +290,15 @@ export default function MatcherScreen() {
             <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Refrescar</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background-0">
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" />
       <Header />
-      <View className="flex-1 items-center justify-center overflow-hidden">
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <TinderSwiper
           ref={swiperRef}
           cards={cards}
@@ -308,72 +316,72 @@ export default function MatcherScreen() {
             <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
           </Pressable>
 
-        {/* Botón Undo */}
-        <Pressable
-          onPress={handleUndo}
-          disabled={!canUndo}
-          style={[
-            styles.actionButton,
-            {
-              width: 40,
-              height: 40,
-              backgroundColor: canUndo ? '#f5e6d3' : '#e8e8e8',
-              opacity: canUndo ? 1 : 0.4,
-            },
-          ]}
-        >
-          <Ionicons name="arrow-undo" size={20} color={canUndo ? '#8B7355' : '#bbb'} />
-        </Pressable>
+          {/* Botón Undo */}
+          <Pressable
+            onPress={handleUndo}
+            disabled={!canUndo}
+            style={[
+              styles.actionButton,
+              {
+                width: 40,
+                height: 40,
+                backgroundColor: canUndo ? '#f5e6d3' : '#e8e8e8',
+                opacity: canUndo ? 1 : 0.4,
+              },
+            ]}
+          >
+            <Ionicons name="arrow-undo" size={20} color={canUndo ? '#8B7355' : '#bbb'} />
+          </Pressable>
 
-        <Pressable
-          onPress={() => swiperRef.current?.swipeRight()}
-          style={[styles.actionButton, styles.likeButton]}
-        >
-          <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
-        </Pressable>
-      </View>
-
-      <BookDetailsScreen
-        visible={!!selectedCard}
-        card={selectedCard}
-        onClose={handleCloseDetails}
-        onChat={handleChat}
-      />
-
-      {matchInfo && (
-        <MatchOverlay
-          data={matchInfo}
-          onClose={() => {
-            setMatchInfo(null);
-            setMatchResult(null);
-          }}
-          onChat={() => {
-            setMatchInfo(null);
-            // Fix audit #11: navegar al chat usando el chatId del match
-            if (matchResult?.chatId) {
-              router.push(`/chat/${matchResult.chatId}` as any);
-            }
-            setMatchResult(null);
-          }}
-        />
-      )}
-
-      {/* Fix audit #10: mostrar error de swipe al usuario */}
-      {swipeError && (
-        <View style={{
-          position: 'absolute',
-          bottom: 100,
-          left: 20,
-          right: 20,
-          backgroundColor: '#e07a5f',
-          padding: 12,
-          borderRadius: 8,
-          alignItems: 'center',
-        }}>
-          <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>{swipeError}</Text>
+          <Pressable
+            onPress={() => swiperRef.current?.swipeRight()}
+            style={[styles.actionButton, styles.likeButton]}
+          >
+            <Ionicons name="heart" size={iconSize.like} color="#fdfbf7" />
+          </Pressable>
         </View>
-      )}
+
+        <BookDetailsScreen
+          visible={!!selectedCard}
+          card={selectedCard}
+          onClose={handleCloseDetails}
+          onChat={handleChat}
+        />
+
+        {matchInfo && (
+          <MatchOverlay
+            data={matchInfo}
+            onClose={() => {
+              setMatchInfo(null);
+              setMatchResult(null);
+            }}
+            onChat={() => {
+              setMatchInfo(null);
+              // Fix audit #11: navegar al chat usando el chatId del match
+              if (matchResult?.chatId) {
+                router.push(`/chat/${matchResult.chatId}` as any);
+              }
+              setMatchResult(null);
+            }}
+          />
+        )}
+
+        {/* Fix audit #10: mostrar error de swipe al usuario */}
+        {swipeError && (
+          <View style={{
+            position: 'absolute',
+            bottom: 100,
+            left: 20,
+            right: 20,
+            backgroundColor: '#e07a5f',
+            padding: 12,
+            borderRadius: 8,
+            alignItems: 'center',
+          }}>
+            <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>{swipeError}</Text>
+          </View>
+        )}
+      </View>
     </View>
-    </SafeAreaView>
   );
 }

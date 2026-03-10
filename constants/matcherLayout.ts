@@ -38,7 +38,7 @@ export const CARD_SIZE_CONFIG: DeviceOrientationConfig<CardSizeConfig> = {
 export const LAYOUT_CONFIG: DeviceOrientationConfig<LayoutConfig> = {
   mobile: {
     portrait: {
-      cardMarginTop: 0,
+      cardMarginTop: -80,
       buttonGap: 40,
       buttonOffsetFromCard: 0, // No se usa, calculado por porcentaje
       dislikeButtonSize: 66,
