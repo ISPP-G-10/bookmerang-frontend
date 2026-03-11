@@ -6,8 +6,7 @@ import { HStack } from '@/components/ui/hstack';
 import { Image } from '@/components/ui/image';
 import { Text } from '@/components/ui/text';
 import { VStack } from '@/components/ui/vstack';
-import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
-import { useDeviceType } from '@/hooks/useDeviceType';
+import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
 import type { BookCondition, MatcherCard } from '@/types/matcher';
 import React, { useMemo } from 'react';
 import { View, useColorScheme, useWindowDimensions } from 'react-native';
@@ -26,24 +25,23 @@ interface BookCardProps {
 }
 
 export default function BookCard({ card, onTap }: BookCardProps) {
-  const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const { deviceType, orientation } = useDeviceType();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
   const { cardWidth, cardHeight, cardMarginTop } = useMemo(() => {
-    const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
-    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
+    const config = MATCHER_LAYOUT;
     
-    const width = SCREEN_WIDTH * sizeConfig.widthRatio;
-    const height = width * sizeConfig.heightRatio;
+    const width = SCREEN_WIDTH * config.card.widthPercent;
+    const height = width * config.card.heightRatio;
+    const marginTop = SCREEN_HEIGHT * config.card.marginTopPercent;
 
     return {
       cardWidth: width,
       cardHeight: height,
-      cardMarginTop: layoutConfig.cardMarginTop,
+      cardMarginTop: marginTop,
     };
-  }, [SCREEN_WIDTH, deviceType, orientation]);
+  }, [SCREEN_WIDTH, SCREEN_HEIGHT]);
 
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;

@@ -1,5 +1,4 @@
-import { LAYOUT_CONFIG } from '@/constants/matcherLayout';
-import { useDeviceType } from '@/hooks/useDeviceType';
+import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
 import type { MatcherCard } from '@/types/matcher';
 import { BlurView } from 'expo-blur';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
@@ -37,48 +36,37 @@ export interface TinderSwiperRef {
 const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
   ({ cards, onSwipeLeft, onSwipeRight, onTap, onEmpty }, ref) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: SCREEN_WIDTH } = useWindowDimensions();
-    const { deviceType, orientation } = useDeviceType();
-    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];  
+    const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+    const config = MATCHER_LAYOUT;
 
     const SWIPE_THRESHOLD = useMemo(() => SCREEN_WIDTH * SWIPE_THRESHOLD_RATIO, [SCREEN_WIDTH]);
     
-
-    // Shared values para animaciones de posición
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
     const isAnimating = useSharedValue(false);
-    
-    // Shared value para controlar el DESENFOQUE de la carta principal
+
     const topCardBlurIntensity = useSharedValue(0);
 
-    // Callback para avanzar - ejecutado DESPUÉS de que la carta salga de pantalla
     const advanceToNext = useCallback(
       (direction: 'left' | 'right') => {
         if (currentIndex >= cards.length) return;
         const card = cards[currentIndex];
         if (!card) return;
 
-        // Ejecutar callbacks
         if (direction === 'right') {
           onSwipeRight?.(card);
         } else {
           onSwipeLeft?.(card);
         }
 
-        // Usar requestAnimationFrame para mejor sincronización en iOS
         requestAnimationFrame(() => {
-          // Cambiar al siguiente índice
           setCurrentIndex((prev) => prev + 1);
-          
-          // Segundo requestAnimationFrame para asegurar que React terminó el render
+
           requestAnimationFrame(() => {
-            // Resetear posiciones para la nueva carta
             translateX.value = 0;
             translateY.value = 0;
             isAnimating.value = false;
             
-            // La nueva carta principal empieza con blur y lo quita progresivamente
             topCardBlurIntensity.value = 1;
             topCardBlurIntensity.value = withTiming(0, { duration: BLUR_FADE_DURATION });
           });
@@ -87,7 +75,6 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       [currentIndex, cards, onSwipeLeft, onSwipeRight, translateX, translateY, isAnimating, topCardBlurIntensity]
     );
 
-    // Función para disparar swipe programático (botones)
     const triggerSwipe = useCallback(
       (direction: 'left' | 'right') => {
         if (currentIndex >= cards.length || isAnimating.value) return;
@@ -124,7 +111,6 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       .onEnd((e) => {
         if (isAnimating.value) return;
 
-        // Verificar si supera el threshold para hacer swipe
         if (Math.abs(translateX.value) > SWIPE_THRESHOLD) {
           isAnimating.value = true;
           const direction = translateX.value > 0 ? 'right' : 'left';
@@ -141,13 +127,11 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
           );
           translateY.value = withTiming(e.translationY, { duration: SWIPE_DURATION });
         } else {
-          // Volver a la posición original
           translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
           translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
         }
       });
 
-    // Gesture para tap (abrir detalles)
     const tapGesture = Gesture.Tap().onEnd(() => {
       if (currentIndex >= cards.length || isAnimating.value) return;
       const card = cards[currentIndex];
@@ -158,7 +142,6 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
     const composedGesture = Gesture.Race(panGesture, tapGesture);
 
-    // Estilo del borde con color según dirección del swipe
     const borderStyle = useAnimatedStyle(() => {
       const borderColor = interpolateColor(
         translateX.value,
@@ -180,7 +163,6 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       };
     });
 
-    // Estilo de la carta principal - solo transformaciones, SIN opacidad
     const topCardStyle = useAnimatedStyle(() => {
       const rotateZ = interpolate(
         translateX.value,
@@ -198,14 +180,12 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       };
     });
 
-    // Desenfoque de la carta principal - desaparece progresivamente
     const topCardBlurStyle = useAnimatedStyle(() => {
       return {
         opacity: topCardBlurIntensity.value,
       };
     });
 
-    // Estilo de la carta siguiente - solo scale
     const nextCardStyle = useAnimatedStyle(() => {
       const scale = interpolate(
         Math.abs(translateX.value),
@@ -220,19 +200,16 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       };
     });
 
-    // Desenfoque de la carta siguiente - SIEMPRE visible al 100%
     const nextCardBlurStyle = useAnimatedStyle(() => {
       return {
         opacity: 1,
       };
     });
 
-    // Calcular índices de las cartas visibles
     const topCardIndex = currentIndex;
     const nextCardIndex = currentIndex + 1;
     const hasCards = topCardIndex < cards.length;
 
-    // Notificar cuando no hay más cartas
     useEffect(() => {
       if (!hasCards) {
         onEmpty?.();
@@ -243,10 +220,9 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
 
     return (
       <View style={styles.container}>
-        {/* Carta siguiente (detrás) - con blur constante */}
         {nextCardIndex < cards.length && (
           <Animated.View
-            style={[styles.cardContainer, nextCardStyle, { marginTop: layoutConfig.cardMarginTop }]}
+            style={[styles.cardContainer, nextCardStyle, { marginTop: SCREEN_HEIGHT * config.card.marginTopPercent }]}
             pointerEvents="none"
           >
             <View style={styles.blurContainer}>
@@ -258,14 +234,12 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
           </Animated.View>
         )}
 
-        {/* Carta principal (draggable) - con blur que desaparece progresivamente */}
         <GestureDetector gesture={composedGesture}>
-          <Animated.View style={[styles.cardContainer, topCardStyle, { marginTop: layoutConfig.cardMarginTop }]}>
+          <Animated.View style={[styles.cardContainer, topCardStyle, { marginTop: SCREEN_HEIGHT * config.card.marginTopPercent }]}>
             <View style={styles.blurContainer}>
               <Animated.View style={borderStyle}>
                 <BookCard card={cards[topCardIndex]} />
               </Animated.View>
-              {/* Blur sobre la carta principal - desaparece al entrar */}
               <Animated.View style={[StyleSheet.absoluteFill, topCardBlurStyle]} pointerEvents="none">
                 <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="light" />
               </Animated.View>

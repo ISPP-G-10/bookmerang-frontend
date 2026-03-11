@@ -2,8 +2,7 @@ import Header from '@/components/Header';
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
 import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
-import { CARD_SIZE_CONFIG, LAYOUT_CONFIG } from '@/constants/matcherLayout';
-import { useDeviceType } from '@/hooks/useDeviceType';
+import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
 import { fetchFeed, sendSwipe, undoLastSwipe, type SwipeResultDto } from '@/lib/matcherApi';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,7 +17,6 @@ export default function MatcherScreen() {
   const router = useRouter();
   const swiperRef = useRef<TinderSwiperRef>(null);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
-  const { deviceType, orientation, isMobile } = useDeviceType();
   const insets = useSafeAreaInsets();
   const [selectedCard, setSelectedCard] = useState<MatcherCard | null>(null);
   const [matchInfo, setMatchInfo] = useState<MatchOverlayData | null>(null);
@@ -27,7 +25,6 @@ export default function MatcherScreen() {
   const isSwiping = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
 
-  // ── Estado del feed ──
   const [cards, setCards] = useState<MatcherCard[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -36,7 +33,6 @@ export default function MatcherScreen() {
   const [allSwiped, setAllSwiped] = useState(false);
   const loadingMore = useRef(false);
 
-  // ── Carga inicial con API real ──
   const loadFeed = useCallback(async (pageNum: number, append = false) => {
     try {
       if (!append) setLoading(true);
@@ -60,12 +56,8 @@ export default function MatcherScreen() {
     loadFeed(0);
   }, [loadFeed]);
 
-  // ── Prefetch de imágenes de las próximas cartas ──
-  // Precargamos las fotos de las siguientes 3 cartas para que no aparezcan en blanco
   const prefetchedRef = useRef(new Set<string>());
   useEffect(() => {
-    // Tomamos las primeras 3 cartas no vistas (el TinderSwiper usa currentIndex internamente,
-    // pero como las cartas se van eliminando conceptualmente, precargamos las primeras disponibles)
     const upcoming = cards.slice(0, 5);
     for (const card of upcoming) {
       for (const photo of card.book.photos) {
@@ -78,16 +70,19 @@ export default function MatcherScreen() {
   }, [cards]);
 
   const styles = useMemo(() => {
-    const sizeConfig = CARD_SIZE_CONFIG[deviceType][orientation];
-    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
+    const config = MATCHER_LAYOUT;
     
-    const cardWidth = SCREEN_WIDTH * sizeConfig.widthRatio;
-    const cardHeight = cardWidth * sizeConfig.heightRatio;
+    const cardWidth = SCREEN_WIDTH * config.card.widthPercent;
+    const cardHeight = cardWidth * config.card.heightRatio;
     
-    // Mantener tu cálculo mejorado del bottom para los botones
-    const buttonBottom = isMobile 
-      ? Math.max(insets.bottom - 10, SCREEN_HEIGHT * 0.02)
-      : (SCREEN_HEIGHT - cardHeight) / 2 - layoutConfig.buttonOffsetFromCard;
+    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
+    const buttonGap = SCREEN_WIDTH * config.buttons.buttonGapPercent;
+    
+    const buttonBottom = Math.max(
+      insets.bottom - 10,
+      SCREEN_HEIGHT * config.buttons.bottomPercent
+    );
 
     return StyleSheet.create({
       container: {
@@ -101,7 +96,7 @@ export default function MatcherScreen() {
         right: 0,
         flexDirection: 'row',
         justifyContent: 'center',
-        gap: layoutConfig.buttonGap,
+        gap: buttonGap,
         alignItems: 'center',
       },
       actionButton: {
@@ -115,25 +110,28 @@ export default function MatcherScreen() {
         shadowRadius: 3.84,
       },
       dislikeButton: {
-        width: layoutConfig.dislikeButtonSize,
-        height: layoutConfig.dislikeButtonSize,
+        width: dislikeButtonSize,
+        height: dislikeButtonSize,
         backgroundColor: '#fdfbf7',
       },
       likeButton: {
-        width: layoutConfig.likeButtonSize,
-        height: layoutConfig.likeButtonSize,
+        width: likeButtonSize,
+        height: likeButtonSize,
         backgroundColor: '#e07a5f',
       },
     });
-  }, [SCREEN_WIDTH, SCREEN_HEIGHT, deviceType, orientation, isMobile, insets]);
+  }, [SCREEN_WIDTH, SCREEN_HEIGHT, insets]);
 
   const iconSize = useMemo(() => {
-    const layoutConfig = LAYOUT_CONFIG[deviceType][orientation];
+    const config = MATCHER_LAYOUT;
+    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
+    
     return {
-      dislike: layoutConfig.dislikeButtonSize * 0.5,
-      like: layoutConfig.likeButtonSize * 0.5,
+      dislike: dislikeButtonSize * config.buttons.iconSizeRatio,
+      like: likeButtonSize * config.buttons.iconSizeRatio,
     };
-  }, [deviceType, orientation]);
+  }, [SCREEN_WIDTH]);
 
   const maybeLoadMore = useCallback(
     (currentIndex: number) => {
@@ -146,17 +144,13 @@ export default function MatcherScreen() {
     [cards.length, hasMore, page, loadFeed],
   );
 
-  // ── Handlers de swipe con API real (optimista) ──
   const handleSwipe = useCallback(
     async (card: MatcherCard, direction: 'LEFT' | 'RIGHT') => {
-      // Prevenir doble swipe mientras hay uno en vuelo
       if (isSwiping.current) return;
       isSwiping.current = true;
 
       maybeLoadMore(cards.indexOf(card) + 1);
 
-      // Swipe optimista: la carta ya se quitó visualmente por TinderSwiper
-      // Registramos en background
       try {
         console.log(`[SWIPE] Sending ${direction} on book ${card.book.id} (${card.book.titulo})`);
         const result: SwipeResultDto = await sendSwipe(card.book.id, direction);
@@ -170,9 +164,9 @@ export default function MatcherScreen() {
             bookTitle: card.book.titulo,
             bookCoverUrl: card.book.photos?.[0]?.url ?? null,
           });
-          setCanUndo(false); // No se puede deshacer un match
+          setCanUndo(false);
         } else {
-          setCanUndo(true); // Se puede deshacer el último swipe
+          setCanUndo(true);
         }
         setSwipeError(null);
       } catch (e: any) {
@@ -213,7 +207,6 @@ export default function MatcherScreen() {
     try {
       await undoLastSwipe();
       setCanUndo(false);
-      // Recargar el feed para que el libro deshecho vuelva a aparecer
       await loadFeed(0);
     } catch (e: any) {
       setSwipeError(e.message ?? 'No se pudo deshacer el swipe');
@@ -224,7 +217,6 @@ export default function MatcherScreen() {
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
     setSelectedCard(null);
-    // TODO: Aquí iría la navegación al chat cuando esté implementado
   };
 
   if (loading) {
@@ -316,21 +308,24 @@ export default function MatcherScreen() {
             <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
           </Pressable>
 
-          {/* Botón Undo */}
           <Pressable
             onPress={handleUndo}
             disabled={!canUndo}
             style={[
               styles.actionButton,
               {
-                width: 40,
-                height: 40,
-                backgroundColor: canUndo ? '#f5e6d3' : '#e8e8e8',
+                width: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                height: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                backgroundColor: canUndo ? '#f2cc8f' : '#e8e8e8',
                 opacity: canUndo ? 1 : 0.4,
               },
             ]}
           >
-            <Ionicons name="arrow-undo" size={20} color={canUndo ? '#8B7355' : '#bbb'} />
+            <Ionicons
+              name="arrow-undo"
+              size={SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
+              color={canUndo ? '#3e2723' : '#bbb'}
+            />
           </Pressable>
 
           <Pressable
@@ -357,7 +352,6 @@ export default function MatcherScreen() {
             }}
             onChat={() => {
               setMatchInfo(null);
-              // Fix audit #11: navegar al chat usando el chatId del match
               if (matchResult?.chatId) {
                 router.push(`/chat/${matchResult.chatId}` as any);
               }
@@ -366,7 +360,6 @@ export default function MatcherScreen() {
           />
         )}
 
-        {/* Fix audit #10: mostrar error de swipe al usuario */}
         {swipeError && (
           <View style={{
             position: 'absolute',
