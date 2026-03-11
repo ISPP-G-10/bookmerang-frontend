@@ -20,7 +20,7 @@ export interface MatcherLayoutConfig {
 
 export const MATCHER_LAYOUT: MatcherLayoutConfig = {
   card: {
-    widthPercent: 0.85,           // 85% del ancho de pantalla
+    widthPercent: 0.70,           // 85% del ancho de pantalla
     heightRatio: 1.6,             // altura = ancho × 1.6
     marginTopPercent: -0.10,      // -10% de altura (negativo para subir)
   },
