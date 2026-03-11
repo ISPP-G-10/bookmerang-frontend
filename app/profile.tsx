@@ -6,22 +6,22 @@ import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
-  DimensionValue,
+    ActivityIndicator,
+    DimensionValue,
+    Image,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
-  getBookDetail,
-  getMyLibrary,
-  toConditionLabel,
-  type BookDetail,
-  type BookListItem,
+    getBookDetail,
+    getMyLibrary,
+    toConditionLabel,
+    type BookDetail,
+    type BookListItem,
 } from "../lib/books";
 import supabase from "../lib/supabase";
 import type { MatcherCard } from "../types/matcher";
@@ -147,6 +147,7 @@ export default function ProfileScreen() {
   }>({ distanceKm: 10, genres: [], bookLength: [] });
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [locationUpdating, setLocationUpdating] = useState(false);
   const [availableGenres, setAvailableGenres] = useState<
     { id: number; name: string }[]
   >([]);
@@ -155,6 +156,44 @@ export default function ProfileScreen() {
     longitude: number;
   } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+
+  const handleUpdateLocation = async () => {
+    setLocationUpdating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setLocationUpdating(false);
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      const lat = location.coords.latitude;
+      const lon = location.coords.longitude;
+      setUserLocation({ latitude: lat, longitude: lon });
+
+      // Update backend
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
+      if (session && userId) {
+        await apiRequest(`/users/${userId}/preferences`, {
+          method: "PUT",
+          body: JSON.stringify({
+            latitud: lat,
+            longitud: lon,
+            radioKm: preferences.distanceKm || 10,
+            extension: preferences.bookLength.includes("0-200") ? "SHORT" : preferences.bookLength.includes("400+") ? "LONG" : "MEDIUM",
+            genreIds: availableGenres.filter(g => preferences.genres.includes(g.name)).map(g => g.id),
+          }),
+        });
+      }
+
+      const label = await reverseGeocode(lat, lon);
+      if (label) setLocationLabel(label);
+    } catch {
+      console.warn("Could not update location");
+    } finally {
+      setLocationUpdating(false);
+    }
+  };
 
   const reverseGeocode = async (lat: number, lon: number) => {
     try {
@@ -262,23 +301,6 @@ export default function ProfileScreen() {
       }
 
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === "granted") {
-          try {
-            const location = await Location.getCurrentPositionAsync({});
-            setUserLocation({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            });
-          } catch {
-            console.warn("Could not get current position");
-          }
-        }
-      } catch {
-        console.warn("Location permission denied");
-      }
-
-      try {
         const res = await apiRequest("/Auth/perfil", { method: "GET" });
         if (res.ok) {
           const json = await res.json();
@@ -363,6 +385,7 @@ export default function ProfileScreen() {
             !isNaN(parsedLat) &&
             !isNaN(parsedLon)
           ) {
+            setUserLocation({ latitude: parsedLat, longitude: parsedLon });
             reverseGeocodeAndSet(parsedLat, parsedLon);
           } else if (json.location) {
             setLocationLabel(json.location);
@@ -593,6 +616,17 @@ export default function ProfileScreen() {
             <Text style={{ fontSize: 14, color: "#8B7355" }}>
               {locationLabel ?? profile?.location ?? "Madrid, España"}
             </Text>
+            <TouchableOpacity
+              onPress={handleUpdateLocation}
+              disabled={locationUpdating}
+              style={{ marginLeft: 6, padding: 2 }}
+            >
+              {locationUpdating ? (
+                <ActivityIndicator size={14} color="#e07a5f" />
+              ) : (
+                <FontAwesome name="refresh" size={14} color="#e07a5f" />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
