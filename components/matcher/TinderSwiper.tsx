@@ -1,21 +1,24 @@
+import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
 import type { MatcherCard } from '@/types/matcher';
 import { BlurView } from 'expo-blur';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    interpolate,
-    interpolateColor,
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming,
+  interpolate,
+  interpolateColor,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import BookCard from './BookCard';
 
 const SWIPE_THRESHOLD_RATIO = 0.3;
 const MAX_ROTATION = 15;
+const SWIPE_DURATION = 300;
+const BLUR_FADE_DURATION = 700;
 
 interface TinderSwiperProps {
   cards: MatcherCard[];
@@ -33,54 +36,64 @@ export interface TinderSwiperRef {
 const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
   ({ cards, onSwipeLeft, onSwipeRight, onTap, onEmpty }, ref) => {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const { width: SCREEN_WIDTH } = useWindowDimensions();
+    const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+    const config = MATCHER_LAYOUT;
 
     const SWIPE_THRESHOLD = useMemo(() => SCREEN_WIDTH * SWIPE_THRESHOLD_RATIO, [SCREEN_WIDTH]);
-
+    
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
-    const nextCardBlurOpacity = useSharedValue(1);
+    const isAnimating = useSharedValue(false);
 
-    const goToNext = useCallback(
+    const topCardBlurIntensity = useSharedValue(0);
+
+    const advanceToNext = useCallback(
       (direction: 'left' | 'right') => {
         if (currentIndex >= cards.length) return;
         const card = cards[currentIndex];
         if (!card) return;
 
-        // Resetear inmediatamente los valores animados
-        translateX.value = 0;
-        translateY.value = 0;
-        nextCardBlurOpacity.value = 1;
-
-        // Ejecutar callbacks
         if (direction === 'right') {
           onSwipeRight?.(card);
         } else {
           onSwipeLeft?.(card);
         }
 
-        // Actualizar índice después de resetear animaciones
-        setCurrentIndex((prev) => prev + 1);
+        requestAnimationFrame(() => {
+          setCurrentIndex((prev) => prev + 1);
+
+          requestAnimationFrame(() => {
+            translateX.value = 0;
+            translateY.value = 0;
+            isAnimating.value = false;
+            
+            topCardBlurIntensity.value = 1;
+            topCardBlurIntensity.value = withTiming(0, { duration: BLUR_FADE_DURATION });
+          });
+        });
       },
-      [currentIndex, cards, onSwipeLeft, onSwipeRight, translateX, translateY, nextCardBlurOpacity]
+      [currentIndex, cards, onSwipeLeft, onSwipeRight, translateX, translateY, isAnimating, topCardBlurIntensity]
     );
 
     const triggerSwipe = useCallback(
       (direction: 'left' | 'right') => {
-        if (currentIndex >= cards.length) return;
-        const targetX =
-          direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
+        if (currentIndex >= cards.length || isAnimating.value) return;
 
-        nextCardBlurOpacity.value = withTiming(0, { duration: 250 });
+        isAnimating.value = true;
+        const targetX = direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
 
-        translateX.value = withTiming(targetX, { duration: 500 }, (finished) => {
-          if (finished) {
-            runOnJS(goToNext)(direction);
+        translateX.value = withTiming(
+          targetX,
+          { duration: SWIPE_DURATION },
+          (finished) => {
+            if (finished) {
+              runOnJS(advanceToNext)(direction);
+            }
           }
-        });
-        translateY.value = withTiming(0, { duration: 500 });
+        );
+        translateY.value = withTiming(0, { duration: SWIPE_DURATION });
       },
-      [currentIndex, cards.length, goToNext, nextCardBlurOpacity, translateX, translateY, SCREEN_WIDTH]
+      [currentIndex, cards.length, advanceToNext, translateX, translateY, isAnimating, SCREEN_WIDTH]
     );
 
     useImperativeHandle(ref, () => ({
@@ -88,35 +101,39 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       swipeRight: () => triggerSwipe('right'),
     }));
 
+    // Gesture para arrastrar con el dedo
     const panGesture = Gesture.Pan()
       .onUpdate((e) => {
+        if (isAnimating.value) return;
         translateX.value = e.translationX;
         translateY.value = e.translationY;
       })
       .onEnd((e) => {
+        if (isAnimating.value) return;
+
         if (Math.abs(translateX.value) > SWIPE_THRESHOLD) {
+          isAnimating.value = true;
           const direction = translateX.value > 0 ? 'right' : 'left';
-          const targetX =
-            direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
+          const targetX = direction === 'right' ? SCREEN_WIDTH * 1.5 : -SCREEN_WIDTH * 1.5;
 
-          nextCardBlurOpacity.value = withTiming(0, { duration: 180 });
-
-          translateX.value = withTiming(targetX, { duration: 300 }, (finished) => {
-            if (finished) {
-              runOnJS(goToNext)(direction);
+          translateX.value = withTiming(
+            targetX,
+            { duration: SWIPE_DURATION },
+            (finished) => {
+              if (finished) {
+                runOnJS(advanceToNext)(direction);
+              }
             }
-          });
-          translateY.value = withTiming(e.translationY * 1.5, { duration: 300 });
+          );
+          translateY.value = withTiming(e.translationY, { duration: SWIPE_DURATION });
         } else {
-          translateX.value = withSpring(0, { damping: 15, stiffness: 120 });
-          translateY.value = withSpring(0, { damping: 15, stiffness: 120 });
-
-          nextCardBlurOpacity.value = withTiming(1, { duration: 120 });
+          translateX.value = withSpring(0, { damping: 15, stiffness: 150 });
+          translateY.value = withSpring(0, { damping: 15, stiffness: 150 });
         }
       });
 
     const tapGesture = Gesture.Tap().onEnd(() => {
-      if (currentIndex >= cards.length) return;
+      if (currentIndex >= cards.length || isAnimating.value) return;
       const card = cards[currentIndex];
       if (card && onTap) {
         runOnJS(onTap)(card);
@@ -159,6 +176,13 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
           { translateY: translateY.value },
           { rotateZ: `${rotateZ}deg` },
         ],
+        zIndex: 10,
+      };
+    });
+
+    const topCardBlurStyle = useAnimatedStyle(() => {
+      return {
+        opacity: topCardBlurIntensity.value,
       };
     });
 
@@ -169,44 +193,21 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
         [0.95, 1],
         'clamp'
       );
-      const opacity = interpolate(
-        Math.abs(translateX.value),
-        [0, SWIPE_THRESHOLD],
-        [0.7, 1],
-        'clamp'
-      );
 
       return {
         transform: [{ scale }],
-        opacity,
+        zIndex: 5,
       };
     });
 
-    const nextCardBlurIntensity = useAnimatedStyle(() => {
+    const nextCardBlurStyle = useAnimatedStyle(() => {
       return {
-        opacity: nextCardBlurOpacity.value,
+        opacity: 1,
       };
     });
 
-    const thirdCardStyle = useAnimatedStyle(() => {
-      const scale = interpolate(
-        Math.abs(translateX.value),
-        [0, SWIPE_THRESHOLD],
-        [0.9, 0.95],
-        'clamp'
-      );
-
-      return {
-        transform: [{ scale }],
-        opacity: 0.5,
-      };
-    });
-
-    // Calcular índices de las cartas visibles
     const topCardIndex = currentIndex;
     const nextCardIndex = currentIndex + 1;
-    const thirdCardIndex = currentIndex + 2;
-
     const hasCards = topCardIndex < cards.length;
 
     useEffect(() => {
@@ -218,38 +219,34 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
     if (!hasCards) return null;
 
     return (
-      <>
-        {/* Third card (fondo del stack) */}
-        {thirdCardIndex < cards.length && (
-          <Animated.View style={[styles.cardContainer, thirdCardStyle]} key={`third-${currentIndex}`}>
-            <View style={styles.blurContainer}>
-              <BookCard card={cards[thirdCardIndex]} />
-              <BlurView intensity={25} style={StyleSheet.absoluteFill} tint="light" />
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Next card (medio del stack) */}
+      <View style={styles.container}>
         {nextCardIndex < cards.length && (
-          <Animated.View style={[styles.cardContainer, nextCardStyle]} key={`next-${currentIndex}`}>
+          <Animated.View
+            style={[styles.cardContainer, nextCardStyle, { marginTop: SCREEN_HEIGHT * config.card.marginTopPercent }]}
+            pointerEvents="none"
+          >
             <View style={styles.blurContainer}>
               <BookCard card={cards[nextCardIndex]} />
-              <Animated.View style={[StyleSheet.absoluteFill, nextCardBlurIntensity]}>
-                <BlurView intensity={15} style={StyleSheet.absoluteFill} tint="light" />
+              <Animated.View style={[StyleSheet.absoluteFill, nextCardBlurStyle]}>
+                <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="light" />
               </Animated.View>
             </View>
           </Animated.View>
         )}
 
-        {/* Top card (carta principal draggable) */}
-        <GestureDetector gesture={composedGesture} key={`gesture-${currentIndex}`}>
-          <Animated.View style={[styles.cardContainer, topCardStyle]}>
-            <Animated.View style={borderStyle}>
-              <BookCard card={cards[topCardIndex]} />
-            </Animated.View>
+        <GestureDetector gesture={composedGesture}>
+          <Animated.View style={[styles.cardContainer, topCardStyle, { marginTop: SCREEN_HEIGHT * config.card.marginTopPercent }]}>
+            <View style={styles.blurContainer}>
+              <Animated.View style={borderStyle}>
+                <BookCard card={cards[topCardIndex]} />
+              </Animated.View>
+              <Animated.View style={[StyleSheet.absoluteFill, topCardBlurStyle]} pointerEvents="none">
+                <BlurView intensity={30} style={StyleSheet.absoluteFill} tint="light" />
+              </Animated.View>
+            </View>
           </Animated.View>
         </GestureDetector>
-      </>
+      </View>
     );
   }
 );
@@ -259,6 +256,11 @@ TinderSwiper.displayName = 'TinderSwiper';
 export default TinderSwiper;
 
 const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cardContainer: {
     position: 'absolute',
     alignSelf: 'center',
