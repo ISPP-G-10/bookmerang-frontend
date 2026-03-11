@@ -614,7 +614,7 @@ export default function ProfileScreen() {
           >
             <FontAwesome name="map-marker" size={14} color="#e07a5f" />
             <Text style={{ fontSize: 14, color: "#8B7355" }}>
-              {locationLabel ?? profile?.location ?? "Madrid, España"}
+              {locationLabel ?? profile?.location ?? "Cargando ubicación..."}
             </Text>
             <TouchableOpacity
               onPress={handleUpdateLocation}
