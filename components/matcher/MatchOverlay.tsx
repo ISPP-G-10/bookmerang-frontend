@@ -3,19 +3,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
-    Easing,
-    interpolate,
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withDelay,
-    withRepeat,
-    withSequence,
-    withSpring,
-    withTiming
+  Easing,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
 
-// ── Types ──
 export interface MatchOverlayData {
   otherUsername: string;
   bookTitle: string | null;
@@ -28,17 +27,16 @@ interface MatchOverlayProps {
   onChat: () => void;
 }
 
-// ── Particle config ──
 const PARTICLE_COUNT = 18;
 
 interface Particle {
   emoji: string;
-  startX: number;     // ratio 0-1
-  startY: number;     // ratio 0-1
+  startX: number;
+  startY: number;
   delay: number;
   duration: number;
   size: number;
-  direction: number;  // -1 or 1
+  direction: number;
 }
 
 function generateParticles(): Particle[] {
@@ -56,7 +54,6 @@ function generateParticles(): Particle[] {
 
 const particles = generateParticles();
 
-// ── Animated particle ──
 function FloatingParticle({ particle, screenWidth, screenHeight }: {
   particle: Particle;
   screenWidth: number;
@@ -93,11 +90,9 @@ function FloatingParticle({ particle, screenWidth, screenHeight }: {
   );
 }
 
-// ── Main component ──
 export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProps) {
   const { width: W, height: H } = useWindowDimensions();
 
-  // ── Entrance animations ──
   const overlayOpacity = useSharedValue(0);
   const titleScale = useSharedValue(0);
   const titleRotate = useSharedValue(-10);
@@ -112,10 +107,8 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
   const bookOpacity = useSharedValue(0);
 
   useEffect(() => {
-    // 1. Overlay fade-in
     overlayOpacity.value = withTiming(1, { duration: 400 });
 
-    // 2. Glow circle
     glowOpacity.value = withDelay(200, withTiming(0.4, { duration: 600 }));
     glowScale.value = withDelay(200,
       withRepeat(
@@ -128,9 +121,7 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
       ),
     );
 
-    // 3. Heart icon pops in
     heartScale.value = withDelay(250, withSpring(1, { damping: 6, stiffness: 150 }));
-    // Heart continuous pulse
     heartPulse.value = withDelay(800,
       withRepeat(
         withSequence(
@@ -142,23 +133,18 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
       ),
     );
 
-    // 4. Title bounces in
     titleScale.value = withDelay(350, withSpring(1, { damping: 8, stiffness: 120 }));
     titleRotate.value = withDelay(350, withSpring(0, { damping: 10, stiffness: 100 }));
 
-    // 5. Book cover slides in
     bookSlideX.value = withDelay(500, withSpring(0, { damping: 14, stiffness: 90 }));
     bookOpacity.value = withDelay(500, withTiming(1, { duration: 300 }));
 
-    // 6. Subtitle fades in
     subtitleOpacity.value = withDelay(650, withTiming(1, { duration: 400 }));
 
-    // 7. Buttons slide up
     buttonsTranslateY.value = withDelay(800, withSpring(0, { damping: 12, stiffness: 100 }));
     buttonsOpacity.value = withDelay(800, withTiming(1, { duration: 350 }));
   }, []);
 
-  // ── Animated styles ──
   const overlayAnimStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
   }));
@@ -195,7 +181,6 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
     transform: [{ translateY: buttonsTranslateY.value }],
   }));
 
-  // ── Animated exit ──
   const handleClose = useCallback(() => {
     overlayOpacity.value = withTiming(0, { duration: 250 }, (finished) => {
       if (finished) runOnJS(onClose)();
@@ -219,27 +204,22 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
         style={StyleSheet.absoluteFill}
       />
 
-      {/* ── Particles ── */}
       {particles.map((p, i) => (
         <FloatingParticle key={i} particle={p} screenWidth={W} screenHeight={H} />
       ))}
 
-      {/* ── Glow circle behind heart ── */}
       <Animated.View style={[styles.glowCircle, glowAnimStyle]} />
 
-      {/* ── Heart icon ── */}
       <Animated.View style={[styles.heartContainer, heartAnimStyle]}>
         <View style={styles.heartBg}>
           <Ionicons name="heart" size={52} color="#fff" />
         </View>
       </Animated.View>
 
-      {/* ── Title ── */}
       <Animated.View style={[styles.titleContainer, titleAnimStyle]}>
         <Text style={styles.titleText}>¡Es un Match!</Text>
       </Animated.View>
 
-      {/* ── Book cover ── */}
       {showBookImage && (
         <Animated.View style={[styles.bookContainer, bookAnimStyle]}>
           <Animated.Image
@@ -250,7 +230,6 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
         </Animated.View>
       )}
 
-      {/* ── Subtitle ── */}
       <Animated.View style={[styles.subtitleContainer, subtitleAnimStyle]}>
         {data.bookTitle && (
           <Text style={styles.bookTitleText} numberOfLines={2}>
@@ -264,7 +243,6 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
         </Text>
       </Animated.View>
 
-      {/* ── Buttons ── */}
       <Animated.View style={[styles.buttonsContainer, buttonsAnimStyle]}>
         <Pressable
           onPress={handleChat}
@@ -291,7 +269,6 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
   );
 }
 
-// ── Styles ──
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
