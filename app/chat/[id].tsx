@@ -2,38 +2,41 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    StyleSheet,
-    TextInput,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-    sendMessage as apiSendMessage,
-    getChat as fetchChat,
-    getMessages as fetchMessages,
-    startTyping,
-    stopTyping,
-    getTypingUsers,
+  sendMessage as apiSendMessage,
+  getChat as fetchChat,
+  getMessages as fetchMessages,
+  startTyping,
+  stopTyping,
+  getTypingUsers,
 } from '@/lib/chatApi';
 import { ChatDto, ChatParticipantDto, MessageDto, TypingUserDto } from '@/types/chat';
 import { ExchangeMeetingDto, ExchangeWithMatchDto } from '@/types/exchange';
 import {
-    getExchangeByChatIdWithMatch,
-    acceptExchange, 
-    rejectExchange
+  getExchangeByChatIdWithMatch,
+  acceptExchange,
+  rejectExchange,
+  deleteExchange
 } from '@/lib/exchangeApi';
 import {
-    getBookDetail, BookDetail
+  getBookDetail, BookDetail
 } from '@/lib/books';
+import { ConfirmModal } from '@/components/ConfirmationModal';
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -41,6 +44,17 @@ function formatMessageTime(dateStr: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatCondition(condition?: BookDetail['condition'] | null): string {
+  switch (condition) {
+    case 'LikeNew':   return 'Como nuevo';
+    case 'VeryGood':  return 'Muy bueno';
+    case 'Good':      return 'Bueno';
+    case 'Acceptable': return 'Aceptable';
+    case 'Poor':      return 'Deteriorado';
+    default:          return '';
+  }
 }
 
 function formatDateHeader(dateStr: string): string {
@@ -75,12 +89,21 @@ export default function ChatDetailScreen() {
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [exchange, setExchange] = useState<ExchangeWithMatchDto | null>(null);
-  const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
-  const [disabledAccept, setDisabledAccept] = useState<boolean>(false);
-  // banner de intercambio commet
+  // const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
   const [myBook, setMyBook] = useState<BookDetail | null>(null);
   const [otherBook, setOtherBook] = useState<BookDetail | null>(null);
-  const [otherUsername, setOtherUsername] = useState<string>(''); // para “Libro de Carlos”
+  const [otherUsername, setOtherUsername] = useState<string>('');
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
+  const [confirmMode, setConfirmMode] = useState<'accept' | 'reject' | null>(null);
+  const [meetingFormVisible, setMeetingFormVisible] = useState(false);
+  const [meetingType, setMeetingType] = useState<MeetingType>('ARBITRARY');
+  const [meetingDate, setMeetingDate] = useState('');
+  const [meetingTime, setMeetingTime] = useState('');
+  const [meetingLocation, setMeetingLocation] = useState('');
+
+
+  type MeetingType = 'ARBITRARY' | 'BOOKSPOT' | 'BOOKDROP';
 
   const loadData = useCallback(async () => {
     try {
@@ -97,7 +120,7 @@ export default function ChatDetailScreen() {
 
       const exchangeData = await getExchangeByChatIdWithMatch(chatId);
       setExchange(exchangeData);
-      
+
       // Ordenar mensajes cronológicamente (más antiguos primero)
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
@@ -133,13 +156,6 @@ export default function ChatDetailScreen() {
     }
   }, [chatId, backendUserId, currentUserId]);
 
-  // Hook para inicializar estado del boton accept
-  const initializeAcceptState = useCallback(() => {
-    if (!exchange || !backendUserId) return;
-    const isAlreadyAccepted = checkUserAcceptance();
-    setDisabledAccept(isAlreadyAccepted);
-  }, [exchange, backendUserId]);
-
   useEffect(() => {
     loadData();
     refreshTyping();
@@ -156,7 +172,7 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     return () => {
       if (isTypingRef.current) {
-        stopTyping(chatId).catch(() => {});
+        stopTyping(chatId).catch(() => { });
       }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -165,8 +181,8 @@ export default function ChatDetailScreen() {
   }, [chatId]);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {});
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {});
+    const showSub = Keyboard.addListener('keyboardDidShow', () => { });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => { });
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -174,41 +190,35 @@ export default function ChatDetailScreen() {
   }, []);
 
   useEffect(() => {
-  const loadExchangeBooks = async () => {
-    if (!exchange || !backendUserId) return;
+    const loadExchangeBooks = async () => {
+      if (!exchange || !backendUserId) return;
 
-    try {
-      // Determinar si soy user1 o user2
-      const isUser1 = backendUserId === exchange.user1Id;
+      try {
+        // Determinar si es user1 o user2
+        const isUser1 = backendUserId === exchange.user1Id;
 
-      const myBookId = isUser1 ? exchange.book1Id : exchange.book2Id;
-      const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
+        const myBookId = isUser1 ? exchange.book1Id : exchange.book2Id;
+        const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
 
-      const [myBookData, otherBookData] = await Promise.all([
-        getBookDetail(myBookId),
-        getBookDetail(otherBookId),
-      ]);
+        const [myBookData, otherBookData] = await Promise.all([
+          getBookDetail(myBookId),
+          getBookDetail(otherBookId),
+        ]);
 
-      setMyBook(myBookData);
-      setOtherBook(otherBookData);
+        setMyBook(myBookData);
+        setOtherBook(otherBookData);
 
-      // Sacar nombre del otro usuario del chat
-      const otherParticipant = chat?.participants.find(
-        (p) => p.userId !== backendUserId
-      );
-      setOtherUsername(otherParticipant?.username ?? 'la otra persona');
-    } catch (e) {
-      console.error('Error cargando libros del intercambio', e);
-    }
-  };
-
-  loadExchangeBooks();
-}, [exchange, backendUserId, chat]);
-
-  
-  useEffect(() => {
-    initializeAcceptState();
-  }, [initializeAcceptState]);
+        // Sacar nombre del otro usuario del chat
+        const otherParticipant = chat?.participants.find(
+          (p) => p.userId !== backendUserId
+        );
+        setOtherUsername(otherParticipant?.username ?? 'la otra persona');
+      } catch (e) {
+        console.error('Error cargando libros del intercambio', e);
+      }
+    };
+    loadExchangeBooks();
+  }, [exchange, backendUserId, chat]);
 
   if (loading) {
     return (
@@ -221,7 +231,7 @@ export default function ChatDetailScreen() {
   if (error || !chat) {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: '#6B7280', marginBottom: 12 }}>
+        <Text style={{ color: '#6B7280', marginBottom: 12, textAlign: 'center' }}>
           {error ?? 'Chat no encontrado'}
         </Text>
         <Pressable onPress={loadData}>
@@ -251,7 +261,7 @@ export default function ChatDetailScreen() {
 
     if (!isTypingRef.current && text.trim().length > 0) {
       isTypingRef.current = true;
-      startTyping(chatId).catch(() => {});
+      startTyping(chatId).catch(() => { });
     }
 
     if (typingTimeoutRef.current) {
@@ -261,12 +271,12 @@ export default function ChatDetailScreen() {
     if (text.trim().length === 0) {
       if (isTypingRef.current) {
         isTypingRef.current = false;
-        stopTyping(chatId).catch(() => {});
+        stopTyping(chatId).catch(() => { });
       }
     } else {
       typingTimeoutRef.current = setTimeout(() => {
         isTypingRef.current = false;
-        stopTyping(chatId).catch(() => {});
+        stopTyping(chatId).catch(() => { });
       }, 3000);
     }
   };
@@ -277,7 +287,7 @@ export default function ChatDetailScreen() {
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
-      stopTyping(chatId).catch(() => {});
+      stopTyping(chatId).catch(() => { });
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     }
 
@@ -344,7 +354,7 @@ export default function ChatDetailScreen() {
     const showDateHeader =
       index === 0 ||
       getDateKey(item.sentAt) !==
-        getDateKey(messages[index - 1].sentAt);
+      getDateKey(messages[index - 1].sentAt);
 
     return (
       <>
@@ -415,53 +425,135 @@ export default function ChatDetailScreen() {
 
   // Acepta el intercambio por parte del usuario actual
   const handleAcceptExchange = async () => {
-  if (!exchange?.exchangeId) return;
-  setError(null);
-  try {
-    const updated = await acceptExchange(exchange.exchangeId);
-    setExchange(updated);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error al aceptar el intercambio';
-    setError(msg);
-  }
+    if (!exchange?.exchangeId) return;
+    setError(null);
+    try {
+      const updated = await acceptExchange(exchange.exchangeId);
+      setExchange(prev =>
+        prev
+          ? {
+            ...prev,    // mantiene user1Id, user2Id, book1Id, book2Id...
+            ...updated, // pisa status, updatedAt, etc. con lo que venga del backend
+          }
+          : updated
+      );
+    } catch (err) {
+      const backendMsg = err instanceof Error ? err.message : 'Error al aceptar el intercambio';
+      setError(`No se pudo aceptar el intercambio: ${backendMsg}`);
+    }
   };
 
-  // Función auxiliar para calcular si se puede aceptar o no
-  const checkUserAcceptance = (): boolean => {
-    // Si sigue negociando, el usuario todavía puede aceptar
-    if (exchange?.status === "NEGOTIATING") return false;
-    
-    if (
-      exchange?.status === "ACCEPTED_BY_1" &&
-      exchange?.user1Id === backendUserId
-    ) {
-      return true;
-    }
-
-    if (
-      exchange?.status === "ACCEPTED_BY_2" &&
-      exchange?.user2Id === backendUserId
-    ) {
-      return true;
-    }
-
-    if(exchange?.status === "REJECTED" || exchange?.status === "ACCEPTED") return true;
-
-    return false;
-  };
-  
   // Desestima el intercambio
   const handleRejectExchange = async () => {
-  if (!exchange?.exchangeId) return;
-  setError(null);
-  try {
-    const updated = await rejectExchange(exchange.exchangeId);
-    setExchange(updated);
-    setDisabledAccept(true);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error al desestimar el intercambio';
-    setError(msg);
-  }
+    if (!exchange?.exchangeId) return;
+    setError(null);
+    try {
+      const updated = await rejectExchange(exchange.exchangeId);
+      setExchange(updated);
+      // await deleteExchange(exchange.exchangeId);  //Se borra el intercambio cuando se rechaza, mas adelante funcionará esto
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Error al desestimar el intercambio';
+      setError(msg);
+    }
+  };
+
+  const getAcceptButtonState = () => {
+
+    if (!exchange || !backendUserId) {
+      return {
+        label: 'Aceptar',
+        bgColor: '#e76541',
+        textColor: '#ffffff',
+        disabled: true,
+      };
+    }
+
+    const otherParticipant = chat?.participants.find(
+      (p) => p.userId !== backendUserId
+    );
+
+    const iAmUser1 = exchange.user1Id === backendUserId;
+    const iAmUser2 = exchange.user2Id === backendUserId;
+
+    // Ambos aceptados
+    if (exchange.status === 'ACCEPTED') {
+      return {
+        label: 'Intercambio aceptado',
+        bgColor: '#16a34a',
+        textColor: '#ffffff',
+        disabled: true,
+      };
+    }
+
+    // User1 ha aceptado, pero 2 no
+    if (
+      (exchange.status === 'ACCEPTED_BY_1' && iAmUser1) ||
+      (exchange.status === 'ACCEPTED_BY_2' && iAmUser2)
+    ) {
+      return {
+        label: `Esperando confirmación...`,
+        bgColor: '#fbbf24',
+        textColor: '#1f2937',
+        disabled: true,
+      };
+    }
+
+    // User2 ha aceptado, pero 1 no
+    if (
+      (exchange.status === 'ACCEPTED_BY_1' && iAmUser2) ||
+      (exchange.status === 'ACCEPTED_BY_2' && iAmUser1)
+    ) {
+      return {
+        label: 'Aceptar intercambio',
+        bgColor: '#e76541',
+        textColor: '#ffffff',
+        disabled: false,
+      };
+    }
+
+    // NEGOTIATING
+    return {
+      label: 'Aceptar intercambio',
+      bgColor: '#e76541',
+      textColor: '#ffffff',
+      disabled: false,
+    };
+  };
+
+  const acceptBtn = getAcceptButtonState();
+  const showExchangeActions =
+    !!exchange &&
+    exchange.status !== 'REJECTED' &&
+    exchange.status !== 'INCIDENT' &&
+    exchange.status !== 'COMPLETED';
+  const canProposeMeeting = exchange?.status === 'ACCEPTED';
+
+
+  const openConfirm = (action: () => Promise<void>, mode: 'accept' | 'reject') => {
+    setPendingAction(() => action);
+    setConfirmVisible(true);
+    setConfirmMode(mode)
+  };
+
+  const openAcceptConfirm = () => {
+    openConfirm(handleAcceptExchange, 'accept');
+  };
+
+  const openRejectConfirm = () => {
+    openConfirm(handleRejectExchange, 'reject');
+  };
+
+  const handleConfirm = async () => {
+    if (pendingAction) {
+      await pendingAction();
+    }
+    setConfirmVisible(false);
+    setPendingAction(null);
+  };
+
+  const handleCancelConfirm = () => {
+    setConfirmVisible(false);
+    setPendingAction(null);
   };
 
   return (
@@ -477,6 +569,19 @@ export default function ChatDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={90}
       >
+        <ConfirmModal
+          visible={confirmVisible}
+          title={confirmMode === 'accept' ? 'Confirmar intercambio' : 'Desestimar intercambio'}
+          message={
+            confirmMode === 'accept'
+              ? '¿Seguro que quieres aceptar este intercambio?'
+              : '¿Seguro que quieres desestimar este intercambio? Esta acción terminará las negocioaciones y es irreversible.'
+          }
+          confirmLabel={confirmMode === 'accept' ? 'Aceptar' : 'Desestimar'}
+          confirmColor={confirmMode === 'accept' ? 'primary' : 'danger'}
+          onConfirm={handleConfirm}
+          onCancel={handleCancelConfirm}
+        />
         {/* Banner de error de intercambio */}
         {error && (
           <View style={styles.exchangeErrorBanner}>
@@ -486,16 +591,14 @@ export default function ChatDetailScreen() {
             </Pressable>
           </View>
         )}
-        
+
         {/* Banner de intercambio */}
         {exchange && myBook && otherBook && (
           <View style={styles.exchangeBanner}>
             <View style={styles.exchangeBannerRow}>
-              {/* Columna izquierda: tu libro */}
               <View style={styles.exchangeBannerColumn}>
                 <Text style={styles.exchangeBannerLabel}>TU LIBRO</Text>
                 <View style={styles.exchangeBookCard}>
-                  {/* Foto o icono */}
                   {myBook.photos[0]?.url ? (
                     <Image
                       source={{ uri: myBook.photos[0].url }}
@@ -509,15 +612,17 @@ export default function ChatDetailScreen() {
                       {myBook.titulo ?? 'Libro sin título'}
                     </Text>
                     {myBook.autor && (
-                      <Text style={styles.exchangeBookAuthor} numberOfLines={1}>
+                      <Text style={styles.exchangeBookAuthor} numberOfLines={2}>
                         {myBook.autor}
                       </Text>
                     )}
                     <Text style={styles.exchangeBookMeta} numberOfLines={1}>
-                      {myBook.cover === 'Hardcover' ? 'Tapa dura' :
-                      myBook.cover === 'Paperback' ? 'Tapa blanda' : ''}
+                      {myBook.cover === 'Hardcover' ? '· Tapa dura' :
+                        myBook.cover === 'Paperback' ? '· Tapa blanda' : ''}
+                    </Text>
+                    <Text style={styles.exchangeBookMeta} numberOfLines={1}>
                       {myBook.condition
-                        ? ` · ${myBook.condition}`
+                        ? `· ${formatCondition(myBook.condition)}`
                         : ''}
                     </Text>
                   </View>
@@ -526,7 +631,7 @@ export default function ChatDetailScreen() {
 
               {/* Icono de intercambio */}
               <View style={styles.exchangeCenterIcon}>
-                <FontAwesome name="exchange" size={20} color="#e4715f" />
+                <FontAwesome name="exchange" size={20} color="#e4715f"/>
               </View>
 
               {/* Columna derecha: libro del otro */}
@@ -558,12 +663,14 @@ export default function ChatDetailScreen() {
                       </Text>
                     )}
                     <Text style={styles.exchangeBookMeta} numberOfLines={1}>
-                      {otherBook.cover === 'Hardcover' ? 'Tapa dura' :
-                      otherBook.cover === 'Paperback' ? 'Tapa blanda' : ''}
-                      {otherBook.condition
-                        ? ` · ${otherBook.condition}`
-                        : ''}
+                      {otherBook.cover === 'Hardcover' ? '· Tapa dura' :
+                        otherBook.cover === 'Paperback' ? '· Tapa blanda' : ''}
                     </Text>
+                    <Text style={styles.exchangeBookMeta} numberOfLines={1}>
+                    {otherBook.condition
+                      ? `· ${formatCondition(otherBook.condition)}`
+                      : ''}
+                  </Text>
                   </View>
                 </View>
               </View>
@@ -572,35 +679,58 @@ export default function ChatDetailScreen() {
         )}
 
         {/* Botones de aceptar y desestimar */}
-        <View style={styles.AcceptRejectContainer}>
-          {/* Botón Aceptar */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.Exchangebutton,
-              styles.acceptButton,
-              disabledAccept && styles.buttonDisabled,
-              pressed && !disabledAccept && styles.buttonPressed,
-            ]}
-            onPress={handleAcceptExchange}
-            disabled={disabledAccept}
-          >
-            <FontAwesome name="thumbs-up" size={18} color="#fff" />
-            <Text style={styles.acceptText}>Aceptar</Text>
-          </Pressable>
+        {showExchangeActions && (
+          <View style={styles.AcceptRejectContainer}>
+            {/* Botón Aceptar */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.Exchangebutton,
+                styles.acceptButton,
+                { backgroundColor: acceptBtn.bgColor },
+                (acceptBtn.disabled || pressed) && styles.buttonPressed,
+              ]}
+              onPress={openAcceptConfirm}
+              disabled={acceptBtn.disabled}
+            >
+              <FontAwesome name="thumbs-up" size={18} color={acceptBtn.textColor} style={styles.iconAccept} />
+              <Text style={[styles.acceptText, { color: acceptBtn.textColor }]}>
+                {acceptBtn.label}
+              </Text>
+            </Pressable>
 
-          {/* Botón Desestimar (mitad derecha) */}
+            {/* Botón Desestimar (mitad derecha) */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.Exchangebutton,
+                styles.rejectButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={openRejectConfirm}
+            >
+              <FontAwesome name="times" size={18} color="#6B7280" style={styles.iconAccept} />
+              <Text style={styles.rejectText}>Desestimar</Text>
+            </Pressable>
+          </View>
+        )}
+        
+        {/* Botón para proponer encuentro */}
+        {canProposeMeeting && (
+        <View style={styles.meetingButtonContainer}>
           <Pressable
             style={({ pressed }) => [
-              styles.Exchangebutton,
-              styles.rejectButton,
-              pressed && styles.buttonPressed,
+              styles.meetingButton,
+              pressed && styles.meetingButtonPressed,
             ]}
-            onPress={handleRejectExchange}
+            onPress={() => {
+              setMeetingType('ARBITRARY');
+              setMeetingFormVisible(true);
+            }}
           >
-            <FontAwesome name="times" size={18} color="#6B7280" />
-            <Text style={styles.rejectText}>Desestimar</Text>
+            <FontAwesome name="calendar" size={18} color="#fff" />
+            <Text style={styles.meetingButtonText}>Proponer encuentro</Text>
           </Pressable>
         </View>
+      )}
 
         {/* Lista de mensajes */}
         <FlatList
@@ -672,34 +802,189 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
+        {meetingFormVisible && (
+          <View style={styles.meetingFormOverlay}>
+            <View style={styles.meetingFormCard}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.meetingFormScrollContent}
+              >
+                {/* Header */}
+                <View style={styles.meetingFormHeader}>
+                  <Text style={styles.meetingFormTitle}>Proponer encuentro</Text>
+                  <Pressable onPress={() => setMeetingFormVisible(false)} style={styles.formCloseButton}>
+                    <FontAwesome name="times" size={20} color="#6B7280" />
+                  </Pressable>
+                </View>
+
+                {/* Tipo de encuentro */}
+                <Text style={styles.meetingSectionLabel}>Tipo de encuentro</Text>
+                <View style={styles.meetingTypeRow}>
+                  <Pressable
+                    style={[
+                      styles.meetingTypeCard,
+                      meetingType === 'ARBITRARY' && styles.meetingTypeCardSelected,
+                    ]}
+                    onPress={() => setMeetingType('ARBITRARY')}
+                  >
+                    <Text
+                      style={[
+                        styles.meetingTypeTitle,
+                        meetingType === 'ARBITRARY' && styles.meetingTypeTitleSelected,
+                      ]}
+                    >
+                      Ubicación arbitraria
+                    </Text>
+                    <Text style={styles.meetingTypeSubtitle}>
+                      Indica cualquier dirección para el encuentro
+                    </Text>
+                    <Text style={styles.meetingTypePrice}>Gratis</Text>
+                  </Pressable>
+
+                  {/* Segundo tipo: BookSpot */}
+                  <Pressable
+                    style={[
+                      styles.meetingTypeCard,
+                      meetingType === 'BOOKSPOT' && styles.meetingTypeCardSelected,
+                    ]}
+                    onPress={() => setMeetingType('BOOKSPOT')}
+                  >
+                    <Text
+                      style={[
+                        styles.meetingTypeTitle,
+                        meetingType === 'BOOKSPOT' && styles.meetingTypeTitleSelected,
+                      ]}
+                    >
+                      BookSpot
+                    </Text>
+                    <Text style={styles.meetingTypeSubtitle}>
+                      Cafetería asociada con zona segura
+                    </Text>
+                    <Text style={styles.meetingTypePriceFree}>Gratis</Text>
+                  </Pressable>
+
+                  {/* Tercer tipo: BookDrop */}
+                  <Pressable
+                    style={[
+                      styles.meetingTypeCard,
+                      meetingType === 'BOOKDROP' && styles.meetingTypeCardSelected,
+                    ]}
+                    onPress={() => setMeetingType('BOOKDROP')}
+                  >
+                    <Text
+                      style={[
+                        styles.meetingTypeTitle,
+                        meetingType === 'BOOKDROP' && styles.meetingTypeTitleSelected,
+                      ]}
+                    >
+                      BookDrop
+                    </Text>
+                    <Text style={styles.meetingTypeSubtitle}>
+                      Deja tu libro para recogida cuando quieras
+                    </Text>
+                    <Text style={styles.meetingTypePricePaid}>
+                      1€ por usuario
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Fecha */}
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.meetingSectionLabel}>Fecha</Text>
+                  <Pressable
+                    style={styles.meetingInput}
+                    onPress={() => {
+                      // aquí más adelante abrirás un date picker
+                    }}
+                  >
+                    <Text style={styles.meetingInputPlaceholder}>
+                      {meetingDate || 'dd/mm/aaaa'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Hora */}
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.meetingSectionLabel}>Hora</Text>
+                  <Pressable
+                    style={styles.meetingInput}
+                    onPress={() => {
+                      // aquí más adelante abrirás un time picker
+                    }}
+                  >
+                    <Text style={styles.meetingInputPlaceholder}>
+                      {meetingTime || '--:--'}
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Ubicación: solo si ARBITRARY */}
+                {meetingType === 'ARBITRARY' && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.meetingSectionLabel}>Ubicación</Text>
+                    <Pressable
+                      style={styles.meetingInput}
+                      onPress={() => {
+                        // aquí más adelante puedes abrir un input aparte o un selector
+                      }}
+                    >
+                      <Text style={styles.meetingInputPlaceholder}>
+                        {meetingLocation || 'Ej: Café Central, Calle Mayor 10'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* Botón Enviar propuesta */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.meetingSubmitButton,
+                    pressed && styles.meetingSubmitPressed,
+                  ]}
+                  onPress={() => {
+                    // aquí luego haremos la llamada a la API exchangeMeeting
+                  }}
+                >
+                  <Text style={styles.meetingSubmitText}>
+                    Enviar propuesta
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </View>
+        )}
+
+
         {/* Input de texto */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={handleInputChange}
-            placeholder="Escribe un mensaje..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={1000}
-            onSubmitEditing={handleSend}
-          />
-          <Pressable
-            style={({ pressed }) => [
-              styles.sendButton,
-              !inputText.trim() && styles.sendButtonDisabled,
-              pressed && styles.sendButtonPressed,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-          >
-            <FontAwesome
-              name="send"
-              size={18}
-              color={inputText.trim() ? '#fff' : '#ccc'}
+        {!meetingFormVisible && (
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={inputText}
+              onChangeText={handleInputChange}
+              placeholder="Escribe un mensaje..."
+              placeholderTextColor="#999"
+              multiline
+              maxLength={1000}
+              onSubmitEditing={handleSend}
             />
-          </Pressable>
-        </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.sendButton,
+                !inputText.trim() && styles.sendButtonDisabled,
+                pressed && styles.sendButtonPressed,
+              ]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+            >
+              <FontAwesome
+                name="send"
+                size={18}
+                color={inputText.trim() ? '#fff' : '#ccc'}
+              />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </>
   );
@@ -922,20 +1207,20 @@ const styles = StyleSheet.create({
   },
   // ── Intercambio ─────────────────────────────────────────────
   AcceptRejectContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     backgroundColor: '#fbf7f4',
-    marginTop: "0.5%"
+    marginTop: 6,
+    marginHorizontal: 14,
   },
   Exchangebutton: {
     flex: 1,
     flexDirection: 'row',
-    height: 44,
+    height: 46,
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: "0.2%",
-    marginLeft: "0.2%",
+    marginHorizontal: 14,
   },
   acceptButton: {
     backgroundColor: '#e76541',
@@ -962,13 +1247,19 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   rejectText: {
     color: '#6B7280',
     fontSize: 15,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 10,
+  },
+  iconAccept: {
+    marginLeft: 10,
+  },
+  iconReject: {
+    marginLeft: 10,
   },
   // cuando solo hay botón desestimar ocupa todo el ancho
   rejectButtonSingle: {
@@ -1024,6 +1315,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: '#6B7280',
+    backgroundColor: '#ffffff',
     marginBottom: 6,
   },
   exchangeBookCard: {
@@ -1066,7 +1358,238 @@ const styles = StyleSheet.create({
   exchangeCenterIcon: {
     width: 32,
     alignItems: 'center',
+    justifyContent: 'center'
   },
-
-
+  exchangeStatusContainer: {
+    marginHorizontal: 14,
+    marginBottom: 4,
+  },
+  exchangeStatusText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  // ── Modales de confirmacion de accept y reject ─────────────────────────────
+  confirmOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  confirmCard: {
+    width: '82%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 16,
+  },
+  confirmButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  confirmSecondaryButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginRight: 8,
+    backgroundColor: '#F3F4F8',
+  },
+  confirmSecondaryText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  confirmPrimaryButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#e4715f',
+  },
+  confirmPrimaryDanger: {
+    backgroundColor: '#DC2626',
+  },
+  confirmPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  meetingButtonContainer: {
+    marginTop: 10,
+    marginHorizontal: 28,   // alineado con el banner
+    backgroundColor: '#ffffff',
+  },
+  meetingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#e4715f',
+    paddingHorizontal: 16,
+    shadowColor: '#e4715f',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  meetingButtonPressed: {
+    opacity: 0.8,
+  },
+  meetingButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  meetingFormOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.25)',
+    justifyContent: 'flex-end',
+  },
+  meetingFormHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    backgroundColor: '#ffffff'
+  },
+  meetingFormTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  meetingSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+    backgroundColor: '#ffffff',
+    marginBottom: 4,
+  },
+  meetingPlaceholder: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  meetingInput: {
+    height: 35,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+  },
+  meetingSubmitButton: {
+    marginTop: 20,
+    height: 46,
+    borderRadius: 24,
+    backgroundColor: '#e4715f',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  meetingSubmitPressed: {
+    opacity: 0.85,
+  },
+  meetingSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  meetingTypeRow: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  meetingTypeCard: {
+    backgroundColor: '#FBF7F4',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#F3F4F8',
+    marginBottom: 8,
+  },
+  meetingTypeCardSelected: {
+    borderColor: '#e4715f',
+    backgroundColor: '#FFF7F4',
+  },
+  meetingTypeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  meetingTypeTitleSelected: {
+    color: '#e4715f',
+  },
+  meetingTypeSubtitle: {
+    fontSize: 13,
+    color: '#4B5563',
+  },
+  meetingTypePrice: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  meetingTypePriceFree: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  meetingTypePricePaid: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#e4715f',
+    fontWeight: '600',
+  },
+  meetingInputPlaceholder: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  meetingFormCard: {
+    maxHeight: '80%',          // para que no tape toda la pantalla
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  meetingFormScrollContent: {
+    paddingBottom: 20,         // espacio extra para el botón
+  },
+  formCloseButton: {
+    backgroundColor: '#FFFFFF',
+    padding: 6,
+    borderRadius: 999,
+  },
 });

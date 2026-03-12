@@ -1,6 +1,5 @@
 import supabase from '@/lib/supabase';
-import { ExchangeMeetingDto, ExchangeWithMatchDto } from '@/types/exchange';
-import { apiRequest } from './api';
+import { ExchangeWithMatchDto } from '@/types/exchange';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
 
@@ -49,6 +48,9 @@ export async function acceptExchange(exchangeId: number): Promise<ExchangeWithMa
     body: JSON.stringify({})
   });
 
+  if(res.status == 403) {
+    throw new Error ("No tienes permiso para aceptar este intercambio.")
+  }
   if (!res.ok) {
     throw new Error(`Error al aceptar el exchange ${exchangeId}: ${res.status}`);
   }
@@ -89,3 +91,36 @@ export async function rejectExchange(exchangeId: number): Promise<ExchangeWithMa
   return exchange;
 }
 
+export async function deleteExchange(exchangeId:number): Promise<boolean> {
+
+  const headers = await getAuthHeaders();
+
+  const res = await fetch(`${API_URL}/Exchange/${exchangeId}`, {
+    method: 'DELETE',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({})
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    
+    let errorMessage = errorText;
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorMessage = errorJson.message || errorJson.error || errorText;
+    } catch {
+      // Si no es JSON, usa el texto crudo
+      errorMessage = `Error ${res.status}: ${errorText.substring(0, 200)}...`;
+    }
+    
+    console.error('Respuesta completa del error:', errorText);
+    throw new Error(errorMessage);
+  }
+
+  const deleted: boolean = await res.json();
+  return deleted;
+  
+}
