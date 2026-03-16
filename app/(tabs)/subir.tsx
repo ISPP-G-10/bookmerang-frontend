@@ -571,7 +571,7 @@ export default function SubirScreen() {
         <View style={styles.content}>
           <Text style={styles.sectionTitle}>Fotos del libro</Text>
           <Text style={styles.sectionSubtitle}>
-            Añade entre {MIN_BOOK_PHOTOS} y {MAX_BOOK_PHOTOS} fotos para mostrar el estado del libro.
+            Añade una foto para mostrar el estado del libro.
             <Text style={styles.required}> *</Text>
           </Text>
           <Text style={styles.counterText}>{photoCounter}</Text>
@@ -660,7 +660,7 @@ export default function SubirScreen() {
       {!canProceedToData ? (
         <View style={styles.nextHintContainer}>
           <Text style={styles.nextHintText}>
-            Debes subir entre {MIN_BOOK_PHOTOS} y {MAX_BOOK_PHOTOS} fotos para continuar.
+            Debes subir una foto para continuar.
           </Text>
         </View>
       ) : null}
