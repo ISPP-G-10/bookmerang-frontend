@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
 import {
+  MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
   createBookDraft,
   deleteBook,
@@ -106,7 +107,7 @@ export default function SubirScreen() {
   const cameraRef = useRef<CameraView | null>(null);
 
   const canAddMorePhotos = photos.length < MAX_BOOK_PHOTOS;
-  const canProceedToData = photos.length === MAX_BOOK_PHOTOS;
+  const canProceedToData = photos.length >= MIN_BOOK_PHOTOS && photos.length <= MAX_BOOK_PHOTOS;
   const photoCounter = useMemo(
     () => `${photos.length}/${MAX_BOOK_PHOTOS}`,
     [photos.length],
@@ -570,7 +571,7 @@ export default function SubirScreen() {
         <View style={styles.content}>
           <Text style={styles.sectionTitle}>Fotos del libro</Text>
           <Text style={styles.sectionSubtitle}>
-            Añade hasta {MAX_BOOK_PHOTOS} fotos para mostrar el estado del libro.
+            Añade entre {MIN_BOOK_PHOTOS} y {MAX_BOOK_PHOTOS} fotos para mostrar el estado del libro.
             <Text style={styles.required}> *</Text>
           </Text>
           <Text style={styles.counterText}>{photoCounter}</Text>
@@ -659,7 +660,7 @@ export default function SubirScreen() {
       {!canProceedToData ? (
         <View style={styles.nextHintContainer}>
           <Text style={styles.nextHintText}>
-            Debes subir exactamente {MAX_BOOK_PHOTOS} fotos para continuar.
+            Debes subir entre {MIN_BOOK_PHOTOS} y {MAX_BOOK_PHOTOS} fotos para continuar.
           </Text>
         </View>
       ) : null}
@@ -889,15 +890,15 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 34,
+    fontSize: 28,
     color: "#3d352d",
   },
   sectionSubtitle: {
-    marginTop: 6,
+    marginTop: 4,
     fontFamily: "Outfit_400Regular",
-    fontSize: 18,
+    fontSize: 15,
     color: "#73675a",
-    lineHeight: 25,
+    lineHeight: 22,
   },
   required: {
     color: "#d5785f",
@@ -916,34 +917,34 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   placeholderTile: {
-    width: 132,
-    height: 132,
-    borderRadius: 16,
+    width: 100,
+    height: 100,
+    borderRadius: 12,
     borderWidth: 2,
     borderStyle: "dashed",
     borderColor: "#efcfc5",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fff",
-    gap: 8,
+    gap: 6,
   },
   placeholderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#f9ede8",
     alignItems: "center",
     justifyContent: "center",
   },
   placeholderText: {
     fontFamily: "Outfit_700Bold",
-    fontSize: 17,
+    fontSize: 13,
     color: "#d5785f",
   },
   photoTile: {
-    width: 132,
-    height: 132,
-    borderRadius: 16,
+    width: 100,
+    height: 100,
+    borderRadius: 12,
     overflow: "hidden",
     backgroundColor: "#ebe4d9",
     position: "relative",
@@ -970,35 +971,35 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     flex: 1,
-    borderRadius: 17,
+    borderRadius: 14,
     backgroundColor: "#d5785f",
-    minHeight: 52,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   secondaryAction: {
     flex: 1,
-    borderRadius: 17,
+    borderRadius: 14,
     borderWidth: 2,
     borderColor: "#d5785f",
     backgroundColor: "#fff",
-    minHeight: 52,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   primaryActionText: {
     color: "#fff",
     fontFamily: "Outfit_700Bold",
-    fontSize: 22,
+    fontSize: 18,
   },
   secondaryActionText: {
     color: "#d5785f",
     fontFamily: "Outfit_700Bold",
-    fontSize: 22,
+    fontSize: 18,
   },
   disabledAction: {
     opacity: 0.55,
@@ -1036,36 +1037,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   footerSaveButton: {
-    minWidth: 120,
-    minHeight: 46,
-    borderRadius: 15,
+    minWidth: 100,
+    minHeight: 40,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: "#e7dfd5",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
     backgroundColor: "#fff",
   },
   footerSaveText: {
     fontFamily: "Outfit_700Bold",
     color: "#9a8e7d",
-    fontSize: 18,
+    fontSize: 14,
   },
   footerNextButton: {
-    minWidth: 150,
-    minHeight: 46,
-    borderRadius: 15,
+    minWidth: 120,
+    minHeight: 40,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
     backgroundColor: "#d5785f",
   },
   footerNextText: {
     color: "#fff",
     fontFamily: "Outfit_700Bold",
-    fontSize: 20,
+    fontSize: 16,
   },
   footerButtonDisabled: {
     opacity: 0.6,

@@ -1,6 +1,7 @@
 import { apiRequest } from "./api";
 import supabase from "./supabase";
 
+export const MIN_BOOK_PHOTOS = 2;
 export const MAX_BOOK_PHOTOS = 5;
 
 export type BookListItem = {
