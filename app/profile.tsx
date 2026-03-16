@@ -6,22 +6,22 @@ import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    DimensionValue,
-    Image,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  ActivityIndicator,
+  DimensionValue,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
-    getBookDetail,
-    getMyLibrary,
-    toConditionLabel,
-    type BookDetail,
-    type BookListItem,
+  getBookDetail,
+  getMyLibrary,
+  toConditionLabel,
+  type BookDetail,
+  type BookListItem,
 } from "../lib/books";
 import supabase from "../lib/supabase";
 import type { MatcherCard } from "../types/matcher";
@@ -109,7 +109,7 @@ function buildLibraryMatcherCard(
       id: 0,
       username: profile?.username ?? profile?.name ?? "usuario",
       nombre: profile?.name ?? profile?.username ?? "Usuario",
-      fotoPerfilUrl: profile?.profilePhoto ?? null,
+      fotoPerfilUrl: profile?.avatar ?? profile?.profilePhoto ?? null,
       plan: "FREE",
       ratingMean: 0,
       finishedExchanges: 0,
@@ -396,6 +396,7 @@ export default function ProfileScreen() {
             email: u?.email,
             name: u?.user_metadata?.name ?? "",
             username: u?.user_metadata?.username ?? "",
+            avatar: u?.user_metadata?.avatar_url ?? null,
           });
         }
       } catch {
@@ -404,6 +405,7 @@ export default function ProfileScreen() {
           email: u?.email,
           name: u?.user_metadata?.name ?? "",
           username: u?.user_metadata?.username ?? "",
+          avatar: u?.user_metadata?.avatar_url ?? null,
         });
       }
       await loadLibrary();
@@ -432,7 +434,7 @@ export default function ProfileScreen() {
         setPreferencesLoading(false);
         return;
       }
-      const userId = session.user.id;
+      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
       const latitude = userLocation?.latitude || 40.4168;
       const longitude = userLocation?.longitude || -3.7038;
       const radioKm = newPreferences.distanceKm || 5;
@@ -564,9 +566,9 @@ export default function ProfileScreen() {
               elevation: 5,
             }}
           >
-            {profile?.avatar ? (
+            {profile?.avatar || profile?.profilePhoto ? (
               <Image
-                source={{ uri: profile.avatar }}
+                source={{ uri: profile?.avatar ?? profile?.profilePhoto }}
                 style={{ width: 112, height: 112 }}
               />
             ) : (
