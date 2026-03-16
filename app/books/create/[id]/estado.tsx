@@ -139,8 +139,8 @@ export default function UploadStatusScreen() {
     if (!Number.isFinite(bookId) || bookId <= 0) return;
     if (photoCount < MIN_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Fotos insuficientes",
-        message: `Necesitas al menos ${MIN_BOOK_PHOTOS} fotos. Actualmente tienes ${photoCount}.`,
+        title: "Foto requerida",
+        message: `Necesitas al menos una foto. Actualmente tienes ${photoCount}.`,
       });
       return;
     }
@@ -167,8 +167,8 @@ export default function UploadStatusScreen() {
     if (saving) return;
     if (photoCount < MIN_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Fotos insuficientes",
-        message: `Necesitas al menos ${MIN_BOOK_PHOTOS} fotos. Actualmente tienes ${photoCount}.`,
+        title: "Foto requerida",
+        message: `Necesitas al menos una foto. Actualmente tienes ${photoCount}.`,
       });
       return;
     }

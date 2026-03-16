@@ -13,7 +13,7 @@ type DataStepValidationInput = {
 export function getPhotoStepValidationError(photoCount: number): string | null {
   if (photoCount >= MIN_BOOK_PHOTOS && photoCount <= MAX_BOOK_PHOTOS) return null;
   if (photoCount < MIN_BOOK_PHOTOS) {
-    return `Debes subir al menos ${MIN_BOOK_PHOTOS} fotos para continuar. Actualmente tienes ${photoCount}.`;
+    return `Debes subir una foto para continuar.`;
   }
   return `Máximo ${MAX_BOOK_PHOTOS} fotos permitidas. Actualmente tienes ${photoCount}.`;
 }

@@ -329,8 +329,8 @@ export default function UploadDataScreen() {
 
     if (photoCount < MIN_BOOK_PHOTOS || photoCount > MAX_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Fotos incompletas",
-        message: `Debes tener entre ${MIN_BOOK_PHOTOS} y ${MAX_BOOK_PHOTOS} fotos antes de continuar al estado del libro.`,
+        title: "Foto requerida",
+        message: `Debes tener al menos una foto antes de continuar al estado del libro.`,
       });
       return;
     }
