@@ -82,7 +82,6 @@ export function BookDetailsScreen({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
         >
-          {/* Header/Hero Section */}
           <View style={styles.heroContainer}>
             {heroPhoto ? (
               <RNImage
@@ -105,7 +104,6 @@ export function BookDetailsScreen({
               </View>
             )}
 
-            {/* Back Button */}
             <Pressable
               onPress={onClose}
               style={[styles.backButton, { top: insets.top + 8 }]}
@@ -127,9 +125,7 @@ export function BookDetailsScreen({
             </View>
           </View>
 
-          {/* Content */}
           <View style={[styles.contentSection, { backgroundColor: bgColor }]}>
-            {/* Title & Author */}
             <View style={{ marginBottom: 18 }}>
               <Heading
                 size="2xl"
@@ -146,7 +142,6 @@ export function BookDetailsScreen({
               </Text>
             </View>
 
-            {/* Owner Info */}
             <View
               style={[
                 styles.ownerCard,
@@ -231,7 +226,6 @@ export function BookDetailsScreen({
               </View>
             </View>
 
-            {/* Specs Grid - Condicional por plataforma */}
             {isWeb ? (
               <>
                 <View style={{ flexDirection: 'row', marginBottom: 10 }}>
@@ -468,7 +462,6 @@ export function BookDetailsScreen({
               </View>
             )}
 
-            {/* Description */}
             {book.observaciones && (
               <View>
                 <View
@@ -496,7 +489,6 @@ export function BookDetailsScreen({
           </View>
         </ScrollView>
 
-        {/* Fixed Action Button */}
         <View
           style={[
             styles.actionButtonContainer,
@@ -526,7 +518,6 @@ export function BookDetailsScreen({
           </Pressable>
         </View>
 
-        {/* Report Dropdown - MOVIDO FUERA DEL SCROLLVIEW */}
         {showReportMenu && (
           <View
             style={[
