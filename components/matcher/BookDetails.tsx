@@ -10,7 +10,6 @@ import {
   Image as RNImage,
   ScrollView,
   StyleSheet,
-  useColorScheme,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -29,9 +28,6 @@ interface BookDetailsScreenProps {
   card: MatcherCard | null;
   onClose: () => void;
   onChat?: (card: MatcherCard) => void;
-  onPrimaryAction?: (card: MatcherCard) => void;
-  primaryActionLabel?: string;
-  primaryActionIcon?: React.ComponentProps<typeof Ionicons>["name"];
 }
 
 export function BookDetailsScreen({
@@ -39,13 +35,8 @@ export function BookDetailsScreen({
   card,
   onClose,
   onChat,
-  onPrimaryAction,
-  primaryActionLabel = 'Solicitar intercambio',
-  primaryActionIcon = 'chatbubble-outline',
 }: BookDetailsScreenProps) {
   const [showReportMenu, setShowReportMenu] = useState(false);
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
 
@@ -55,18 +46,17 @@ export function BookDetailsScreen({
 
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;
-  const handlePrimaryAction = onPrimaryAction ?? onChat;
 
   const handleReport = (reason: string) => {
     setShowReportMenu(false);
     console.log('Reportado:', reason);
   };
 
-  const bgColor = isDark ? '#1C1C1E' : '#FAF7F4';
-  const cardBgColor = isDark ? '#2C2C2E' : '#FFFFFF';
-  const borderColor = isDark ? '#3A3A3C' : '#F3E9E0';
-  const textPrimary = isDark ? '#fdfbf7' : '#3e2723';
-  const textSecondary = isDark ? '#AEAEB2' : '#8B7355';
+  const bgColor = '#fdfbf7';
+  const cardBgColor = '#FFFFFF';
+  const borderColor = '#F3E9E0';
+  const textPrimary = '#3e2723';
+  const textSecondary = '#8B7355';
 
   const specCardWidth = isWeb ? (SCREEN_WIDTH - 48 - 10) / 2 : undefined;
 
@@ -463,7 +453,17 @@ export function BookDetailsScreen({
             )}
 
             {book.observaciones && (
-              <View>
+              <View
+                style={[
+                  {
+                    backgroundColor: cardBgColor,
+                    borderColor,
+                    padding: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View
                   style={{
                     flexDirection: 'row',
@@ -481,7 +481,7 @@ export function BookDetailsScreen({
                     Sobre este libro
                   </Heading>
                 </View>
-                <Text style={{ color: textSecondary, fontSize: 13, lineHeight: 20 }}>
+                <Text style={{ color: textSecondary, fontSize: 13 }}>
                   {book.observaciones}
                 </Text>
               </View>
@@ -496,24 +496,26 @@ export function BookDetailsScreen({
           ]}
         >
           <Pressable
-            onPress={() => handlePrimaryAction?.(card)}
+            onPress={() => onChat?.(card)}
             style={[
               styles.actionButton,
               {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
+                opacity: onChat ? 1 : 0.5,
               },
             ]}
+            disabled={!onChat}
           >
             <Ionicons
-              name={primaryActionIcon}
+              name="chatbubble-outline"
               size={22}
               color="#fdfbf7"
               style={{ marginRight: 8 }}
             />
             <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>
-              {primaryActionLabel}
+              Solicitar intercambio
             </Text>
           </Pressable>
         </View>
