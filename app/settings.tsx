@@ -1,8 +1,10 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -1003,7 +1005,12 @@ export default function SettingsScreen() {
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
-  
+  const [showCameraModal, setShowCameraModal] = React.useState(false);
+  const [cameraFacing, setCameraFacing] = React.useState<CameraType>("back");
+  const [capturingPhoto, setCapturingPhoto] = React.useState(false);
+  const [wasEditingProfile, setWasEditingProfile] = React.useState(false);
+  const cameraRef = React.useRef<CameraView | null>(null);
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
@@ -1127,7 +1134,16 @@ export default function SettingsScreen() {
   };
 
   const handleTakePhoto = async () => {
-    if (Platform.OS === "web") {
+    let permission;
+
+    try {
+      permission = await Camera.requestCameraPermissionsAsync();
+    } catch {
+      permission = null;
+    }
+
+    if (!permission?.granted) {
+      // En web (y otros casos) puede fallar pedir permiso; caer a selector de archivos.
       const file = await pickPhotoFromWebCamera();
       if (!file) return;
 
@@ -1154,20 +1170,55 @@ export default function SettingsScreen() {
       return;
     }
 
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Permiso requerido", "Necesitas permitir acceso a la cámara.");
-      return;
+    // Si el modal de edición está abierto, ciérralo antes de abrir la cámara para evitar que quede por delante.
+    if (editProfileOpen) {
+      setWasEditingProfile(true);
+      setEditProfileOpen(false);
     }
 
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: "images",
-      quality: 0.8,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
+    setShowCameraModal(true);
+  };
 
-    await applySelectedProfilePhoto(result);
+  const closeCameraModal = () => {
+    if (capturingPhoto) return;
+    setShowCameraModal(false);
+    if (wasEditingProfile) {
+      setWasEditingProfile(false);
+      setEditProfileOpen(true);
+    }
+  };
+
+  const toggleCameraFacing = () => {
+    setCameraFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
+  const handleCapturePhoto = async () => {
+    if (!cameraRef.current || capturingPhoto) return;
+
+    setCapturingPhoto(true);
+    setPhotoLoading(true);
+
+    try {
+      const captured = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      if (captured?.uri) {
+        const asset = {
+          uri: captured.uri,
+          mimeType: "image/jpeg",
+          width: (captured as any).width ?? 0,
+          height: (captured as any).height ?? 0,
+        } as ImagePicker.ImagePickerAsset;
+
+        const publicUrl = await uploadProfilePhoto(asset);
+        setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+        showToast("Foto de perfil actualizada");
+        closeCameraModal();
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo tomar la foto");
+    } finally {
+      setCapturingPhoto(false);
+      setPhotoLoading(false);
+    }
   };
 
   React.useEffect(() => {
@@ -1486,6 +1537,102 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showCameraModal}
+        animationType="slide"
+        onRequestClose={closeCameraModal}
+      >
+        <View style={{ flex: 1, backgroundColor: "#121212" }}>
+          <CameraView
+            ref={cameraRef}
+            style={{ flex: 1 }}
+            facing={cameraFacing}
+          />
+
+          <View
+            style={{
+              position: "absolute",
+              top: 48,
+              left: 16,
+              right: 16,
+              flexDirection: "row",
+              justifyContent: "flex-end",
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                minHeight: 40,
+                borderRadius: 999,
+                backgroundColor: "rgba(0,0,0,0.48)",
+                paddingHorizontal: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+              onPress={closeCameraModal}
+            >
+              <FontAwesome name="times" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "900" }}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={{
+              position: "absolute",
+              left: 16,
+              right: 16,
+              bottom: 28,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                minHeight: 52,
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                backgroundColor: "rgba(0,0,0,0.48)",
+              }}
+              onPress={toggleCameraFacing}
+            >
+              <FontAwesome name="refresh" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "900" }}>Girar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                minHeight: 52,
+                borderRadius: 16,
+                backgroundColor: "#e07a5f",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 8,
+                opacity: capturingPhoto ? 0.6 : 1,
+              }}
+              onPress={handleCapturePhoto}
+              disabled={capturingPhoto}
+            >
+              {capturingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <FontAwesome name="camera" size={20} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "900" }}>
+                    Capturar
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <EditProfileModal
         visible={editProfileOpen}
