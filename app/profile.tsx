@@ -3,7 +3,7 @@ import PreferencesModal from "@/components/PreferencesModal";
 import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -264,6 +264,75 @@ export default function ProfileScreen() {
   const handleCloseLibraryBook = useCallback(() => {
     setSelectedLibraryCard(null);
   }, []);
+  
+  const loadProfileData = useCallback(async (): Promise<any | null> => {
+  const { data: { user: currentUser } = {} } = await supabase.auth.getUser();
+  if (!currentUser) {
+    router.replace("/login" as any);
+    return null;
+  }
+
+  try {
+    const res = await apiRequest("/Auth/perfil", { method: "GET" });
+    if (res.ok) {
+      const json = await res.json();
+      setProfile(json);
+
+      const maybeLat =
+        json.latitud ??
+        json.Latitud ??
+        json.latitude ??
+        json.Latitude ??
+        json.lat ??
+        json.Lat;
+      const maybeLon =
+        json.longitud ??
+        json.Longitud ??
+        json.longitude ??
+        json.Longitude ??
+        json.lon ??
+        json.Lon ??
+        json.Long;
+
+      const parsedLat =
+        typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
+      const parsedLon =
+        typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
+
+      if (
+        parsedLat &&
+        parsedLon &&
+        !isNaN(parsedLat) &&
+        !isNaN(parsedLon)
+      ) {
+        setUserLocation({ latitude: parsedLat, longitude: parsedLon });
+        reverseGeocodeAndSet(parsedLat, parsedLon);
+      } else if (json.location) {
+        setLocationLabel(json.location);
+      }
+
+      return json;
+    }
+
+    const { data: { user: u } = {} } = await supabase.auth.getUser();
+    setProfile({
+      email: u?.email,
+      name: u?.user_metadata?.name ?? "",
+      username: u?.user_metadata?.username ?? "",
+      avatar: u?.user_metadata?.avatar_url ?? null,
+    });
+    return null;
+  } catch {
+    const { data: { user: u } = {} } = await supabase.auth.getUser();
+    setProfile({
+      email: u?.email,
+      name: u?.user_metadata?.name ?? "",
+      username: u?.user_metadata?.username ?? "",
+      avatar: u?.user_metadata?.avatar_url ?? null,
+    });
+    return null;
+  }
+}, [router]);
 
   useEffect(() => {
     (async () => {
@@ -300,115 +369,61 @@ export default function ProfileScreen() {
         console.error("Error fetching genres:", err);
       }
 
-      try {
-        const res = await apiRequest("/Auth/perfil", { method: "GET" });
-        if (res.ok) {
-          const json = await res.json();
-          setProfile(json);
-          
-          await loadLibrary(json);
-          // 2️⃣ Cargar preferencias DESPUÉS de tener los géneros
-          try {
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
-            if (session) {
-              // Usar el ID del backend, NO el de Supabase
-              const userId = json.id ?? json.userId ?? json.user_id;
-              
-              if (!userId) {
-              } else {
-                const prefsRes = await fetch(
-                  `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
-                  {
-                    headers: {
-                      Authorization: `Bearer ${session.access_token}`,
-                    },
+      const profileData = await loadProfileData();
+
+      if (profileData) {
+        await loadLibrary(profileData);
+
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session) {
+            const userId = profileData.id ?? profileData.userId ?? profileData.user_id;
+
+            if (userId) {
+              const prefsRes = await fetch(
+                `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${session.access_token}`,
                   },
-                );
-                
-                if (prefsRes.ok) {
-                  const prefs = await prefsRes.json();
-                  
-                  // Convertir extension a bookLength
-                  const bookLengths: string[] = [];
-                  if (prefs.extension === "SHORT") bookLengths.push("0-200");
-                  else if (prefs.extension === "MEDIUM")
-                    bookLengths.push("200-400");
-                  else if (prefs.extension === "LONG") bookLengths.push("400+");
-              
-                  // Mapear genreIds a nombres usando los géneros cargados
-                  const genreNames: string[] = [];
-                  if (
-                    prefs.genreIds &&
-                    Array.isArray(prefs.genreIds) &&
-                    loadedGenres.length > 0
-                  ) {
-                    prefs.genreIds.forEach((id: number) => {
-                      const genre = loadedGenres.find((g) => g.id === id);
-                      if (genre) genreNames.push(genre.name);
-                    });
-                  }
-                  
-                  setPreferences({
-                    distanceKm: prefs.radioKm || 10,
-                    genres: genreNames,
-                    bookLength: bookLengths,
+                },
+              );
+
+              if (prefsRes.ok) {
+                const prefs = await prefsRes.json();
+
+                const bookLengths: string[] = [];
+                if (prefs.extension === "SHORT") bookLengths.push("0-200");
+                else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
+                else if (prefs.extension === "LONG") bookLengths.push("400+");
+
+                const genreNames: string[] = [];
+                if (
+                  prefs.genreIds &&
+                  Array.isArray(prefs.genreIds) &&
+                  loadedGenres.length > 0
+                ) {
+                  prefs.genreIds.forEach((id: number) => {
+                    const genre = loadedGenres.find((g) => g.id === id);
+                    if (genre) genreNames.push(genre.name);
                   });
                 }
+
+                setPreferences({
+                  distanceKm: prefs.radioKm || 10,
+                  genres: genreNames,
+                  bookLength: bookLengths,
+                });
               }
             }
-          } catch (err) {}
-          
-          const maybeLat =
-            json.latitud ??
-            json.Latitud ??
-            json.latitude ??
-            json.Latitude ??
-            json.lat ??
-            json.Lat;
-          const maybeLon =
-            json.longitud ??
-            json.Longitud ??
-            json.longitude ??
-            json.Longitude ??
-            json.lon ??
-            json.Lon ??
-            json.Long;
-          const parsedLat =
-            typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
-          const parsedLon =
-            typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
-          if (
-            parsedLat &&
-            parsedLon &&
-            !isNaN(parsedLat) &&
-            !isNaN(parsedLon)
-          ) {
-            setUserLocation({ latitude: parsedLat, longitude: parsedLon });
-            reverseGeocodeAndSet(parsedLat, parsedLon);
-          } else if (json.location) {
-            setLocationLabel(json.location);
           }
-        } else {
-          const { data: { user: u } = {} } = await supabase.auth.getUser();
-          setProfile({
-            email: u?.email,
-            name: u?.user_metadata?.name ?? "",
-            username: u?.user_metadata?.username ?? "",
-            avatar: u?.user_metadata?.avatar_url ?? null,
-          });
-        }
-      } catch {
-        const { data: { user: u } = {} } = await supabase.auth.getUser();
-        setProfile({
-          email: u?.email,
-          name: u?.user_metadata?.name ?? "",
-          username: u?.user_metadata?.username ?? "",
-          avatar: u?.user_metadata?.avatar_url ?? null,
-        });
+        } catch {}
+      } else {
+        await loadLibrary();
       }
-      await loadLibrary();
       setLoading(false);
     })();
   }, []);
@@ -417,6 +432,12 @@ export default function ProfileScreen() {
     if (!message) return;
     loadLibrary();
   }, [message]);
+
+  useFocusEffect(
+          useCallback(() => {
+            void loadProfileData();
+          }, [loadProfileData]),
+        );
 
   const handleSavePreferences = async (newPreferences: {
     distanceKm: number;

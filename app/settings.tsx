@@ -1288,8 +1288,11 @@ export default function SettingsScreen() {
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
 
-      // Navigate to profile page so the Profile screen reflects changes
-      router.replace("/profile" as any);
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/profile" as any);
+      }
     } catch (e) {
       console.error(e);
     }
