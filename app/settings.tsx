@@ -1,7 +1,10 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { Camera, CameraView, type CameraType } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
 import { Stack, useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Modal,
@@ -16,6 +19,21 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
+
+const PROFILE_STORAGE_BUCKET =
+  process.env.EXPO_PUBLIC_PROFILE_IMAGES_BUCKET ??
+  process.env.EXPO_PUBLIC_BOOK_IMAGES_BUCKET ??
+  "images";
+
+const resolveFileExtension = (asset: ImagePicker.ImagePickerAsset): string => {
+  const fromName = asset.fileName?.split(".").pop()?.toLowerCase();
+  if (fromName && /^[a-z0-9]+$/.test(fromName)) return fromName;
+
+  const fromMime = asset.mimeType?.split("/").pop()?.toLowerCase();
+  if (fromMime && /^[a-z0-9]+$/.test(fromMime)) return fromMime;
+
+  return "jpg";
+};
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -143,10 +161,16 @@ function FloatingModal({
 function PhotoPickerModal({
   visible,
   onClose,
+  onPickGallery,
+  onPickCamera,
+  loading,
 }: {
   visible: boolean;
   onClose: () => void;
-}) {  
+  onPickGallery: () => void;
+  onPickCamera: () => void;
+  loading: boolean;
+}) {
   return (
     <FloatingModal visible={visible} onClose={onClose}>
       <View style={{ padding: 24 }}>
@@ -170,7 +194,8 @@ function PhotoPickerModal({
             alignItems: "center",
             justifyContent: "space-between",
           }}
-          onPress={onClose}
+          onPress={onPickGallery}
+          disabled={loading}
         >
           <View>
             <Text style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}>
@@ -192,7 +217,8 @@ function PhotoPickerModal({
             alignItems: "center",
             justifyContent: "space-between",
           }}
-          onPress={onClose}
+          onPress={onPickCamera}
+          disabled={loading}
         >
           <View>
             <Text style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}>
@@ -212,6 +238,7 @@ function PhotoPickerModal({
             alignItems: "center",
           }}
           onPress={onClose}
+          disabled={loading}
         >
           <Text style={{ fontSize: 15, fontWeight: "900", color: "#8B7355" }}>
             Cancelar
@@ -228,6 +255,9 @@ function EditProfileModal({
   onClose,
   profile,
   onSave,
+  onSelectFromGallery,
+  onTakePhoto,
+  photoLoading,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -236,7 +266,10 @@ function EditProfileModal({
     name: string;
     username: string;
     avatar?: string | null;
-  }) => void;
+  }) => Promise<void>;
+  onSelectFromGallery: () => Promise<void>;
+  onTakePhoto: () => Promise<void>;
+  photoLoading: boolean;
 }) {
   const [name, setName] = React.useState(profile?.name ?? "");
   const [username, setUsername] = React.useState(profile?.username ?? "");
@@ -288,6 +321,7 @@ function EditProfileModal({
 
           <View style={{ alignItems: "center", marginBottom: 8 }}>
             <TouchableOpacity
+              disabled={photoLoading}
               onPress={() => setPhotoModal(true)}
               style={{ position: "relative" }}
             >
@@ -300,9 +334,9 @@ function EditProfileModal({
                   overflow: "hidden",
                 }}
               >
-                {profile?.avatar ? (
+                {avatar ? (
                   <Image
-                    source={{ uri: profile.avatar }}
+                    source={{ uri: avatar }}
                     style={{ width: 96, height: 96 }}
                    />
                 ) : (
@@ -401,6 +435,15 @@ function EditProfileModal({
       <PhotoPickerModal
         visible={photoModal}
         onClose={() => setPhotoModal(false)}
+        onPickGallery={async () => {
+          await onSelectFromGallery();
+          setPhotoModal(false);
+        }}
+        onPickCamera={async () => {
+          await onTakePhoto();
+          setPhotoModal(false);
+        }}
+        loading={photoLoading}
       />
     </>
   );
@@ -961,6 +1004,12 @@ export default function SettingsScreen() {
   const [pushNotif, setPushNotif] = React.useState(true);
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
+  const [photoLoading, setPhotoLoading] = React.useState(false);
+  const [showCameraModal, setShowCameraModal] = React.useState(false);
+  const [cameraFacing, setCameraFacing] = React.useState<CameraType>("back");
+  const [capturingPhoto, setCapturingPhoto] = React.useState(false);
+  const [wasEditingProfile, setWasEditingProfile] = React.useState(false);
+  const cameraRef = React.useRef<CameraView | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -971,6 +1020,205 @@ export default function SettingsScreen() {
     setSelectedLanguage(code);
     setLanguageOpen(false);
     showToast("Idioma actualizado correctamente");
+  };
+
+  const uploadProfileBinary = async (
+    fileData: ArrayBuffer,
+    extension: string,
+    mimeType: string,
+  ): Promise<string> => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("No se pudo identificar al usuario autenticado.");
+    }
+
+    const path = `profiles/${user.id}/${Date.now()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(PROFILE_STORAGE_BUCKET)
+      .upload(path, fileData, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(
+        `No se pudo subir la imagen al storage (${PROFILE_STORAGE_BUCKET}): ${uploadError.message}`,
+      );
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(PROFILE_STORAGE_BUCKET)
+      .getPublicUrl(path);
+
+    if (!publicUrlData?.publicUrl) {
+      throw new Error("No se pudo generar la URL pública de la foto.");
+    }
+
+    return publicUrlData.publicUrl;
+  };
+
+  const uploadProfilePhoto = async (
+    asset: ImagePicker.ImagePickerAsset,
+  ): Promise<string> => {
+    const extension = resolveFileExtension(asset);
+    const localFile = await fetch(asset.uri);
+    if (!localFile.ok) {
+      throw new Error("No se pudo leer la imagen seleccionada.");
+    }
+
+    const fileData = await localFile.arrayBuffer();
+
+    return uploadProfileBinary(
+      fileData,
+      extension,
+      asset.mimeType ?? "image/jpeg",
+    );
+  };
+
+  const pickPhotoFromWebCamera = async (): Promise<File | null> => {
+    if (typeof document === "undefined") return null;
+
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.setAttribute("capture", "environment");
+
+      input.onchange = () => {
+        resolve(input.files?.[0] ?? null);
+      };
+
+      input.oncancel = () => {
+        resolve(null);
+      };
+
+      input.click();
+    });
+  };
+
+  const applySelectedProfilePhoto = async (
+    result: ImagePicker.ImagePickerResult,
+  ) => {
+    if (result.canceled || result.assets.length === 0) return;
+
+    setPhotoLoading(true);
+    try {
+      const publicUrl = await uploadProfilePhoto(result.assets[0]);
+      setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+      showToast("Foto de perfil actualizada");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo actualizar la foto");
+    } finally {
+      setPhotoLoading(false);
+    }
+  };
+
+  const handleSelectFromGallery = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permiso requerido", "Necesitas permitir acceso a la galería.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsMultipleSelection: false,
+      quality: 0.8,
+    });
+
+    await applySelectedProfilePhoto(result);
+  };
+
+  const handleTakePhoto = async () => {
+    let permission;
+
+    try {
+      permission = await Camera.requestCameraPermissionsAsync();
+    } catch {
+      permission = null;
+    }
+
+    if (!permission?.granted) {
+      // En web (y otros casos) puede fallar pedir permiso; caer a selector de archivos.
+      const file = await pickPhotoFromWebCamera();
+      if (!file) return;
+
+      setPhotoLoading(true);
+      try {
+        const extension =
+          file.name?.split(".").pop()?.toLowerCase() ||
+          file.type?.split("/").pop()?.toLowerCase() ||
+          "jpg";
+
+        const publicUrl = await uploadProfileBinary(
+          await file.arrayBuffer(),
+          extension,
+          file.type || "image/jpeg",
+        );
+
+        setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+        showToast("Foto de perfil actualizada");
+      } catch (e: any) {
+        Alert.alert("Error", e?.message ?? "No se pudo actualizar la foto");
+      } finally {
+        setPhotoLoading(false);
+      }
+      return;
+    }
+
+    // Si el modal de edición está abierto, ciérralo antes de abrir la cámara para evitar que quede por delante.
+    if (editProfileOpen) {
+      setWasEditingProfile(true);
+      setEditProfileOpen(false);
+    }
+
+    setShowCameraModal(true);
+  };
+
+  const closeCameraModal = () => {
+    if (capturingPhoto) return;
+    setShowCameraModal(false);
+    if (wasEditingProfile) {
+      setWasEditingProfile(false);
+      setEditProfileOpen(true);
+    }
+  };
+
+  const toggleCameraFacing = () => {
+    setCameraFacing((current) => (current === "back" ? "front" : "back"));
+  };
+
+  const handleCapturePhoto = async () => {
+    if (!cameraRef.current || capturingPhoto) return;
+
+    setCapturingPhoto(true);
+    setPhotoLoading(true);
+
+    try {
+      const captured = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      if (captured?.uri) {
+        const asset = {
+          uri: captured.uri,
+          mimeType: "image/jpeg",
+          width: (captured as any).width ?? 0,
+          height: (captured as any).height ?? 0,
+        } as ImagePicker.ImagePickerAsset;
+
+        const publicUrl = await uploadProfilePhoto(asset);
+        setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+        showToast("Foto de perfil actualizada");
+        closeCameraModal();
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo tomar la foto");
+    } finally {
+      setCapturingPhoto(false);
+      setPhotoLoading(false);
+    }
   };
 
   React.useEffect(() => {
@@ -1040,8 +1288,11 @@ export default function SettingsScreen() {
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
 
-      // Navigate to profile page so the Profile screen reflects changes
-      router.replace("/profile" as any);
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/profile" as any);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -1290,11 +1541,110 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
+      <Modal
+        visible={showCameraModal}
+        animationType="slide"
+        onRequestClose={closeCameraModal}
+      >
+        <View style={{ flex: 1, backgroundColor: "#121212" }}>
+          <CameraView
+            ref={cameraRef}
+            style={{ flex: 1 }}
+            facing={cameraFacing}
+          />
+
+          <View
+            style={{
+              position: "absolute",
+              top: 48,
+              left: 16,
+              right: 16,
+              flexDirection: "row",
+              justifyContent: "flex-end",
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                minHeight: 40,
+                borderRadius: 999,
+                backgroundColor: "rgba(0,0,0,0.48)",
+                paddingHorizontal: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+              onPress={closeCameraModal}
+            >
+              <FontAwesome name="times" size={20} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "900" }}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={{
+              position: "absolute",
+              left: 16,
+              right: 16,
+              bottom: 28,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                minHeight: 52,
+                borderRadius: 16,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                backgroundColor: "rgba(0,0,0,0.48)",
+              }}
+              onPress={toggleCameraFacing}
+            >
+              <FontAwesome name="refresh" size={18} color="#fff" />
+              <Text style={{ color: "#fff", fontWeight: "900" }}>Girar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                minHeight: 52,
+                borderRadius: 16,
+                backgroundColor: "#e07a5f",
+                alignItems: "center",
+                justifyContent: "center",
+                flexDirection: "row",
+                gap: 8,
+                opacity: capturingPhoto ? 0.6 : 1,
+              }}
+              onPress={handleCapturePhoto}
+              disabled={capturingPhoto}
+            >
+              {capturingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <FontAwesome name="camera" size={20} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "900" }}>
+                    Capturar
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <EditProfileModal
         visible={editProfileOpen}
         onClose={() => setEditProfileOpen(false)}
         profile={profile}
         onSave={handleSaveProfile}
+        onSelectFromGallery={handleSelectFromGallery}
+        onTakePhoto={handleTakePhoto}
+        photoLoading={photoLoading}
       />
       <ChangeEmailModal
         visible={changeEmailOpen}
