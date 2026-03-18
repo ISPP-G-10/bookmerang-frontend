@@ -32,7 +32,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <AuthLayout title="Inicia sesión">
+    <AuthLayout title="Inicia sesión" scrollable={false}>
       <AuthInput
         icon="mail-outline"
         placeholder="Correo electrónico"

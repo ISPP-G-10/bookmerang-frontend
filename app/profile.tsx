@@ -1,6 +1,5 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
-import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -24,7 +23,7 @@ import {
   type BookListItem,
 } from "../lib/books";
 import supabase from "../lib/supabase";
-import type { MatcherCard } from "../types/matcher";
+import { MatcherCard } from "@/types/matcher";
 
 const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
   if (!Array.isArray(books)) return [];
@@ -129,15 +128,12 @@ export default function ProfileScreen() {
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
-  const [selectedLibraryCard, setSelectedLibraryCard] =
-    useState<MatcherCard | null>(null);
-  const [openingLibraryBookId, setOpeningLibraryBookId] = useState<number | null>(
-    null,
-  );
+  const [selectedLibraryCard, setSelectedLibraryCard] = useState<MatcherCard | null>(null);
+  const [openingLibraryBookId, setOpeningLibraryBookId] = useState<number | null>(null);
 
   // Calcular números de columnas basado en ancho de pantalla
-  const numColumns = width >= 768 ? 4 : 3;
-  const bookWidth = `${(100 / numColumns) - 1}%` as DimensionValue;
+  const numColumns = width >= 768 ? 4 : 2;
+  const bookWidth = (width - 40 - (numColumns - 1) * 12) / numColumns;
 
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [preferences, setPreferences] = useState<{
@@ -260,10 +256,6 @@ export default function ProfileScreen() {
     },
     [profile],
   );
-
-  const handleCloseLibraryBook = useCallback(() => {
-    setSelectedLibraryCard(null);
-  }, []);
   
   const loadProfileData = useCallback(async (): Promise<any | null> => {
   const { data: { user: currentUser } = {} } = await supabase.auth.getUser();
@@ -1011,22 +1003,6 @@ export default function ProfileScreen() {
                     </View>
                   )}
 
-                  {openingLibraryBookId === book.id && (
-                    <View
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        left: 0,
-                        backgroundColor: "rgba(0,0,0,0.18)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <ActivityIndicator color="#ffffff" />
-                    </View>
-                  )}
                   <View
                     style={{
                       position: "absolute",
@@ -1073,18 +1049,6 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      <BookDetailsScreen
-        visible={!!selectedLibraryCard}
-        card={selectedLibraryCard}
-        onClose={handleCloseLibraryBook}
-        primaryActionLabel="Editar libro"
-        primaryActionIcon="create-outline"
-        onPrimaryAction={(card) => {
-          handleCloseLibraryBook();
-          router.push(`/books/${card.book.id}/edit` as any);
-        }}
-      />
-
       <PreferencesModal
         visible={preferencesOpen}
         onClose={() => setPreferencesOpen(false)}
@@ -1098,3 +1062,4 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
