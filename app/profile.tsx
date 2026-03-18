@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
+import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -1058,6 +1059,12 @@ export default function ProfileScreen() {
         title="Editar Preferencias"
         error={preferencesError}
         loading={preferencesLoading}
+      />
+
+      <BookDetailsScreen
+        visible={selectedLibraryCard !== null}
+        card={selectedLibraryCard}
+        onClose={() => setSelectedLibraryCard(null)}
       />
     </View>
   );
