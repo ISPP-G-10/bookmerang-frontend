@@ -15,6 +15,8 @@ interface AuthLayoutProps {
 }
 
 export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, title }) => {
+  const isWeb = Platform.OS === "web";
+
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-[#fdfbf7]"
@@ -40,7 +42,11 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({ children, title }) => {
           {/* Imagen */}
           <Image
             source={require("../../assets/images/fondo_bookmerang.png")}
-            style={{ width: "100%", height: 220 }}
+            style={{
+              width: isWeb ? 420 : "80%",
+              height: isWeb ? 260 : 220,
+              maxWidth: "90%",
+            }}
             resizeMode="cover"
           />
         </View>
