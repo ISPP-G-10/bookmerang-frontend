@@ -281,9 +281,7 @@ async function getBookDetailFromSupabase(
   const baseSelect =
     "id, isbn, titulo, autor, editorial, num_paginas, cover, condition, observaciones, owner_id, status";
 
-  let bookData: any = null;
-
-  const ownedQuery = await supabase
+  const bookQuery = await supabase
     .from("books")
     .select(baseSelect)
     .eq("id", bookId)
@@ -291,20 +289,7 @@ async function getBookDetailFromSupabase(
     .neq("status", "DELETED")
     .maybeSingle();
 
-  if (ownedQuery.data) {
-    bookData = ownedQuery.data;
-  } else {
-    const byIdQuery = await supabase
-      .from("books")
-      .select(baseSelect)
-      .eq("id", bookId)
-      .neq("status", "DELETED")
-      .maybeSingle();
-
-    if (byIdQuery.data) {
-      bookData = byIdQuery.data;
-    }
-  }
+  const bookData = bookQuery.data;
 
   if (!bookData) {
     console.warn("No se encontró detalle de libro en Supabase", {
@@ -539,6 +524,15 @@ export async function getBookDetail(bookId: number): Promise<BookDetail> {
     return mapApiBookDetail(raw);
   }
 
+  // Si es 403, es un error de permiso (no es tu libro)
+  if (response.status === 403) {
+    throw new Error("403: No tienes permiso para ver este libro");
+  }
+  if (response.status === 404) {
+    throw new Error("404: Este libro no existe");
+  }
+
+  // Si falla la API por otra razón, intenta fallback a Supabase
   const supabaseBook = await getBookDetailFromSupabase(bookId);
   if (supabaseBook) return supabaseBook;
 

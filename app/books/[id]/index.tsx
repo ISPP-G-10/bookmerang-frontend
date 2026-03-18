@@ -43,8 +43,15 @@ export default function BookDetailScreen() {
         if (!id) return;
         setLoading(true);
         setBook(await getBookDetail(Number(id)));
-      } catch {
-        setError("No se pudo cargar el detalle del libro.");
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Error desconocido";
+        if (errorMessage.startsWith("403")) {
+          setError("No tienes permiso para ver este libro.");
+        } else if (errorMessage.startsWith("404")) {
+          setError("Este libro no existe.")
+        } else {
+          setError("No se pudo cargar el detalle del libro.");
+        }
       } finally {
         setLoading(false);
       }
