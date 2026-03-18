@@ -23,13 +23,15 @@ export default function Header({ showBack = false }: HeaderProps) {
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {/* Izquierda: flecha atrás o foto de perfil */}
       <TouchableOpacity onPress={handleLeftPress}>
-        <View style={styles.profileButton}>
-          <FontAwesome
-            name={showBack ? "arrow-left" : "user"}
-            size={18}
-            color="#fdfbf7"
-          />
-        </View>
+        {!showBack ? (
+          <View style={styles.profileButton}>
+            <FontAwesome name="user" size={18} color="#fdfbf7" />
+          </View>
+        ) : (
+          <View style={styles.profileButton}>
+            <FontAwesome name="arrow-left" size={18} color="#fdfbf7" />
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Logo y nombre */}

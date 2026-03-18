@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import supabase from "../lib/supabase";
+import { useTutorial } from '@/contexts/TutorialContext';
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -952,6 +953,7 @@ function SettingsRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { resetTutorial } = useTutorial();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
@@ -1258,6 +1260,20 @@ export default function SettingsScreen() {
             right={
               <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
             }
+          />
+        </View>
+
+        {sectionLabel("Soporte")}
+        <View style={card}>
+          <SettingsRow
+            icon="question-circle"
+            label="Repetir tutorial"
+            subtitle="Vuelve a ver la guía de la app"
+            onPress={async () => {
+              await resetTutorial();
+              router.replace('/(tabs)/matcher' as any);
+            }}
+            isLast
           />
         </View>
 

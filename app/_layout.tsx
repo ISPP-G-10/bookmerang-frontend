@@ -10,11 +10,13 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import '../global.css';
 
+import TutorialTooltip from '@/components/TutorialTooltip';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { TutorialProvider } from '@/contexts/TutorialContext';
+import { CopilotProvider } from 'react-native-copilot';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -59,28 +61,37 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-            <Stack.Screen name="register" options={{ headerShown: false }} />
-            <Stack.Screen name="profile" options={{ headerShown: false }} />
-            <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
-            <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="chat/[id]"
-              options={{
-                headerShown: true,
-                title: "Chat",
-              }}
-            />
-          </Stack>
-        </ThemeProvider>
-      </AuthProvider>
-    </GestureHandlerRootView>
+    <AuthProvider>
+      <TutorialProvider>
+        <CopilotProvider
+          tooltipComponent={TutorialTooltip}
+          stepNumberComponent={() => null}
+          backdropColor="rgba(0,0,0,0.7)"
+          animationDuration={300}
+          verticalOffset={0}
+          arrowColor="#ffffff"
+        >
+          <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+            <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+          <Stack.Screen name="register" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/index" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[id]/edit" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="chat/[id]"
+            options={{
+              headerShown: true,
+              title: "Chat",
+            }}
+          />
+            </Stack>
+          </ThemeProvider>
+        </CopilotProvider>
+      </TutorialProvider>
+    </AuthProvider>
   );
 }

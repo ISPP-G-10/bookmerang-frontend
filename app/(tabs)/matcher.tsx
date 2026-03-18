@@ -290,15 +290,17 @@ export default function MatcherScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <Header />
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <TinderSwiper
-          ref={swiperRef}
-          cards={cards}
-          onSwipeLeft={handleSwipeLeft}
-          onSwipeRight={handleSwipeRight}
-          onTap={handleTap}
-          onEmpty={handleEmpty}
-        />
+      <View className="flex-1 items-center justify-center overflow-hidden">
+        <View style={{ flex: 1, alignSelf: 'stretch' }}>
+          <TinderSwiper
+            ref={swiperRef}
+            cards={cards}
+            onSwipeLeft={handleSwipeLeft}
+            onSwipeRight={handleSwipeRight}
+            onTap={handleTap}
+            onEmpty={handleEmpty}
+          />
+        </View>
 
         <View style={styles.actionsContainer}>
           <Pressable
