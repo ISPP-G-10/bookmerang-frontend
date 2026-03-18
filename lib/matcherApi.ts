@@ -18,6 +18,7 @@ interface FeedBookDto {
   condition: string | null;
   observaciones: string | null;
   genres: string[];
+  languages: string[];
   photos: string[];
   score: number;
   isPriority: boolean;
@@ -66,7 +67,10 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
       createdAt: '',
       updatedAt: '',
       genres: dto.genres.map((name, i) => ({ id: i, name })),
-      languages: [],
+      languages: (dto.languages ?? []).map((language, i) => ({
+        id: i,
+        language,
+      })),
       photos: dto.photos.map((url, i) => ({
         id: i,
         bookId: dto.id,
