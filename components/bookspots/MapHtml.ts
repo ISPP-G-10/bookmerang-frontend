@@ -43,6 +43,7 @@ export function getMapHtml(lat: number, lng: number): string {
           #tooFarBanner.visible { display: flex; }
           #tooFarBanner .bdot { width: 8px; height: 8px; background: rgba(255,255,255,0.45); border-radius: 50%; flex-shrink: 0; }
 
+          /* ── user location modal ── */
           #userModalOverlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.25); z-index: 2000; align-items: flex-end;
@@ -66,6 +67,7 @@ export function getMapHtml(lat: number, lng: number): string {
             cursor: pointer; margin-top: 20px;
           }
 
+          /* ── active bookspot modal ── */
           .modal-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.35); z-index: 2000; align-items: flex-end;
@@ -83,7 +85,6 @@ export function getMapHtml(lat: number, lng: number): string {
           }
           .modal-title { font-size: 17px; font-weight: 700; color: #3d405b; margin-bottom: 3px; line-height: 1.3; }
           .modal-address { font-size: 13px; color: #9e9aad; margin-bottom: 16px; display: flex; align-items: center; gap: 4px; }
-
           .mode-selector {
             display: flex; background: #f5f4f0; border-radius: 12px;
             padding: 4px; gap: 4px; margin-bottom: 16px;
@@ -96,24 +97,45 @@ export function getMapHtml(lat: number, lng: number): string {
           }
           .mode-btn.active { background: white; color: #3d405b; box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
           .mode-btn svg { flex-shrink: 0; }
-
           .modal-stats { display: flex; gap: 10px; margin-bottom: 20px; }
           .stat-box { flex: 1; background: #fdfbf7; border-radius: 12px; padding: 12px 8px; text-align: center; }
           .stat-value { font-size: 17px; font-weight: 700; color: #e07a5f; }
           .stat-label { font-size: 11px; color: #9e9aad; margin-top: 3px; }
-
           @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
           .stat-value.loading {
             background: #f0ece4; color: transparent; border-radius: 6px;
             animation: pulse 1.1s ease-in-out infinite;
             display: inline-block; min-width: 56px; height: 22px;
           }
-
           .btn-googlemaps {
             width: 100%; padding: 14px; background: #e07a5f; color: white; border: none;
             border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; margin-bottom: 10px;
           }
           .btn-close { width: 100%; padding: 10px; background: transparent; color: #9e9aad; border: none; font-size: 14px; cursor: pointer; }
+
+          /* ── pending bookspot modal ── */
+          #pendingModalOverlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.35); z-index: 2000; align-items: flex-end;
+          }
+          #pendingModalOverlay.active { display: flex; }
+          #pendingModal {
+            background: white; width: 100%; border-radius: 20px 20px 0 0;
+            padding: 20px 20px 32px; font-family: sans-serif;
+          }
+          .pending-badge {
+            display: inline-block; background: #fff8e1; color: #f59e0b;
+            font-size: 11px; font-weight: 700; border-radius: 6px; padding: 2px 8px;
+            margin-bottom: 8px; letter-spacing: 0.03em; text-transform: uppercase;
+          }
+          .progress-track {
+            width: 100%; height: 8px; background: #F3E9E0;
+            border-radius: 4px; overflow: hidden; margin: 10px 0 6px;
+          }
+          .progress-fill {
+            height: 100%; background: #f59e0b; border-radius: 4px;
+            transition: width 0.4s ease;
+          }
         </style>
       </head>
       <body>
@@ -121,6 +143,7 @@ export function getMapHtml(lat: number, lng: number): string {
         <div id="radiusBadge"><span class="bdot"></span><span id="radiusText">Cargando BookSpots...</span></div>
         <div id="tooFarBanner"><span class="bdot"></span><span>Acerca el zoom para ver BookSpots</span></div>
 
+        <!-- User location modal -->
         <div id="userModalOverlay">
           <div id="userModal">
             <div class="modal-handle"></div>
@@ -128,7 +151,7 @@ export function getMapHtml(lat: number, lng: number): string {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               Tu ubicación
             </div>
-            <div class="user-title">Tu</div>
+            <div class="user-title">Tu ubicación</div>
             <div class="user-address">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9e9aad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
               <span id="userAddress">Obteniendo dirección...</span>
@@ -137,6 +160,7 @@ export function getMapHtml(lat: number, lng: number): string {
           </div>
         </div>
 
+        <!-- Active bookspot modal -->
         <div class="modal-overlay" id="modalOverlay">
           <div class="modal">
             <div class="modal-handle"></div>
@@ -148,30 +172,24 @@ export function getMapHtml(lat: number, lng: number): string {
               </svg>
               <span id="modalAddress"></span>
             </div>
-
             <div class="mode-selector">
               <button class="mode-btn active" id="btnWalk" onclick="setMode('walk')">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="4" r="1.5"/>
-                  <path d="M9 22l2-6 2.5 2.5 2-5"/>
-                  <path d="M10.5 10.5L9 22"/>
-                  <path d="M13.5 10.5l2.5 4.5-3 2"/>
-                  <path d="M12 6l-1.5 4.5 3 1"/>
-                  <path d="M14 6.5l1.5-1"/>
+                  <circle cx="12" cy="4" r="1.5"/><path d="M9 22l2-6 2.5 2.5 2-5"/>
+                  <path d="M10.5 10.5L9 22"/><path d="M13.5 10.5l2.5 4.5-3 2"/>
+                  <path d="M12 6l-1.5 4.5 3 1"/><path d="M14 6.5l1.5-1"/>
                 </svg>
                 A pie
               </button>
               <button class="mode-btn" id="btnCar" onclick="setMode('car')">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M5 17H3v-5l2-5h14l2 5v5h-2"/>
-                  <circle cx="7.5" cy="17.5" r="2.5"/>
-                  <circle cx="16.5" cy="17.5" r="2.5"/>
+                  <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/>
                   <path d="M5 12h14"/>
                 </svg>
                 En coche
               </button>
             </div>
-
             <div class="modal-stats">
               <div class="stat-box">
                 <div class="stat-value loading" id="statDist"></div>
@@ -184,6 +202,37 @@ export function getMapHtml(lat: number, lng: number): string {
             </div>
             <button class="btn-googlemaps" onclick="openGoogleMaps()">Cómo llegar</button>
             <button class="btn-close" onclick="closeModal()">Cerrar</button>
+          </div>
+        </div>
+
+        <!-- Pending bookspot modal (my proposals) -->
+        <div id="pendingModalOverlay">
+          <div id="pendingModal">
+            <div class="modal-handle"></div>
+            <div class="pending-badge">Pendiente de validación</div>
+            <div class="modal-title" id="pendingModalTitle" style="margin-top:4px"></div>
+            <div class="modal-address" style="margin-top:4px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9e9aad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+              </svg>
+              <span id="pendingModalAddress"></span>
+            </div>
+
+            <!-- Validation progress -->
+            <div style="background:#fffbf0;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:16px">
+              <div style="font-size:11px;font-weight:900;letter-spacing:1px;color:#f59e0b;text-transform:uppercase;margin-bottom:8px">
+                Progreso de validaciones
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="pendingProgressFill" style="width:0%"></div>
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#3d405b;margin-top:4px" id="pendingProgressText"></div>
+              <div style="font-size:12px;color:#9e9aad;margin-top:3px" id="pendingProgressSub"></div>
+            </div>
+
+            <div style="font-size:12px;color:#c9b5a3;margin-bottom:20px" id="pendingCreatedAt"></div>
+
+            <button class="btn-close" onclick="closePendingModal()" style="background:#f5f4f0;border-radius:12px;padding:13px;font-weight:600;color:#3d405b">Cerrar</button>
           </div>
         </div>
 
@@ -202,7 +251,21 @@ export function getMapHtml(lat: number, lng: number): string {
           let currentMode = 'walk';
           let routeCar  = { distanceM: null, durationS: null, geometry: null };
           let routeWalk = { distanceM: null, durationS: null, geometry: null };
+          let isPicking = false;
+          let pickedMarker = null;
 
+          // Separate layer for user's own pending spots (not clustered)
+          const pendingLayer = L.layerGroup().addTo(map);
+
+          function postToRN(message) {
+            if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
+              window.ReactNativeWebView.postMessage(message);
+            } else if (window.parent !== window) {
+              window.parent.postMessage(message, '*');
+            }
+          }
+
+          /* ── Icons ── */
           function createUserIcon() {
             return L.divIcon({
               className: '',
@@ -210,8 +273,7 @@ export function getMapHtml(lat: number, lng: number): string {
                 <div style="position:absolute;inset:-6px;background:rgba(59,130,246,0.18);border-radius:50%;"></div>
                 <div style="width:20px;height:20px;background:#3b82f6;border:3px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.25);"></div>
               </div>\`,
-              iconSize: [20, 20],
-              iconAnchor: [10, 10],
+              iconSize: [20, 20], iconAnchor: [10, 10],
             });
           }
 
@@ -227,9 +289,24 @@ export function getMapHtml(lat: number, lng: number): string {
                   <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
                 </svg>
               </svg>\`,
-              iconSize: [32, 42],
-              iconAnchor: [16, 42],
-              popupAnchor: [0, -42],
+              iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42],
+            });
+          }
+
+          // Pending (user's own proposals): amber outline pin with clock icon
+          function createPendingIcon() {
+            return L.divIcon({
+              className: '',
+              html: \`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
+                <path d="M16 0 C7.163 0 0 7.163 0 16 C0 28 16 42 16 42 C16 42 32 28 32 16 C32 7.163 24.837 0 16 0Z"
+                  fill="#fdfbf7" stroke="#f59e0b" stroke-width="2.5"/>
+                <svg x="8" y="5" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </svg>\`,
+              iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42],
             });
           }
 
@@ -237,7 +314,9 @@ export function getMapHtml(lat: number, lng: number): string {
             .addTo(map)
             .on('click', openUserModal);
 
+          /* ── User location modal ── */
           async function openUserModal() {
+            postToRN(JSON.stringify({ type: 'mapModalOpen' }));
             document.getElementById('userModalOverlay').classList.add('active');
             document.getElementById('userAddress').textContent = 'Obteniendo dirección...';
             try {
@@ -259,9 +338,11 @@ export function getMapHtml(lat: number, lng: number): string {
           }
 
           function closeUserModal() {
+            postToRN(JSON.stringify({ type: 'mapModalClose' }));
             document.getElementById('userModalOverlay').classList.remove('active');
           }
 
+          /* ── Active bookspots ── */
           const clusterGroup = L.markerClusterGroup({
             maxClusterRadius: 48, spiderfyOnMaxZoom: true,
             showCoverageOnHover: false, zoomToBoundsOnClick: true,
@@ -298,30 +379,88 @@ export function getMapHtml(lat: number, lng: number): string {
             });
           }
 
+          /* ── User's pending spots ── */
+          function updateUserPendingSpots(spots) {
+            pendingLayer.clearLayers();
+            if (!spots || spots.length === 0) return;
+
+            spots.forEach(function(spot) {
+              L.marker(
+                [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
+                { icon: createPendingIcon() }
+              ).on('click', function() { openPendingModal(spot); })
+              .addTo(pendingLayer);
+            });
+          }
+
+          function openPendingModal(spot) {
+            postToRN(JSON.stringify({ type: 'mapModalOpen' }));
+            var nombre = spot.nombre ?? spot.Nombre ?? '';
+            var address = spot.addressText ?? spot.AddressText ?? '';
+            var validation = spot.validationCount ?? 0;
+            var required = spot.requiredValidations ?? 5;
+            var remaining = required - validation;
+            var pct = Math.min((validation / required) * 100, 100).toFixed(0);
+            var created = spot.createdAt ?? spot.CreatedAt ?? '';
+
+            document.getElementById('pendingModalTitle').textContent = nombre;
+            document.getElementById('pendingModalAddress').textContent = address;
+            document.getElementById('pendingProgressFill').style.width = pct + '%';
+            document.getElementById('pendingProgressText').textContent =
+              validation + '/' + required + ' personas han validado tu BookSpot';
+            document.getElementById('pendingProgressSub').textContent =
+              remaining > 0
+                ? 'Aún quedan ' + remaining + ' persona' + (remaining !== 1 ? 's' : '') + ' más por validarlo'
+                : '✓ ¡Listo para activarse!';
+            document.getElementById('pendingCreatedAt').textContent =
+              created ? 'Propuesto el ' + new Date(created).toLocaleDateString('es-ES') : '';
+
+            document.getElementById('pendingModalOverlay').classList.add('active');
+          }
+
+          function closePendingModal() {
+            postToRN(JSON.stringify({ type: 'mapModalClose' }));
+            document.getElementById('pendingModalOverlay').classList.remove('active');
+          }
+
           function showTooFarMessage() {
             clusterGroup.clearLayers();
             document.getElementById('tooFarBanner').classList.add('visible');
             document.getElementById('radiusText').textContent = '';
           }
 
-          function postToRN(message) {
-            if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
-                window.ReactNativeWebView.postMessage(message);
-            } else if (window.parent !== window) {
-                window.parent.postMessage(message, '*');
-            }
-            }
+          /* ── Pick mode ── */
+          function enablePickMode() { isPicking = true; }
 
+          function disablePickMode() {
+            isPicking = false;
+            if (pickedMarker) {
+              try { map.removeLayer(pickedMarker); } catch(e) {}
+              pickedMarker = null;
+            }
+          }
+
+          map.on('click', function(e) {
+            if (!isPicking) return;
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} pickedMarker = null; }
+            pickedMarker = L.marker([lat, lng], { icon: createSpotIcon() }).addTo(map);
+            postToRN(JSON.stringify({ type: 'pickLocation', lat, lng }));
+            isPicking = false;
+          });
+
+          /* ── View change ── */
           function emitViewChange() {
             const center = map.getCenter();
             const ne = map.getBounds().getNorthEast();
             const radiusKm = map.distance(center, ne) / 1000;
             postToRN(JSON.stringify({ type: 'viewChange', lat: center.lat, lng: center.lng, radiusKm }));
           }
-
           map.on('zoomend', emitViewChange);
           map.on('moveend', emitViewChange);
 
+          /* ── Active spot modal ── */
           function formatDist(m) {
             return m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
           }
@@ -331,16 +470,12 @@ export function getMapHtml(lat: number, lng: number): string {
             var distEl = document.getElementById('statDist');
             var timeEl = document.getElementById('statTime');
             if (r.distanceM === null) {
-              distEl.className = 'stat-value loading';
-              distEl.textContent = '';
-              timeEl.className = 'stat-value loading';
-              timeEl.textContent = '';
+              distEl.className = 'stat-value loading'; distEl.textContent = '';
+              timeEl.className = 'stat-value loading'; timeEl.textContent = '';
               return;
             }
-            distEl.className = 'stat-value';
-            distEl.textContent = formatDist(r.distanceM);
-            timeEl.className = 'stat-value';
-            timeEl.textContent = Math.round(r.durationS / 60) + ' min';
+            distEl.className = 'stat-value'; distEl.textContent = formatDist(r.distanceM);
+            timeEl.className = 'stat-value'; timeEl.textContent = Math.round(r.durationS / 60) + ' min';
           }
 
           function setMode(mode) {
@@ -351,9 +486,7 @@ export function getMapHtml(lat: number, lng: number): string {
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
             var r = mode === 'car' ? routeCar : routeWalk;
             if (r.geometry) {
-              routeLine = L.geoJSON(r.geometry, {
-                style: { color: '#e07a5f', weight: 4, opacity: 0.75 }
-              }).addTo(map);
+              routeLine = L.geoJSON(r.geometry, { style: { color: '#e07a5f', weight: 4, opacity: 0.75 } }).addTo(map);
               map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
             }
           }
@@ -381,6 +514,7 @@ export function getMapHtml(lat: number, lng: number): string {
             document.getElementById('modalTitle').textContent = spot.nombre ?? spot.Nombre;
             document.getElementById('modalAddress').textContent = spot.addressText ?? spot.AddressText;
             renderModeStats();
+            postToRN(JSON.stringify({ type: 'mapModalOpen' }));
             document.getElementById('modalOverlay').classList.add('active');
 
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
@@ -389,11 +523,9 @@ export function getMapHtml(lat: number, lng: number): string {
             var spotLng = spot.longitude ?? spot.Longitude;
             var coords = \`\${userLng},\${userLat};\${spotLng},\${spotLat}\`;
 
-            // Walk se muestra en cuanto llega sin esperar al coche
             fetchRoute('foot', coords).then(function(result) {
-              if (result) {
-                routeWalk = result;
-              } else {
+              if (result) { routeWalk = result; }
+              else {
                 var dKm = getDistKm(spot);
                 routeWalk.distanceM = dKm * 1000 * 1.2;
                 routeWalk.durationS = routeWalk.distanceM / 83 * 60;
@@ -402,19 +534,15 @@ export function getMapHtml(lat: number, lng: number): string {
                 renderModeStats();
                 if (routeWalk.geometry) {
                   if (routeLine) map.removeLayer(routeLine);
-                  routeLine = L.geoJSON(routeWalk.geometry, {
-                    style: { color: '#e07a5f', weight: 4, opacity: 0.75 }
-                  }).addTo(map);
+                  routeLine = L.geoJSON(routeWalk.geometry, { style: { color: '#e07a5f', weight: 4, opacity: 0.75 } }).addTo(map);
                   map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
                 }
               }
             });
 
-            // Coche llega cuando llega, actualiza solo si el usuario ya cambió al tab
             fetchRoute('driving', coords).then(function(result) {
-              if (result) {
-                routeCar = result;
-              } else {
+              if (result) { routeCar = result; }
+              else {
                 var dKm = getDistKm(spot);
                 routeCar.distanceM = dKm * 1000;
                 routeCar.durationS = (dKm * 1000) / 667;
@@ -424,6 +552,7 @@ export function getMapHtml(lat: number, lng: number): string {
           }
 
           function closeModal() {
+            postToRN(JSON.stringify({ type: 'mapModalClose' }));
             document.getElementById('modalOverlay').classList.remove('active');
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
             map.setView([userLat, userLng], map.getZoom());
@@ -449,9 +578,9 @@ export function getMapHtml(lat: number, lng: number): string {
 
           window.addEventListener('message', function(event) {
             if (event.data && event.data.type === 'eval') {
-                try { eval(event.data.code); } catch(e) {}
+              try { eval(event.data.code); } catch(e) {}
             }
-            });
+          });
         </script>
       </body>
     </html>
