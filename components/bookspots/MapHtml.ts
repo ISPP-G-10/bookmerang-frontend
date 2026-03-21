@@ -297,16 +297,24 @@ export function getMapHtml(lat: number, lng: number): string {
           function createPendingIcon() {
             return L.divIcon({
               className: '',
-              html: \`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42">
-                <path d="M16 0 C7.163 0 0 7.163 0 16 C0 28 16 42 16 42 C16 42 32 28 32 16 C32 7.163 24.837 0 16 0Z"
-                  fill="#fdfbf7" stroke="#f59e0b" stroke-width="2.5"/>
-                <svg x="8" y="5" width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"/>
-                  <polyline points="12 6 12 12 16 14"/>
+              html: \`<svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 34 46">
+                <!-- drop shadow -->
+                <ellipse cx="17" cy="44" rx="6" ry="2.2" fill="rgba(0,0,0,0.18)"/>
+                <!-- pin body -->
+                <path d="M17 0 C8.163 0 1 7.163 1 16 C1 29 17 44 17 44 C17 44 33 29 33 16 C33 7.163 25.837 0 17 0Z"
+                  fill="#f59e0b"/>
+                <!-- white inner circle -->
+                <circle cx="17" cy="15.5" r="9" fill="rgba(255,255,255,0.22)"/>
+                <!-- bookmark / pending icon: hourglass shape in white -->
+                <svg x="9" y="6" width="16" height="19" viewBox="0 0 24 24" fill="none"
+                  stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 22h14"/>
+                  <path d="M5 2h14"/>
+                  <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/>
+                  <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
                 </svg>
               </svg>\`,
-              iconSize: [32, 42], iconAnchor: [16, 42], popupAnchor: [0, -42],
+              iconSize: [34, 46], iconAnchor: [17, 44], popupAnchor: [0, -44],
             });
           }
 
