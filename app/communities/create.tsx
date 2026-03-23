@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,14 +11,16 @@ export default function CreateCommunityScreen() {
   const [name, setName] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleCreate = async () => {
+    setErrorMessage(null);
     if (!name.trim()) {
-      Alert.alert('Error', 'Por favor, ingresa un nombre para la comunidad.');
+      setErrorMessage('Por favor, ingresa un nombre para la comunidad.');
       return;
     }
     if (!selectedSpot) {
-      Alert.alert('Error', 'Por favor, selecciona un BookSpot de referencia.');
+      setErrorMessage('Por favor, selecciona un BookSpot de referencia.');
       return;
     }
 
@@ -28,10 +30,9 @@ export default function CreateCommunityScreen() {
         name: name.trim(),
         referenceBookspotId: selectedSpot,
       });
-      Alert.alert('¡Éxito!', 'Comunidad creada correctamente.');
       router.back();
     } catch (error: any) {
-      Alert.alert('Error al crear', error.message || 'Error desconocido');
+      setErrorMessage(error.message || 'Error al crear la comunidad');
     } finally {
       setLoading(false);
     }
@@ -50,12 +51,22 @@ export default function CreateCommunityScreen() {
         </View>
 
         <ScrollView style={styles.content}>
+          {errorMessage && (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={20} color="#DC2626" />
+              <Text style={styles.errorText}>{errorMessage}</Text>
+            </View>
+          )}
+
           <Text style={styles.label}>Nombre de la comunidad</Text>
           <TextInput
             style={styles.input}
             placeholder="Ej: Amantes de la ciencia ficción"
             value={name}
-            onChangeText={setName}
+            onChangeText={(text) => {
+              setName(text);
+              if (errorMessage) setErrorMessage(null);
+            }}
             maxLength={50}
           />
 
@@ -69,7 +80,10 @@ export default function CreateCommunityScreen() {
                 styles.spotItem,
                 selectedSpot === spot.id && styles.spotItemSelected
               ]}
-              onPress={() => setSelectedSpot(spot.id)}
+              onPress={() => {
+                setSelectedSpot(spot.id);
+                if (errorMessage) setErrorMessage(null);
+              }}
             >
               <View style={styles.spotInfo}>
                 <Text style={[styles.spotName, selectedSpot === spot.id && styles.spotNameSelected]}>
@@ -127,6 +141,23 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#B91C1C',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
   },
   label: {
     fontSize: 16,
