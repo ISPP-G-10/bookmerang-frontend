@@ -40,7 +40,7 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
             <View style={[styles.markerContainer, isMine ? styles.myMarker : styles.otherMarker]}>
               <Ionicons name={isMine ? "people" : "location"} size={20} color="#fff" />
             </View>
-            <Callout style={styles.callout} tooltip={false}>
+            <Callout tooltip={true}>
               <View style={styles.calloutContent}>
                 <Text style={styles.commName}>{comm.name}</Text>
                 <Text style={styles.commSpot}>{comm.spot.nombre}</Text>
@@ -90,12 +90,16 @@ const styles = StyleSheet.create({
   otherMarker: {
     backgroundColor: '#3d405b',
   },
-  callout: {
-    width: 200,
-    padding: 10,
-  },
   calloutContent: {
-    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 15,
+    width: 200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   commName: {
     fontSize: 16,
