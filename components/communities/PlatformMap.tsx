@@ -10,9 +10,10 @@ type Props = {
   communities: (CommunityDto & { spot: Bookspot })[];
   myCommunities: CommunityDto[];
   onJoin: (communityId: number) => void;
+  onAdmin: (comm: CommunityDto) => void;
 };
 
-export default function PlatformMap({ location, communities, myCommunities, onJoin }: Props) {
+export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin }: Props) {
   return (
     <MapView
       style={styles.map}
@@ -31,6 +32,8 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
             onCalloutPress={() => {
               if (!isMine) {
                 onJoin(comm.id);
+              } else {
+                onAdmin(comm);
               }
             }}
           >
@@ -49,7 +52,9 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
                     <Text style={styles.joinBtnText}>Toca para Unirte</Text>
                   </View>
                 ) : (
-                  <Text style={styles.alreadyJoined}>Ya eres miembro</Text>
+                  <View style={[styles.joinBtn, { backgroundColor: '#3d405b' }]}>
+                    <Text style={styles.joinBtnText}>Administrar</Text>
+                  </View>
                 )}
               </View>
             </Callout>

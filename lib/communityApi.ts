@@ -83,6 +83,19 @@ export async function joinCommunity(communityId: number): Promise<CommunityDto> 
   return res.json();
 }
 
+export async function deleteCommunity(communityId: number): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_URL}/communities/${communityId}`, {
+    method: 'DELETE',
+    headers,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al eliminar comunidad: ${res.status} ${errorText}`);
+  }
+}
+
 export async function leaveCommunity(communityId: number): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/communities/${communityId}/leave`, {
@@ -95,3 +108,4 @@ export async function leaveCommunity(communityId: number): Promise<void> {
     throw new Error(`Error al abandonar comunidad: ${res.status} ${errorText}`);
   }
 }
+
