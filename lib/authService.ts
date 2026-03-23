@@ -1,7 +1,28 @@
 import { apiRequest } from "./api";
-import supabase from "./supabase";
+import {
+  clearStoredAuthSession,
+  setStoredAuthSession,
+  updateStoredAuthUser,
+} from "./authSession";
+
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  const raw = await response.text();
+  if (!raw) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") return parsed.error;
+    if (typeof parsed?.message === "string") return parsed.message;
+  } catch {
+    // Keep raw text when body is not JSON.
+  }
+
+  return raw;
+}
 
 export interface RegisterProfileData {
+  email: string;
+  password: string;
   username: string;
   name: string;
   profilePhoto?: string;
@@ -11,8 +32,8 @@ export interface RegisterProfileData {
 }
 
 export interface UserPreferencesData {
-  latitud: number;
-  longitud: number;
+  latitude: number;
+  longitude: number;
   radioKm: number;
   extension: "SHORT" | "MEDIUM" | "LONG";
   genreIds: number[];
@@ -20,39 +41,28 @@ export interface UserPreferencesData {
 
 export const authService = {
   async signIn(email: string, password: string) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    const response = await apiRequest("/Auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
     });
-    if (error) throw error;
 
-    // Verificar si el usuario existe en el backend
-    try {
-      const response = await apiRequest("/Auth/me");
-      if (!response.ok) {
-        await supabase.auth.signOut();
-        throw new Error("La cuenta ha sido eliminada o no existe en nuestros registros.");
-      }
-    } catch (e: any) {
-      if (e.message !== "La cuenta ha sido eliminada o no existe en nuestros registros.") {
-        await supabase.auth.signOut();
-        throw new Error("No se pudo verificar la cuenta. Inténtalo de nuevo.");
-      }
-      throw e;
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Credenciales inválidas"));
     }
 
-    return data;
-  },
-
-  async signUp(email: string, password: string, name: string) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: name },
+    const data = await response.json();
+    await setStoredAuthSession({
+      accessToken: data.accessToken,
+      user: {
+        id: data.user.id,
+        supabaseId: data.user.supabaseId,
+        email: data.user.email,
+        username: data.user.username,
+        name: data.user.name,
+        profilePhoto: data.user.profilePhoto,
       },
     });
-    if (error) throw error;
+
     return data;
   },
 
@@ -67,11 +77,78 @@ export const authService = {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Error al registrar el perfil en el backend");
+      throw new Error(await readApiError(response, "Error al registrar el perfil en el backend"));
     }
 
-    return await response.json();
+    const data = await response.json();
+    await setStoredAuthSession({
+      accessToken: data.accessToken,
+      user: {
+        id: data.user.id,
+        supabaseId: data.user.supabaseId,
+        email: data.user.email,
+        username: data.user.username,
+        name: data.user.name,
+        profilePhoto: data.user.profilePhoto,
+      },
+    });
+
+    return data.user;
+  },
+
+  async patchEmail(newEmail: string, currentPassword: string) {
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedPassword = currentPassword.trim();
+
+    const response = await apiRequest("/Auth/email", {
+      method: "PATCH",
+      body: JSON.stringify({
+        newEmail: normalizedEmail,
+        currentPassword: normalizedPassword,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al actualizar el email"));
+    }
+
+    const payload = await response.json().catch(() => null);
+    const user = payload?.user ?? payload ?? {};
+    const syncedEmail = typeof user?.email === "string" ? user.email : normalizedEmail;
+
+    try {
+      await updateStoredAuthUser({
+        email: syncedEmail,
+        username: typeof user?.username === "string" ? user.username : undefined,
+        name: typeof user?.name === "string" ? user.name : undefined,
+        profilePhoto: typeof user?.profilePhoto === "string" ? user.profilePhoto : undefined,
+      });
+    } catch (error) {
+      // No rompemos el flujo si falla sincronizar cache local.
+      console.warn("[authService.patchEmail] updateStoredAuthUser failed", error);
+    }
+
+    return {
+      ...user,
+      email: syncedEmail,
+    };
+  },
+
+  async patchPassword(currentPassword: string, newPassword: string) {
+    const response = await apiRequest("/Auth/password", {
+      method: "PATCH",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al actualizar la contraseña"));
+    }
+
+    return response.json();
+  },
+
+  async signOut() {
+    await clearStoredAuthSession();
   },
 
   async updatePreferences(userId: string, preferences: UserPreferencesData) {
@@ -81,8 +158,7 @@ export const authService = {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || "Error al guardar preferencias");
+      throw new Error(await readApiError(response, "Error al guardar preferencias"));
     }
 
     return response;

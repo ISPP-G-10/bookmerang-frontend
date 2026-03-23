@@ -18,6 +18,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
+import { authService } from "../lib/authService";
+import {
+  getStoredAuthSession,
+  getStoredUserId,
+  updateStoredAuthUser,
+} from "../lib/authSession";
 import supabase from "../lib/supabase";
 
 const PROFILE_STORAGE_BUCKET =
@@ -148,7 +154,9 @@ function FloatingModal({
             maxHeight: "85%",
             overflow: "hidden",
           }}
-          onPress={() => {}}
+          onPress={(event) => {
+            event.stopPropagation();
+          }}
         >
           {children}
         </Pressable>
@@ -454,10 +462,12 @@ function ChangeEmailModal({
   visible,
   onClose,
   currentEmail,
+  onEmailChanged,
 }: {
   visible: boolean;
   onClose: () => void;
   currentEmail: string;
+  onEmailChanged?: (email: string) => void;
 }) {
   const [newEmail, setNewEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -477,22 +487,20 @@ function ChangeEmailModal({
   }, [visible]);
 
   const handleSave = async () => {
-    if (!newEmail.trim()) return setError("Introduce el nuevo email");
-    if (!password.trim()) return setError("Introduce tu contraseña actual");
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail) return setError("Introduce el nuevo email");
+    if (!normalizedPassword) return setError("Introduce tu contraseña actual");
+
     setSaving(true);
     setError("");
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentEmail,
-        password,
-      });
-      if (signInError) throw new Error("Contraseña incorrecta");
-      const { error: updateError } = await supabase.auth.updateUser({
-        email: newEmail,
-      });
-      if (updateError) throw updateError;
+      const updatedUser = await authService.patchEmail(normalizedEmail, normalizedPassword);
+      onEmailChanged?.(updatedUser?.email ?? normalizedEmail);
       setSuccess(true);
     } catch (e: any) {
+      console.error("[ChangeEmailModal.handleSave]", e);
       setError(e?.message ?? "Error al cambiar el email");
     } finally {
       setSaving(false);
@@ -557,7 +565,7 @@ function ChangeEmailModal({
                 marginBottom: 8,
               }}
             >
-              ¡Email enviado!
+              ¡Email actualizado!
             </Text>
             <Text
               style={{
@@ -567,8 +575,7 @@ function ChangeEmailModal({
                 marginBottom: 24,
               }}
             >
-              Revisa tu bandeja de entrada en {newEmail} para confirmar el
-              cambio.
+              Tu correo se ha actualizado correctamente a {newEmail}.
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -719,15 +726,7 @@ function ChangePasswordModal({
     setSaving(true);
     setError("");
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentEmail,
-        password: currentPassword,
-      });
-      if (signInError) throw new Error("Contraseña actual incorrecta");
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (updateError) throw updateError;
+      await authService.patchPassword(currentPassword, newPassword);
       setSuccess(true);
     } catch (e: any) {
       setError(e?.message ?? "Error al cambiar la contraseña");
@@ -1027,15 +1026,13 @@ export default function SettingsScreen() {
     extension: string,
     mimeType: string,
   ): Promise<string> => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const userId = await getStoredUserId();
 
-    if (!user) {
+    if (!userId) {
       throw new Error("No se pudo identificar al usuario autenticado.");
     }
 
-    const path = `profiles/${user.id}/${Date.now()}.${extension}`;
+    const path = `profiles/${userId}/${Date.now()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from(PROFILE_STORAGE_BUCKET)
@@ -1223,15 +1220,14 @@ export default function SettingsScreen() {
 
   React.useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const session = await getStoredAuthSession();
+      const user = session?.user;
       if (user) {
         setCurrentEmail(user.email ?? "");
         setProfile({
-          name: user.user_metadata?.name ?? "",
-          username: user.user_metadata?.username ?? "",
-          avatar: user.user_metadata?.avatar_url ?? null,
+          name: user.name ?? "",
+          username: user.username ?? "",
+          avatar: user.profilePhoto ?? null,
         });
       }
     })();
@@ -1263,20 +1259,6 @@ export default function SettingsScreen() {
         return;
       }
 
-      // Then: update Supabase auth user metadata
-      const updateData: any = { name: data.name, username: data.username };
-      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
-        updateData.avatar_url = data.avatar;
-      }
-
-      const res = await supabase.auth.updateUser({ data: updateData });
-      console.log("supabase.updateUser res:", res);
-      if (res.error) {
-        console.error("Error updating user in Supabase:", res.error);
-        Alert.alert("Error", res.error.message || "No se pudo actualizar el perfil en Supabase");
-        return;
-      }
-
       // Update local state so Settings shows new values
       const out: any = { ...profile };
       out.name = data.name;
@@ -1284,6 +1266,13 @@ export default function SettingsScreen() {
       if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
         out.avatar = data.avatar;
       }
+
+      await updateStoredAuthUser({
+        name: data.name,
+        username: data.username,
+        profilePhoto: out.avatar,
+      });
+
       setProfile(out);
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
@@ -1299,7 +1288,7 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await authService.signOut();
     router.replace("/login" as any);
   };
 
@@ -1341,17 +1330,13 @@ export default function SettingsScreen() {
       if (!ok) return;
 
       try {
-        const { data: session } = await supabase.auth.getSession();
-        const userId = session.session?.user.id;
-        const accessToken = session.session?.access_token;
-
         const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           throw new Error(text || "Error borrando la cuenta en el servidor");
         }
 
-        await supabase.auth.signOut();
+        await authService.signOut();
         window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
       } catch (e: any) {
         console.error("Error borrando cuenta en backend:", e);
@@ -1372,10 +1357,6 @@ export default function SettingsScreen() {
           onPress: async () => {
             console.log('Eliminar: confirm pressed');
             try {
-              const { data: session } = await supabase.auth.getSession();
-              const userId = session.session?.user.id;
-              const accessToken = session.session?.access_token;
-
               // Llama al backend para borrar el baseUser; el backend debe encargarse
               // de eliminar el usuario en Supabase de forma administrativa.
               try {
@@ -1386,7 +1367,7 @@ export default function SettingsScreen() {
                 }
 
                 // Si el backend respondió OK, cierra sesión y notifica.
-                await supabase.auth.signOut();
+                await authService.signOut();
                 Alert.alert("Cuenta eliminada", "Tu cuenta ha sido eliminada correctamente.");
               } catch (e: any) {
                 console.error("Error borrando cuenta en backend:", e);
@@ -1650,6 +1631,7 @@ export default function SettingsScreen() {
         visible={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}
         currentEmail={currentEmail}
+        onEmailChanged={(email) => setCurrentEmail(email)}
       />
       <ChangePasswordModal
         visible={changePasswordOpen}

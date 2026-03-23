@@ -1,4 +1,4 @@
-import supabase from '@/lib/supabase';
+import { getAccessToken } from '@/lib/authSession';
 import { ExchangeWithMatchDto } from '@/types/exchange';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
@@ -7,8 +7,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
  * Obtiene el token JWT del usuario autenticado en Supabase.
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  const token = await getAccessToken();
 
   return {
     'Content-Type': 'application/json',
