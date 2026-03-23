@@ -15,3 +15,15 @@ export interface CreateCommunityRequest {
   name: string;
   referenceBookspotId: number;
 }
+
+export interface CommunityLibraryBookDto {
+  bookId: number;
+  ownerId: string;
+  ownerUsername: string;
+  titulo: string;
+  autor: string;
+  thumbnailUrl: string | null;
+  genres: string[];
+  likesCount: number;
+  likedByMe: boolean;
+}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Text, Pressable } from 'react-native';
-import MapView, { Marker, Callout } from 'react-native-maps';
+import MapView, { Marker, Callout, CalloutSubview } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { CommunityDto } from '@/types/community';
 import { Bookspot } from '@/lib/mockBookspots';
@@ -11,9 +11,10 @@ type Props = {
   myCommunities: CommunityDto[];
   onJoin: (communityId: number) => void;
   onAdmin: (comm: CommunityDto) => void;
+  onLibrary: (communityId: number) => void;
 };
 
-export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin }: Props) {
+export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin, onLibrary }: Props) {
   return (
     <MapView
       style={styles.map}
@@ -29,13 +30,6 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
               latitude: comm.spot.latitude,
               longitude: comm.spot.longitude,
             }}
-            onCalloutPress={() => {
-              if (!isMine) {
-                onJoin(comm.id);
-              } else {
-                onAdmin(comm);
-              }
-            }}
           >
             <View style={[styles.markerContainer, isMine ? styles.myMarker : styles.otherMarker]}>
               <Ionicons name={isMine ? "people" : "location"} size={20} color="#fff" />
@@ -48,12 +42,23 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
                 <Text style={styles.commStatus}>Estado: {comm.status}</Text>
                 
                 {!isMine ? (
-                  <View style={styles.joinBtn}>
-                    <Text style={styles.joinBtnText}>Toca para Unirte</Text>
-                  </View>
+                  <CalloutSubview onPress={() => onJoin(comm.id)}>
+                    <View style={styles.joinBtn}>
+                      <Text style={styles.joinBtnText}>Toca para Unirte</Text>
+                    </View>
+                  </CalloutSubview>
                 ) : (
-                  <View style={[styles.joinBtn, { backgroundColor: '#3d405b' }]}>
-                    <Text style={styles.joinBtnText}>Administrar</Text>
+                  <View style={styles.myCommButtons}>
+                    <CalloutSubview onPress={() => onAdmin(comm)}>
+                      <View style={[styles.joinBtn, { backgroundColor: '#3d405b' }]}>
+                        <Text style={styles.joinBtnText}>Administrar</Text>
+                      </View>
+                    </CalloutSubview>
+                    <CalloutSubview onPress={() => onLibrary(comm.id)}>
+                      <View style={[styles.joinBtn, { backgroundColor: '#e4715f' }]}>
+                        <Text style={styles.joinBtnText}>Ver Comunidad</Text>
+                      </View>
+                    </CalloutSubview>
                   </View>
                 )}
               </View>
@@ -130,11 +135,19 @@ const styles = StyleSheet.create({
   joinBtnText: {
     color: '#fff',
     fontWeight: '600',
+    textAlign: 'center',
   },
   alreadyJoined: {
     color: '#e4715f',
     fontWeight: 'bold',
     textAlign: 'center',
     marginTop: 4,
+  },
+  myCommButtons: {
+    flexDirection: 'column',
+    gap: 6,
+  },
+  myCommBtn: {
+    width: '100%',
   },
 });

@@ -183,12 +183,13 @@ export default function ComunidadesScreen() {
         </View>
       ) : (
         <View style={styles.mapContainer}>
-          <PlatformMap 
+          <PlatformMap
             location={location}
             communities={communitiesWithLocation}
             myCommunities={myCommunities}
             onJoin={handleJoin}
             onAdmin={handleAdmin}
+            onLibrary={(communityId: number) => router.push(`/communities/${communityId}` as any)}
           />
           
           <Pressable 

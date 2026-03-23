@@ -9,9 +9,10 @@ type Props = {
   myCommunities: CommunityDto[];
   onJoin: (communityId: number) => void;
   onAdmin: (comm: CommunityDto) => void;
+  onLibrary?: (communityId: number) => void;
 };
 
-export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin }: Props) {
+export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin, onLibrary }: Props) {
   const [MapReady, setMapReady] = useState(false);
   const [mapComponents, setMapComponents] = useState<any>(null);
 
@@ -115,9 +116,14 @@ export default function PlatformMap({ location, communities, myCommunities, onJo
                     <Text style={styles.joinBtnText}>Toca para Unirte</Text>
                   </Pressable>
                 ) : (
-                  <Pressable style={[styles.joinBtn, { backgroundColor: '#3d405b' }]} onPress={() => onAdmin(comm)}>
-                    <Text style={styles.joinBtnText}>Administrar</Text>
-                  </Pressable>
+                  <View style={styles.myCommButtons}>
+                    <Pressable style={[styles.joinBtn, { backgroundColor: '#3d405b' }]} onPress={() => onAdmin(comm)}>
+                      <Text style={styles.joinBtnText}>Administrar</Text>
+                    </Pressable>
+                    <Pressable style={[styles.joinBtn, { backgroundColor: '#e4715f' }]} onPress={() => onLibrary?.(comm.id)}>
+                      <Text style={styles.joinBtnText}>Ver Comunidad</Text>
+                    </Pressable>
+                  </View>
                 )}
               </View>
             </Popup>
@@ -175,5 +181,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginTop: 4,
+  },
+  myCommButtons: {
+    gap: 6,
   },
 });
