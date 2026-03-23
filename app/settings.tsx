@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -33,6 +33,23 @@ const resolveFileExtension = (asset: ImagePicker.ImagePickerAsset): string => {
   if (fromMime && /^[a-z0-9]+$/.test(fromMime)) return fromMime;
 
   return "jpg";
+};
+
+const isRemoteAvatarUrl = (value: string | null | undefined): value is string =>
+  Boolean(value && /^https?:\/\//i.test(value));
+
+const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
+  try {
+    const url = new URL(publicUrl);
+    const marker = `/storage/v1/object/public/${PROFILE_STORAGE_BUCKET}/`;
+    const markerIndex = url.pathname.indexOf(marker);
+
+    if (markerIndex === -1) return null;
+
+    return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+  } catch {
+    return null;
+  }
 };
 
 // ── Switch custom ────────────────────────────────────────────────────
@@ -163,12 +180,16 @@ function PhotoPickerModal({
   onClose,
   onPickGallery,
   onPickCamera,
+  onRemovePhoto,
+  hasPhoto,
   loading,
 }: {
   visible: boolean;
   onClose: () => void;
   onPickGallery: () => void;
   onPickCamera: () => void;
+  onRemovePhoto?: () => void;
+  hasPhoto?: boolean;
   loading: boolean;
 }) {
   return (
@@ -230,6 +251,31 @@ function PhotoPickerModal({
           </View>
           <FontAwesome name="camera" size={20} color="#e07a5f" />
         </TouchableOpacity>
+        {hasPhoto ? (
+          <TouchableOpacity
+            style={{
+              backgroundColor: "#fff1ed",
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+            onPress={onRemovePhoto}
+            disabled={loading}
+          >
+            <View>
+              <Text style={{ fontSize: 14, fontWeight: "900", color: "#b64b34" }}>
+                Borrar foto
+              </Text>
+              <Text style={{ fontSize: 12, color: "#8B7355", marginTop: 2 }}>
+                Quita tu foto actual del perfil
+              </Text>
+            </View>
+            <FontAwesome name="trash" size={20} color="#b64b34" />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           style={{
             backgroundColor: "#fdfbf7",
@@ -257,6 +303,7 @@ function EditProfileModal({
   onSave,
   onSelectFromGallery,
   onTakePhoto,
+  onRemovePhoto,
   photoLoading,
 }: {
   visible: boolean;
@@ -269,6 +316,7 @@ function EditProfileModal({
   }) => Promise<void>;
   onSelectFromGallery: () => Promise<void>;
   onTakePhoto: () => Promise<void>;
+  onRemovePhoto: () => void;
   photoLoading: boolean;
 }) {
   const [name, setName] = React.useState(profile?.name ?? "");
@@ -281,9 +329,26 @@ function EditProfileModal({
     if (visible) {
       setName(profile?.name ?? "");
       setUsername(profile?.username ?? "");
+    }
+  }, [visible]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+
+    if (!name && profile?.name) {
+      setName(profile.name);
+    }
+
+    if (!username && profile?.username) {
+      setUsername(profile.username);
+    }
+  }, [visible, profile?.name, profile?.username, name, username]);
+
+  React.useEffect(() => {
+    if (visible) {
       setAvatar(profile?.avatar ?? null);
     }
-  }, [visible, profile]);
+  }, [visible, profile?.avatar]);
 
   const inputStyle = {
     backgroundColor: "#fdfbf7",
@@ -410,9 +475,23 @@ function EditProfileModal({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={async () => {
+                  const trimmedName = name.trim();
+                  const trimmedUsername = username.trim();
+                  if (!trimmedName || !trimmedUsername) {
+                    Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
+                    return;
+                  }
+
                   setSaving(true);
-                  await onSave({ name, username, avatar });
-                  setSaving(false);
+                  try {
+                    await onSave({
+                      name: trimmedName,
+                      username: trimmedUsername,
+                      avatar,
+                    });
+                  } finally {
+                    setSaving(false);
+                  }
                 }}
               disabled={saving}
               style={{
@@ -443,6 +522,12 @@ function EditProfileModal({
           await onTakePhoto();
           setPhotoModal(false);
         }}
+        onRemovePhoto={() => {
+          setAvatar(null);
+          onRemovePhoto();
+          setPhotoModal(false);
+        }}
+        hasPhoto={Boolean(avatar)}
         loading={photoLoading}
       />
     </>
@@ -1005,6 +1090,7 @@ export default function SettingsScreen() {
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
+  const [persistedAvatar, setPersistedAvatar] = React.useState<string | null>(null);
   const [showCameraModal, setShowCameraModal] = React.useState(false);
   const [cameraFacing, setCameraFacing] = React.useState<CameraType>("back");
   const [capturingPhoto, setCapturingPhoto] = React.useState(false);
@@ -1021,6 +1107,68 @@ export default function SettingsScreen() {
     setLanguageOpen(false);
     showToast("Idioma actualizado correctamente");
   };
+
+  const normalizeProfile = (
+    source: any,
+    fallbackUser?: { email?: string | null; user_metadata?: Record<string, any> | null } | null,
+  ) => {
+    const fallbackMetadata = fallbackUser?.user_metadata ?? {};
+    const avatar =
+      source?.avatar ??
+      source?.profilePhoto ??
+      fallbackMetadata?.avatar_url ??
+      null;
+
+    return {
+      ...source,
+      email: source?.email ?? fallbackUser?.email ?? "",
+      name: source?.name ?? fallbackMetadata?.name ?? "",
+      username: source?.username ?? fallbackMetadata?.username ?? "",
+      avatar: avatar || null,
+    };
+  };
+
+  const removeStoredProfilePhoto = async (avatarUrl: string | null | undefined) => {
+    if (!isRemoteAvatarUrl(avatarUrl)) return;
+
+    const storagePath = extractStoragePathFromPublicUrl(avatarUrl);
+    if (!storagePath) return;
+
+    const { error } = await supabase.storage
+      .from(PROFILE_STORAGE_BUCKET)
+      .remove([storagePath]);
+
+    if (error) {
+      console.warn("No se pudo eliminar la foto previa del storage:", error.message);
+    }
+  };
+
+  const loadProfile = React.useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    setCurrentEmail(user.email ?? "");
+
+    try {
+      const res = await apiRequest("/Auth/perfil", { method: "GET" });
+      if (res.ok) {
+        const serverProfile = await res.json();
+        const normalized = normalizeProfile(serverProfile, user);
+        setPersistedAvatar(normalized.avatar);
+        setProfile(normalized);
+        return;
+      }
+    } catch (error) {
+      console.error("No se pudo cargar el perfil desde el backend:", error);
+    }
+
+    const normalized = normalizeProfile({}, user);
+    setPersistedAvatar(normalized.avatar);
+    setProfile(normalized);
+  }, []);
 
   const uploadProfileBinary = async (
     fileData: ArrayBuffer,
@@ -1222,20 +1370,14 @@ export default function SettingsScreen() {
   };
 
   React.useEffect(() => {
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentEmail(user.email ?? "");
-        setProfile({
-          name: user.user_metadata?.name ?? "",
-          username: user.user_metadata?.username ?? "",
-          avatar: user.user_metadata?.avatar_url ?? null,
-        });
-      }
-    })();
-  }, []);
+    void loadProfile();
+  }, [loadProfile]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const handleSaveProfile = async (data: {
     name: string;
@@ -1243,20 +1385,32 @@ export default function SettingsScreen() {
     avatar?: string | null;
   }) => {
     try {
+      const nextAvatar = isRemoteAvatarUrl(data.avatar) ? data.avatar : null;
+      const nextName = data.name.trim();
+      const nextUsername = data.username.trim();
+
+      if (!nextName || !nextUsername) {
+        Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
+        return;
+      }
+
+      let savedProfile: any = null;
+
       // First: update backend app profile record
       try {
         const patchRes = await apiRequest("/Auth/perfil", {
           method: "PATCH",
           body: JSON.stringify({
-            username: data.username,
-            name: data.name,
-            profilePhoto: data.avatar ?? null,
+            username: nextUsername,
+            name: nextName,
+            profilePhoto: nextAvatar === null ? "" : nextAvatar,
           }),
         });
         if (!patchRes.ok) {
           const txt = await patchRes.text().catch(() => "");
           throw new Error(txt || "Error actualizando perfil en el servidor");
         }
+        savedProfile = await patchRes.json().catch(() => null);
       } catch (err: any) {
         console.error("Backend PATCH error:", err);
         Alert.alert("Error", err?.message || "No se pudo actualizar el perfil en el servidor");
@@ -1264,10 +1418,11 @@ export default function SettingsScreen() {
       }
 
       // Then: update Supabase auth user metadata
-      const updateData: any = { name: data.name, username: data.username };
-      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
-        updateData.avatar_url = data.avatar;
-      }
+      const updateData: any = {
+        name: nextName,
+        username: nextUsername,
+        avatar_url: nextAvatar,
+      };
 
       const res = await supabase.auth.updateUser({ data: updateData });
       console.log("supabase.updateUser res:", res);
@@ -1278,12 +1433,26 @@ export default function SettingsScreen() {
       }
 
       // Update local state so Settings shows new values
-      const out: any = { ...profile };
-      out.name = data.name;
-      out.username = data.username;
-      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
-        out.avatar = data.avatar;
+      const out = normalizeProfile(
+        {
+          ...(profile ?? {}),
+          ...(savedProfile ?? {}),
+          name: nextName,
+          username: nextUsername,
+          avatar: nextAvatar,
+          profilePhoto: nextAvatar ?? "",
+        },
+        {
+          email: currentEmail,
+          user_metadata: updateData,
+        },
+      );
+
+      if (persistedAvatar && persistedAvatar !== nextAvatar) {
+        await removeStoredProfilePhoto(persistedAvatar);
       }
+
+      setPersistedAvatar(nextAvatar);
       setProfile(out);
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
@@ -1637,15 +1806,18 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <EditProfileModal
-        visible={editProfileOpen}
-        onClose={() => setEditProfileOpen(false)}
-        profile={profile}
-        onSave={handleSaveProfile}
-        onSelectFromGallery={handleSelectFromGallery}
-        onTakePhoto={handleTakePhoto}
-        photoLoading={photoLoading}
-      />
+    <EditProfileModal
+      visible={editProfileOpen}
+      onClose={() => setEditProfileOpen(false)}
+      profile={profile}
+      onSave={handleSaveProfile}
+      onSelectFromGallery={handleSelectFromGallery}
+      onTakePhoto={handleTakePhoto}
+      onRemovePhoto={() =>
+        setProfile((current: any) => ({ ...(current ?? {}), avatar: null }))
+      }
+      photoLoading={photoLoading}
+    />
       <ChangeEmailModal
         visible={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}
