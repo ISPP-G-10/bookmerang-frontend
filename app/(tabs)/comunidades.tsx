@@ -6,7 +6,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import Header from '@/components/Header';
-import { ConfirmModal } from '@/components/ConfirmationModal';
 import { exploreCommunities, getMyCommunities, joinCommunity, leaveCommunity, deleteCommunity } from '@/lib/communityApi';
 import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
@@ -240,39 +239,56 @@ export default function ComunidadesScreen() {
             )}
 
             <View style={styles.modalActions}>
-              <Pressable 
-                style={styles.leaveBtn} 
+              <Pressable
+                style={styles.leaveBtn}
                 onPress={() => confirmAction('Abandonar', '¿Seguro que quieres abandonar esta comunidad?', handleLeave, true)}
               >
                 <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
               </Pressable>
 
               {isCreator && (
-                <Pressable 
-                  style={styles.deleteBtn} 
+                <Pressable
+                  style={styles.deleteBtn}
                   onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
                 >
                   <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
                 </Pressable>
               )}
             </View>
+
           </View>
         </View>
-      </Modal>
 
-      {/* Confirm Action Modal for Web/Mobile consistency */}
-      <ConfirmModal
-        visible={confirmModalVisible}
-        title={confirmConfig.title}
-        message={confirmConfig.message}
-        confirmLabel="Confirmar"
-        confirmColor={confirmConfig.isDestructive ? 'danger' : 'primary'}
-        onConfirm={async () => {
-          setConfirmModalVisible(false);
-          await confirmConfig.onConfirm();
-        }}
-        onCancel={() => setConfirmModalVisible(false)}
-      />
+          {/* Confirm overlay at modalOverlay level to cover full screen on iOS */}
+          {confirmModalVisible && (
+            <View style={styles.confirmOverlay}>
+              <View style={styles.confirmCard}>
+                <Text style={styles.confirmTitle}>{confirmConfig.title}</Text>
+                <Text style={styles.confirmMessage}>{confirmConfig.message}</Text>
+                <View style={styles.confirmButtons}>
+                  <Pressable
+                    style={styles.confirmSecondaryBtn}
+                    onPress={() => setConfirmModalVisible(false)}
+                  >
+                    <Text style={styles.confirmSecondaryText}>Cancelar</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.confirmPrimaryBtn,
+                      confirmConfig.isDestructive ? styles.confirmDangerBtn : null,
+                    ]}
+                    onPress={async () => {
+                      setConfirmModalVisible(false);
+                      await confirmConfig.onConfirm();
+                    }}
+                  >
+                    <Text style={styles.confirmPrimaryText}>Confirmar</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          )}
+      </Modal>
     </View>
   );
 }
@@ -417,5 +433,70 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  confirmOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 99,
+  },
+  confirmCard: {
+    width: '90%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  confirmTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 16,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  confirmSecondaryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginRight: 8,
+    backgroundColor: '#F3F4F8',
+  },
+  confirmSecondaryText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  confirmPrimaryBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#e4715f',
+  },
+  confirmDangerBtn: {
+    backgroundColor: '#DC2626',
+  },
+  confirmPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
