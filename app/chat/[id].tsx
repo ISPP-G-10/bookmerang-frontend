@@ -244,7 +244,7 @@ export default function ChatDetailScreen() {
   // Título del header
   let headerTitle: string;
   if (chat.type === 'COMMUNITY') {
-    headerTitle = 'Comunidad';
+    headerTitle = chat.name ?? 'Comunidad';
   } else {
     const other = chat.participants.find(
       (p) => p.userId !== currentUserId
