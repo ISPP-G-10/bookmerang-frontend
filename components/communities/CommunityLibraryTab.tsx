@@ -36,7 +36,6 @@ export default function CommunityLibraryTab({ communityId }: Props) {
       setLoading(true);
       setPremiumRequired(false);
       const data = await getCommunityLibrary(communityId, 1, 100);
-      console.log('[Library] Respuesta del backend:', JSON.stringify(data?.[0], null, 2));
       setBooks(data);
     } catch (error: any) {
       if (error.message?.includes('403')) {
