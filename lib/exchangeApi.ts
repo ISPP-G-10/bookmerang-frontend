@@ -23,6 +23,10 @@ async function getAuthHeaders(): Promise<HeadersInit> {
 export async function getExchangeByChatIdWithMatch(chatId: number): Promise<ExchangeWithMatchDto | null> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/exchange/byChat/${chatId}/withMatch`, { headers });
+  
+  if (res.status === 404) {
+    return null;
+  }
 
   if (res.status === 404) {
     return null;

@@ -3,44 +3,43 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
-  ScrollView,
-  Alert,
 } from "react-native";
 
+import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
+import { BookDetail, getBookDetail } from "@/lib/books";
 import {
   sendMessage as apiSendMessage,
   getChat as fetchChat,
   getMessages as fetchMessages,
+  getTypingUsers,
   startTyping,
   stopTyping,
-  getTypingUsers,
 } from "@/lib/chatApi";
+import {
+  acceptExchange,
+  getExchangeByChatIdWithMatch,
+  rejectExchange
+} from "@/lib/exchangeApi";
 import {
   ChatDto,
   ChatParticipantDto,
   MessageDto,
   TypingUserDto,
 } from "@/types/chat";
-import { ExchangeMeetingDto, ExchangeWithMatchDto } from "@/types/exchange";
-import {
-  getExchangeByChatIdWithMatch,
-  acceptExchange,
-  rejectExchange,
-  deleteExchange,
-} from "@/lib/exchangeApi";
-import { getBookDetail, BookDetail } from "@/lib/books";
-import { ConfirmModal } from "@/components/ConfirmationModal";
+import { ExchangeWithMatchDto } from "@/types/exchange";
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -306,8 +305,8 @@ export default function ChatDetailScreen() {
 
   // Título del header
   let headerTitle: string;
-  if (chat.type === "COMMUNITY") {
-    headerTitle = "Comunidad";
+  if (chat.type === 'COMMUNITY') {
+    headerTitle = chat.name ?? 'Comunidad';
   } else {
     const other = chat.participants.find((p) => p.userId !== currentUserId);
     headerTitle = other?.username ?? "Chat";
@@ -847,6 +846,7 @@ export default function ChatDetailScreen() {
           data={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: false })

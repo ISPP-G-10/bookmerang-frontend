@@ -59,9 +59,9 @@ function ChatListItem({
     (p) => p.userId !== currentUserId,
   );
 
-  if (chat.type === "COMMUNITY") {
-    // Usar el nombre del primer participante diferente como fallback
-    displayName = otherParticipant?.username ?? "Comunidad";
+  if (chat.type === 'COMMUNITY') {
+    // Usar el nombre de la comunidad devuelto por el backend
+    displayName = chat.name ?? 'Comunidad';
   } else {
     displayName = otherParticipant?.username ?? "Usuario";
     avatarUrl = otherParticipant?.profilePhoto || null;
@@ -140,10 +140,10 @@ export default function ChatListScreen() {
   const [allChats, setAllChats] = useState<ChatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const TAB_VALUES = ["Nuevos matches", "En curso", "Finalizados"];
-  const [activeTab, setActiveTab] = useState<string>("Nuevos matches");
-  const [search, setSearch] = useState("");
-  const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([]);
+  const TAB_VALUES = ['Comunidades', 'Nuevos matches', 'En curso', 'Finalizados'];
+  const [activeTab, setActiveTab] = useState<string>('Nuevos matches');
+  const [search, setSearch] = useState('');
+  const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([])
 
   const fetchChats = useCallback(async () => {
     try {
@@ -152,12 +152,8 @@ export default function ChatListScreen() {
 
       const data = await getMyChats();
 
-      const exchangeResults = await Promise.all(
-        data.map((c) => getExchangeByChatIdWithMatch(c.id)),
-      );
-      setExchanges(
-        exchangeResults.filter((e): e is ExchangeWithMatchDto => !!e),
-      ); //Si alguno es null no lo incluye
+      const exchangeResults = await Promise.all(data.map(c => getExchangeByChatIdWithMatch(c.id)));
+      setExchanges(exchangeResults.filter((e): e is ExchangeWithMatchDto => e !== null));
 
       // Si aún no conocemos el userId del backend, resolverlo desde los chats
       if (!backendUserId) {
@@ -193,6 +189,10 @@ export default function ChatListScreen() {
   useEffect(() => {
     // filtrar por texto (barra de búsqueda)
     const bySearch = allChats.filter((c) => {
+      if (c.type === 'COMMUNITY') {
+        const name = c.name ?? 'Comunidad';
+        return name.toLowerCase().includes(search.toLowerCase());
+      }
       const other = c.participants.find((p) => p.userId !== currentUserId);
       const name = (other?.username ?? "Usuario desconocido").toLowerCase();
       return name.includes(search.toLowerCase());
@@ -200,12 +200,20 @@ export default function ChatListScreen() {
 
     // filtrar por pestaña
     const byTab = bySearch.filter((chat) => {
+      if (activeTab === 'Comunidades') {
+        return chat.type === 'COMMUNITY';
+      }
+
+      if (chat.type === 'COMMUNITY') {
+        return false;
+      }
+
       const currentExchange = exchanges.find((e) => e.chatId === chat.id);
       return exchangeMatchesTab(currentExchange, activeTab);
     });
 
     setChats(byTab);
-  }, [search, activeTab, allChats, exchanges]);
+  }, [search, activeTab, allChats, exchanges, currentUserId]);
 
   //Función que determina dónde va cada exchange según su estado
   const exchangeMatchesTab = (
