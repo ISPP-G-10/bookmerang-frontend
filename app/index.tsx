@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect } from "react";
-import supabase from "../lib/supabase";
+import { getStoredAuthSession } from "../lib/authSession";
 
 export default function IndexScreen() {
   useEffect(() => {
@@ -9,7 +9,7 @@ export default function IndexScreen() {
 
   const checkAuth = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getStoredAuthSession();
       
       if (session) {
         router.replace("/(tabs)/matcher");

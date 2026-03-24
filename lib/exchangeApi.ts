@@ -1,4 +1,4 @@
-import supabase from '@/lib/supabase';
+import { getAccessToken } from '@/lib/authSession';
 import { ExchangeWithMatchDto } from '@/types/exchange';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
@@ -7,8 +7,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
  * Obtiene el token JWT del usuario autenticado en Supabase.
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  const token = await getAccessToken();
 
   return {
     'Content-Type': 'application/json',
@@ -20,9 +19,17 @@ async function getAuthHeaders(): Promise<HeadersInit> {
  * Obtiene un exchange por el id de su chat asociado, con los atributos de match
  * GET /api/exchange/byChat/{chatId}
  */
-export async function getExchangeByChatIdWithMatch(chatId: number): Promise<ExchangeWithMatchDto> {
+export async function getExchangeByChatIdWithMatch(chatId: number): Promise<ExchangeWithMatchDto | null> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/exchange/byChat/${chatId}/withMatch`, { headers });
+  
+  if (res.status === 404) {
+    return null;
+  }
+
+  if (res.status === 404) {
+    return null;
+  }
 
   if (!res.ok) {
     throw new Error(`Error al obtener exchange con chat id ${chatId}: ${res.status}`);

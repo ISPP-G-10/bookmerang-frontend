@@ -5,7 +5,6 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/authService";
-import supabase from "@/lib/supabase";
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -34,6 +33,7 @@ export default function RegisterScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
 
   const validate = () => {
     if (!email || !password || !username || !name) {
@@ -70,11 +70,10 @@ export default function RegisterScreen() {
         setUserLocation({ latitude: latitud, longitude: longitud });
       }
 
-      // 2) Supabase SignUp
-      await authService.signUp(email, password, name);
-
-      // 3) Backend Profile
+      // 2) Backend Register
       const userData = await authService.registerBackendProfile({
+        email,
+        password,
         username,
         name,
         latitud,
@@ -83,9 +82,10 @@ export default function RegisterScreen() {
 
       if (userData?.id) {
         setBackendUserId(userData.id);
+        setRegisteredUserId(userData.id);
       }
 
-      // 4) Prepare Preferences Modal
+      // 3) Prepare Preferences Modal
       const genres = await authService.fetchGenres();
       setAvailableGenres(genres);
 
@@ -122,14 +122,12 @@ export default function RegisterScreen() {
         preferences.bookLength.includes("0-200") ? "SHORT" :
         preferences.bookLength.includes("400+") ? "LONG" : "MEDIUM";
 
-      // session should be available now after signup
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.user?.id) throw new Error("Sesión no encontrada");
+      const userId = registeredUserId;
+      if (!userId) throw new Error("Sesión no encontrada");
 
-      await authService.updatePreferences(session.user.id, {
-        latitud: latitude,
-        longitud: longitude,
+      await authService.updatePreferences(userId, {
+        latitude,
+        longitude,
         radioKm: preferences.distanceKm || 10,
         extension,
         genreIds,

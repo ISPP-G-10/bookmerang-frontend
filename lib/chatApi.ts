@@ -1,4 +1,4 @@
-import supabase from '@/lib/supabase';
+import { getAccessToken } from '@/lib/authSession';
 import { encryptMessage, decryptMessage } from '@/lib/crypto';
 import {
   ChatDto,
@@ -39,8 +39,7 @@ export function resolveUserIdFromChats(chats: ChatDto[]): string | null {
  * Obtiene el token JWT del usuario autenticado en Supabase.
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  const token = await getAccessToken();
 
   return {
     'Content-Type': 'application/json',

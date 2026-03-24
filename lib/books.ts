@@ -1,8 +1,9 @@
 import { apiRequest } from "./api";
+import { getStoredUserId } from "./authSession";
 import supabase from "./supabase";
 
 export const MIN_BOOK_PHOTOS = 1;
-export const MAX_BOOK_PHOTOS = 5;
+export const MAX_BOOK_PHOTOS = 1;
 
 export type BookListItem = {
   id: number;
@@ -146,11 +147,7 @@ function toDbCover(
 }
 
 async function getCurrentUserId(): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return user?.id ?? null;
+  return getStoredUserId();
 }
 
 function normalizeDraftItem(raw: any): BookDraftSummary {
