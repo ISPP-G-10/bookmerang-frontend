@@ -8,6 +8,23 @@ export interface BookspotNearbyDTO {
   longitude: number;
   isBookdrop: boolean;
   distanceKm: number;
+  /** "Añadido por X" */
+  creatorUsername?: string;
+}
+
+export interface BookspotDTO {
+  id: number;
+  nombre: string;
+  addressText: string;
+  latitude: number;
+  longitude: number;
+  isBookdrop: boolean;
+  status: string;
+  validationCount: number | null;
+  requiredValidations: number;
+  createdAt: string;
+  /** Fecha de validación comunitaria */
+  validatedAt?: string;
 }
 
 export interface BookspotPendingDTO {
@@ -18,9 +35,10 @@ export interface BookspotPendingDTO {
   longitude: number;
   isBookdrop: boolean;
   status: string;
-  validationCount: number;
+  validationCount: number | null;
   requiredValidations: number;
   createdAt: string;
+  validatedAt?: string;
 }
 
 export const MAX_RADIUS_KM = 20;
@@ -65,6 +83,41 @@ export async function createBookspot(data: {
   return res.json();
 }
 
+export async function getRandomPendingBookspot(
+  latitude: number,
+  longitude: number,
+  radiusKm: number,
+): Promise<BookspotDTO | null> {
+  try {
+    const res = await apiRequest(
+      `/bookspots/pending/random?latitude=${latitude}&longitude=${longitude}&radiusKm=${radiusKm}`,
+    );
+    if (res.status === 204) return null;
+    if (!res.ok) {
+      console.warn(`[BookSpots] getRandomPending error ${res.status}`);
+      return null;
+    }
+    return res.json();
+  } catch (e: any) {
+    console.warn("[BookSpots] getRandomPending fetch error:", e?.message ?? e);
+    return null;
+  }
+}
+
+export async function getUserActiveBookspots(): Promise<BookspotPendingDTO[]> {
+  try {
+    const res = await apiRequest(`/bookspots/user/active`);
+    if (!res.ok) {
+      console.warn(`[BookSpots] API error ${res.status}:`, await res.text());
+      return [];
+    }
+    return res.json();
+  } catch (e: any) {
+    console.warn("[BookSpots] fetch error:", e?.message ?? e);
+    return [];
+  }
+}
+
 export async function getUserPendingBookspots(): Promise<BookspotPendingDTO[]> {
   try {
     const res = await apiRequest(`/bookspots/user/pending`);
@@ -85,6 +138,22 @@ export async function deleteBookspot(id: number): Promise<void> {
     const text = await res.text();
     throw new Error(text || `Error ${res.status}`);
   }
+}
+
+/** PATCH /api/bookspots/{id} */
+export async function updateBookspotName(
+  id: number,
+  nombre: string,
+): Promise<BookspotDTO> {
+  const res = await apiRequest(`/bookspots/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ nombre }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Error ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function getAddressFromCoordinates(
