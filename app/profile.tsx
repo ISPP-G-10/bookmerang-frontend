@@ -278,43 +278,6 @@ export default function ProfileScreen() {
 
       if (profileData) {
         await loadLibrary(profileData);
-
-        try {
-          const userId = profileData.id ?? profileData.userId ?? profileData.user_id;
-
-          if (userId) {
-            const prefsRes = await apiRequest(`/users/${userId}/preferences`, {
-              method: "GET",
-            });
-
-              if (prefsRes.ok) {
-                const prefs = await prefsRes.json();
-
-                const bookLengths: string[] = [];
-                if (prefs.extension === "SHORT") bookLengths.push("0-200");
-                else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
-                else if (prefs.extension === "LONG") bookLengths.push("400+");
-
-                const genreNames: string[] = [];
-                if (
-                  prefs.genreIds &&
-                  Array.isArray(prefs.genreIds) &&
-                  loadedGenres.length > 0
-                ) {
-                  prefs.genreIds.forEach((id: number) => {
-                    const genre = loadedGenres.find((g) => g.id === id);
-                    if (genre) genreNames.push(genre.name);
-                  });
-                }
-
-                setPreferences({
-                  distanceKm: prefs.radioKm || 10,
-                  genres: genreNames,
-                  bookLength: bookLengths,
-                });
-              }
-          }
-        } catch {}
       } else {
         await loadLibrary();
       }
@@ -388,6 +351,52 @@ export default function ProfileScreen() {
       }
     } catch (err: any) {
       setPreferencesError(err?.message || "Error al guardar preferencias");
+    } finally {
+      setPreferencesLoading(false);
+    }
+  };
+
+  const handleOpenPreferences = async () => {
+    setPreferencesOpen(true);
+    setPreferencesLoading(true);
+    setPreferencesError("");
+
+    try {
+      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
+      if (!userId) return;
+
+      const prefsRes = await apiRequest(`/users/${userId}/preferences`, {
+        method: "GET",
+      });
+
+      if (prefsRes.ok) {
+        const prefs = await prefsRes.json();
+
+        const bookLengths: string[] = [];
+        if (prefs.extension === "SHORT") bookLengths.push("0-200");
+        else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
+        else if (prefs.extension === "LONG") bookLengths.push("400+");
+
+        const genreNames: string[] = [];
+        if (
+          prefs.genreIds &&
+          Array.isArray(prefs.genreIds) &&
+          availableGenres.length > 0
+        ) {
+          prefs.genreIds.forEach((id: number) => {
+            const genre = availableGenres.find((g) => g.id === id);
+            if (genre) genreNames.push(genre.name);
+          });
+        }
+
+        setPreferences({
+          distanceKm: prefs.radioKm || 10,
+          genres: genreNames,
+          bookLength: bookLengths,
+        });
+      }
+    } catch {
+      // Keep defaults if preferences are not available yet.
     } finally {
       setPreferencesLoading(false);
     }
@@ -766,7 +775,7 @@ export default function ProfileScreen() {
             alignItems: "center",
             backgroundColor: "#ffffff",
           }}
-          onPress={() => setPreferencesOpen(true)}
+          onPress={handleOpenPreferences}
         >
           <Text style={{ color: "#e07a5f", fontWeight: "900", fontSize: 15 }}>
             Editar Preferencias

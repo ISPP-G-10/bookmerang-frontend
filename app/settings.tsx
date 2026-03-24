@@ -63,6 +63,15 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
   }
 };
 
+const toImageDataUrl = (value: string, mimeType?: string): string => {
+  const trimmed = value.trim();
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `data:${mimeType ?? "image/jpeg"};base64,${trimmed}`;
+};
+
 const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1248,8 +1257,12 @@ export default function SettingsScreen() {
   const uploadProfilePhoto = async (
     asset: ImagePicker.ImagePickerAsset,
   ): Promise<string> => {
-    if (asset.base64) {
-      return `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`;
+    if (typeof asset.base64 === "string" && asset.base64.trim().length > 0) {
+      return toImageDataUrl(asset.base64, asset.mimeType);
+    }
+
+    if (typeof asset.uri === "string" && /^data:image\//i.test(asset.uri)) {
+      return asset.uri;
     }
 
     const extension = resolveFileExtension(asset);
@@ -1392,22 +1405,12 @@ export default function SettingsScreen() {
     try {
       const captured = await cameraRef.current.takePictureAsync({
         quality: 0.8,
-        base64: true,
       });
       if (captured?.uri) {
-        const dataUrl =
-          captured.base64 != null
-            ? `data:image/jpeg;base64,${captured.base64}`
-            : null;
-        const asset = {
-          uri: captured.uri,
-          base64: captured.base64,
-          mimeType: "image/jpeg",
-          width: (captured as any).width ?? 0,
-          height: (captured as any).height ?? 0,
-        } as ImagePicker.ImagePickerAsset;
-
-        const publicUrl = dataUrl ?? (await uploadProfilePhoto(asset));
+         const publicUrl = await uploadProfilePhoto({
+           ...captured,
+           mimeType: "image/jpeg",
+         } as ImagePicker.ImagePickerAsset);
         hasUnsavedProfileDraft.current = true;
         setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
         showToast("Foto de perfil actualizada");
