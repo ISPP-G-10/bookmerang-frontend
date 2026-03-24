@@ -1,4 +1,4 @@
-import { fetchMyBackendUserId } from '@/lib/api';
+import { fetchMyBackendUser } from '@/lib/api';
 import { clearStoredAuthSession, getStoredAuthSession } from '@/lib/authSession';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
@@ -23,6 +23,9 @@ interface AuthContextType {
   /** ID utilizable para identificar al usuario actual. */
   currentUserId: string | null;
 
+  /** Plan de pricing del usuario ('FREE' | 'PREMIUM') */
+  userPlan: string;
+
   /** true mientras se está comprobando la sesión inicial */
   loading: boolean;
 
@@ -37,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   backendUserId: null,
   currentUserId: null,
+  userPlan: 'FREE',
   loading: true,
   setBackendUserId: () => {},
   signOut: async () => {},
@@ -49,6 +53,7 @@ const storageKey = (userId: string) => `backendUserId_${userId}`;
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<any | null>(null);
   const [backendUserId, setBackendUserIdState] = useState<string | null>(null);
+  const [userPlan, setUserPlan] = useState<string>('FREE');
   const [loading, setLoading] = useState(true);
 
   const safeGetStorageItem = useCallback(async (key: string): Promise<string | null> => {
@@ -95,25 +100,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace('/login' as any);
   }, [safeRemoveStorageItem, session]);
 
-  // Intenta resolver el backendUserId desde el backend o desde AsyncStorage
+  // Intenta resolver el backendUserId y plan desde el backend o desde AsyncStorage
   const resolveBackendUserId = useCallback(async (userId: string) => {
     // Primero intentar desde AsyncStorage
     const stored = await safeGetStorageItem(storageKey(userId));
     if (stored) {
       setBackendUserIdState(stored);
-      return;
     }
-    // Si no hay almacenado, intentar llamar al backend
-    let resolved: string | null = null;
+    // Siempre llamar al backend para obtener el plan actualizado
     try {
-      resolved = await fetchMyBackendUserId();
+      const backendUser = await fetchMyBackendUser();
+      if (backendUser) {
+        setBackendUserIdState(backendUser.id);
+        setUserPlan(backendUser.plan);
+        await safeSetStorageItem(storageKey(userId), backendUser.id);
+      }
     } catch (error) {
-      console.warn('[AuthContext] fetchMyBackendUserId failed:', error);
-    }
-
-    if (resolved) {
-      setBackendUserIdState(resolved);
-      await safeSetStorageItem(storageKey(userId), resolved);
+      console.warn('[AuthContext] fetchMyBackendUser failed:', error);
     }
   }, [safeGetStorageItem, safeSetStorageItem]);
 
@@ -149,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, backendUserId, currentUserId, loading, setBackendUserId, signOut }}
+      value={{ session, backendUserId, currentUserId, userPlan, loading, setBackendUserId, signOut }}
     >
       {children}
     </AuthContext.Provider>

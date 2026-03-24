@@ -27,10 +27,6 @@ export async function getExchangeByChatIdWithMatch(chatId: number): Promise<Exch
     return null;
   }
 
-  if (res.status === 404) {
-    return null;
-  }
-
   if (!res.ok) {
     throw new Error(`Error al obtener exchange con chat id ${chatId}: ${res.status}`);
   }

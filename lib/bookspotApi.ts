@@ -44,6 +44,17 @@ export interface BookspotPendingDTO {
 export const MAX_RADIUS_KM = 20;
 export const DEFAULT_RADIUS_KM = 1;
 
+export async function getBookspotById(id: number): Promise<BookspotDTO> {
+  const res = await apiRequest(`/bookspots/${id}`);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al obtener el bookspot: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
 export async function getNearbyBookspots(
   latitude: number,
   longitude: number,
