@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   Pressable,
   Text,
@@ -25,6 +26,14 @@ import {
 } from "react-native";
 
 import { WebView } from "react-native-webview";
+
+// FAB: bottom: 20, height: 52 → center at bottom: 46
+// LocationButton height ≈ 40 → bottom: 26 so its center is also at bottom: 46
+const FAB_BOTTOM = 20;
+const FAB_HEIGHT = 52;
+const FAB_CENTER = FAB_BOTTOM + FAB_HEIGHT / 2; // 46
+const LOC_BTN_HEIGHT = 40;
+const LOC_BTN_BOTTOM = FAB_CENTER - LOC_BTN_HEIGHT / 2; // 26
 
 export default function BookSpotsScreen() {
   const [location, setLocation] = useState<{
@@ -39,6 +48,8 @@ export default function BookSpotsScreen() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [pendingModalOpen, setPendingModalOpen] = useState(false);
   const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [locationBtnVisible, setLocationBtnVisible] = useState(false);
+
   const [pickedLocation, setPickedLocation] = useState<{
     lat: number;
     lng: number;
@@ -141,7 +152,6 @@ export default function BookSpotsScreen() {
     [sendToMap],
   );
 
-  // Fetch the user's own pending spots and paint them on the map with the amber icon
   const fetchUserPending = useCallback(async () => {
     try {
       const pending = await getUserPendingBookspots();
@@ -167,73 +177,71 @@ export default function BookSpotsScreen() {
     }
   }, [fetchNearby, fetchUserPending]);
 
+  // Shared message handler logic
+  const handleMapMessage = useCallback(
+    (msg: any) => {
+      if (msg.type === "mapModalOpen") {
+        setMapModalOpen(true);
+        return;
+      }
+      if (msg.type === "mapModalClose") {
+        setMapModalOpen(false);
+        return;
+      }
+      if (msg.type === "locationButtonVisible") {
+        setLocationBtnVisible(msg.visible);
+        return;
+      }
+      if (msg.type === "openUrl") {
+        if (Platform.OS === "web") {
+          window.open(msg.url, "_blank");
+        } else {
+          Linking.openURL(msg.url);
+        }
+        return;
+      }
+      if (msg.type === "viewChange") {
+        if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+        fetchDebounceRef.current = setTimeout(
+          () => fetchNearby(msg.lat, msg.lng, msg.radiusKm),
+          600,
+        );
+        return;
+      }
+      if (msg.type === "pickLocation") {
+        (async () => {
+          const address = await getAddressFromCoordinates(msg.lat, msg.lng);
+          setPickedLocation({ lat: msg.lat, lng: msg.lng, address });
+          setCreateModalOpen(true);
+        })();
+      }
+    },
+    [fetchNearby],
+  );
+
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const handleMessage = (event: MessageEvent) => {
       try {
         const msg =
           typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (msg.type === "mapModalOpen") {
-          setMapModalOpen(true);
-          return;
-        }
-        if (msg.type === "mapModalClose") {
-          setMapModalOpen(false);
-          return;
-        }
-        if (msg.type === "viewChange") {
-          if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
-          fetchDebounceRef.current = setTimeout(
-            () => fetchNearby(msg.lat, msg.lng, msg.radiusKm),
-            600,
-          );
-        }
-        if (msg.type === "pickLocation") {
-          (async () => {
-            const address = await getAddressFromCoordinates(msg.lat, msg.lng);
-            setPickedLocation({ lat: msg.lat, lng: msg.lng, address });
-            setCreateModalOpen(true);
-          })();
-        }
+        handleMapMessage(msg);
       } catch {}
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [fetchNearby]);
+  }, [handleMapMessage]);
 
   const handleNativeMessage = useCallback(
     (event: any) => {
       try {
         const msg = JSON.parse(event.nativeEvent.data);
-        if (msg.type === "mapModalOpen") {
-          setMapModalOpen(true);
-          return;
-        }
-        if (msg.type === "mapModalClose") {
-          setMapModalOpen(false);
-          return;
-        }
-        if (msg.type === "viewChange") {
-          if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
-          fetchDebounceRef.current = setTimeout(
-            () => fetchNearby(msg.lat, msg.lng, msg.radiusKm),
-            600,
-          );
-        }
-        if (msg.type === "pickLocation") {
-          (async () => {
-            const address = await getAddressFromCoordinates(msg.lat, msg.lng);
-            setPickedLocation({ lat: msg.lat, lng: msg.lng, address });
-            setCreateModalOpen(true);
-          })();
-        }
+        handleMapMessage(msg);
       } catch {}
     },
-    [fetchNearby],
+    [handleMapMessage],
   );
 
-  // Re-send pending spots to map whenever the pending modal closes
-  // (user may have deleted one)
   const handlePendingModalClose = useCallback(() => {
     setPendingModalOpen(false);
     fetchUserPending();
@@ -271,17 +279,89 @@ export default function BookSpotsScreen() {
   const anyModalOpen =
     menuOpen || createModalOpen || pendingModalOpen || mapModalOpen;
 
+  // "Mi ubicación" button — centro alineado con el centro del FAB
+  const LocationButton =
+    locationBtnVisible && !anyModalOpen ? (
+      <Pressable
+        onPress={() => sendToMap("backToUserLocation()")}
+        style={({ pressed }) => ({
+          position: "absolute",
+          bottom: LOC_BTN_BOTTOM,
+          left: 16,
+          height: LOC_BTN_HEIGHT,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          backgroundColor: "white",
+          borderRadius: 12,
+          paddingHorizontal: 14,
+          elevation: 4,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.14,
+          shadowRadius: 6,
+          borderWidth: 1,
+          borderColor: "rgba(0,0,0,0.06)",
+          opacity: pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.97 : 1 }],
+          zIndex: 10,
+        })}
+      >
+        {/* crosshair icon */}
+        <View
+          style={{
+            width: 15,
+            height: 15,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              width: 9,
+              height: 9,
+              borderRadius: 4.5,
+              borderWidth: 2,
+              borderColor: "#3b82f6",
+            }}
+          />
+          <View
+            style={{
+              position: "absolute",
+              width: 1.5,
+              height: 15,
+              backgroundColor: "#3b82f6",
+              opacity: 0.5,
+            }}
+          />
+          <View
+            style={{
+              position: "absolute",
+              width: 15,
+              height: 1.5,
+              backgroundColor: "#3b82f6",
+              opacity: 0.5,
+            }}
+          />
+        </View>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d405b" }}>
+          Mi ubicación
+        </Text>
+      </Pressable>
+    ) : null;
+
   // FAB: map-marker icon + small "+" badge
   const AddButton = (
     <Pressable
       onPress={() => setMenuOpen(true)}
       style={{
         position: "absolute",
-        bottom: 20,
+        bottom: FAB_BOTTOM,
         right: 20,
-        width: 52,
-        height: 52,
-        borderRadius: 26,
+        width: FAB_HEIGHT,
+        height: FAB_HEIGHT,
+        borderRadius: FAB_HEIGHT / 2,
         backgroundColor: "#e07a5f",
         alignItems: "center",
         justifyContent: "center",
@@ -334,6 +414,7 @@ export default function BookSpotsScreen() {
             onLoad={handleIframeLoad}
             style={{ width: "100%", height: "100%", border: "none" }}
           />
+          {LocationButton}
           {AddButton}
         </View>
         <BookSpotActionMenu
@@ -349,7 +430,6 @@ export default function BookSpotsScreen() {
           visible={createModalOpen}
           onClose={() => {
             setCreateModalOpen(false);
-            // Refresh pending pins after a new proposal
             fetchUserPending();
           }}
           pickedLocation={pickedLocation}
@@ -379,6 +459,7 @@ export default function BookSpotsScreen() {
           onLoad={handleWebViewLoad}
           onMessage={handleNativeMessage}
         />
+        {LocationButton}
         {AddButton}
       </View>
       <BookSpotActionMenu

@@ -23,15 +23,80 @@ export function getMapHtml(lat: number, lng: number): string {
             color: white !important; font-weight: 700 !important; font-size: 13px !important;
           }
 
-          #radiusBadge {
+          /* ── badge centrado ── */
+          #radiusBadgeWrap {
             position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
-            background: white; border-radius: 24px; padding: 7px 14px 7px 10px;
+            z-index: 1000; pointer-events: auto;
+            transition: opacity 0.2s ease;
+          }
+          #radiusBadgeWrap.hidden { opacity: 0; pointer-events: none; }
+
+          #radiusBadge {
+            background: white; border-radius: 24px; padding: 7px 13px 7px 10px;
             font-size: 12px; font-weight: 600; color: #3d405b; font-family: sans-serif;
-            z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.13); pointer-events: none;
-            white-space: nowrap; display: flex; align-items: center; gap: 7px;
-            border: 1px solid rgba(0,0,0,0.06); max-width: 85vw;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.13);
+            white-space: nowrap; display: flex; align-items: center; gap: 6px;
+            border: 1px solid rgba(0,0,0,0.06);
           }
           #radiusBadge .bdot { width: 8px; height: 8px; background: #e07a5f; border-radius: 50%; flex-shrink: 0; }
+
+          /* ── filter pill + dropdown (fijo a la derecha) ── */
+          #filterWrap {
+            position: fixed; top: 12px; right: 12px;
+            z-index: 1000;
+            transition: opacity 0.2s ease;
+          }
+          #filterWrap.hidden { opacity: 0; pointer-events: none; }
+
+          #filterPill {
+            display: flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px;
+            border: 1.5px solid rgba(0,0,0,0.08); border-radius: 50%;
+            background: white; cursor: pointer;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+            transition: border-color 0.15s, background 0.15s;
+          }
+          #filterPill.has-inactive {
+            background: #fff8f6; border-color: rgba(224,122,95,0.35);
+          }
+          #filterPill.has-inactive svg { stroke: #e07a5f; }
+
+          #filterDropdown {
+            position: absolute; top: calc(100% + 7px); right: 0;
+            background: white; border-radius: 14px; padding: 5px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.14); border: 1px solid rgba(0,0,0,0.07);
+            min-width: 168px; display: none; flex-direction: column; gap: 2px;
+            z-index: 1010;
+          }
+          #filterDropdown.open { display: flex; }
+
+          .filter-row {
+            display: flex; align-items: center; gap: 9px;
+            padding: 9px 10px; border-radius: 10px; cursor: pointer;
+            transition: background 0.12s;
+          }
+          .filter-row:hover { background: #f7f5f2; }
+          .filter-row .fr-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+          }
+          .filter-row .fr-label {
+            flex: 1; font-size: 12px; font-weight: 700; color: #3d405b; font-family: sans-serif;
+          }
+          .filter-row .fr-check {
+            width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid #ddd;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            transition: background 0.12s, border-color 0.12s;
+          }
+          .filter-row.checked-spot .fr-check {
+            background: #e07a5f; border-color: #e07a5f;
+          }
+          .filter-row.checked-drop .fr-check {
+            background: #f97316; border-color: #f97316;
+          }
+          .filter-row .fr-check svg { display: none; }
+          .filter-row.checked-spot .fr-check svg,
+          .filter-row.checked-drop .fr-check svg { display: block; }
 
           #tooFarBanner {
             position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
@@ -43,7 +108,7 @@ export function getMapHtml(lat: number, lng: number): string {
           #tooFarBanner.visible { display: flex; }
           #tooFarBanner .bdot { width: 8px; height: 8px; background: rgba(255,255,255,0.45); border-radius: 50%; flex-shrink: 0; }
 
-          /* ── user location modal ── */
+          /* ── modals ── */
           #userModalOverlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.25); z-index: 2000; align-items: flex-end;
@@ -67,7 +132,6 @@ export function getMapHtml(lat: number, lng: number): string {
             cursor: pointer; margin-top: 20px;
           }
 
-          /* ── active bookspot modal ── */
           .modal-overlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.35); z-index: 2000; align-items: flex-end;
@@ -113,7 +177,6 @@ export function getMapHtml(lat: number, lng: number): string {
           }
           .btn-close { width: 100%; padding: 10px; background: transparent; color: #9e9aad; border: none; font-size: 14px; cursor: pointer; }
 
-          /* ── pending bookspot modal ── */
           #pendingModalOverlay {
             display: none; position: fixed; inset: 0;
             background: rgba(0,0,0,0.35); z-index: 2000; align-items: flex-end;
@@ -140,7 +203,60 @@ export function getMapHtml(lat: number, lng: number): string {
       </head>
       <body>
         <div id="map"></div>
-        <div id="radiusBadge"><span class="bdot"></span><span id="radiusText">Cargando BookSpots...</span></div>
+
+        <!-- Badge centrado -->
+        <div id="radiusBadgeWrap">
+          <div id="radiusBadge">
+            <span class="bdot"></span>
+            <span id="radiusText">Cargando BookSpots...</span>
+          </div>
+        </div>
+
+        <!-- Filtro fijo a la derecha -->
+        <div id="filterWrap">
+          <div style="position: relative;">
+            <button id="filterPill" onclick="toggleFilterDropdown()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3d405b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+              </svg>
+            </button>
+
+            <div id="filterDropdown">
+              <!-- BookSpot row -->
+              <div class="filter-row checked-spot" id="rowSpot" onclick="toggleFilter('spot')">
+                <div class="fr-icon" style="background:#fdf0ec;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e07a5f" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  </svg>
+                </div>
+                <span class="fr-label">BookSpot</span>
+                <div class="fr-check">
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="2 6 5 9 10 3"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- BookDrop row -->
+              <div class="filter-row checked-drop" id="rowDrop" onclick="toggleFilter('drop')">
+                <div class="fr-icon" style="background:#fff3eb;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  </svg>
+                </div>
+                <span class="fr-label">BookDrop</span>
+                <div class="fr-check">
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="2 6 5 9 10 3"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div id="tooFarBanner"><span class="bdot"></span><span>Acerca el zoom para ver BookSpots</span></div>
 
         <!-- User location modal -->
@@ -164,7 +280,7 @@ export function getMapHtml(lat: number, lng: number): string {
         <div class="modal-overlay" id="modalOverlay">
           <div class="modal">
             <div class="modal-handle"></div>
-            <div class="modal-type-badge">BookSpot</div>
+            <div class="modal-type-badge" id="modalTypeBadge">BookSpot</div>
             <div class="modal-title" id="modalTitle"></div>
             <div class="modal-address">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9e9aad" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -205,7 +321,7 @@ export function getMapHtml(lat: number, lng: number): string {
           </div>
         </div>
 
-        <!-- Pending bookspot modal (my proposals) -->
+        <!-- Pending bookspot modal -->
         <div id="pendingModalOverlay">
           <div id="pendingModal">
             <div class="modal-handle"></div>
@@ -218,7 +334,6 @@ export function getMapHtml(lat: number, lng: number): string {
               <span id="pendingModalAddress"></span>
             </div>
 
-            <!-- Validation progress -->
             <div style="background:#fffbf0;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:16px">
               <div style="font-size:11px;font-weight:900;letter-spacing:1px;color:#f59e0b;text-transform:uppercase;margin-bottom:8px">
                 Progreso de validaciones
@@ -253,8 +368,12 @@ export function getMapHtml(lat: number, lng: number): string {
           let routeWalk = { distanceM: null, durationS: null, geometry: null };
           let isPicking = false;
           let pickedMarker = null;
+          let allSpots = [];
+          let filterSpot = true;
+          let filterDrop = true;
+          let filterDropdownOpen = false;
 
-          // Separate layer for user's own pending spots (not clustered)
+          const BACK_BTN_THRESHOLD_M = 300;
           const pendingLayer = L.layerGroup().addTo(map);
 
           function postToRN(message) {
@@ -263,6 +382,79 @@ export function getMapHtml(lat: number, lng: number): string {
             } else if (window.parent !== window) {
               window.parent.postMessage(message, '*');
             }
+          }
+
+          function formatDistKm(km) { return km.toFixed(1) + ' km'; }
+          function formatDistM(m) { return (m / 1000).toFixed(1) + ' km'; }
+
+          function hideTopBar() {
+            document.getElementById('radiusBadgeWrap').classList.add('hidden');
+            document.getElementById('filterWrap').classList.add('hidden');
+          }
+          function showTopBar() {
+            document.getElementById('radiusBadgeWrap').classList.remove('hidden');
+            document.getElementById('filterWrap').classList.remove('hidden');
+          }
+
+          /* ── Filter dropdown ── */
+          function toggleFilterDropdown() {
+            filterDropdownOpen = !filterDropdownOpen;
+            document.getElementById('filterDropdown').classList.toggle('open', filterDropdownOpen);
+          }
+
+          // Close dropdown when clicking outside
+          document.addEventListener('click', function(e) {
+            var wrap = document.getElementById('filterWrap');
+            if (filterDropdownOpen && !wrap.contains(e.target)) {
+              filterDropdownOpen = false;
+              document.getElementById('filterDropdown').classList.remove('open');
+            }
+          });
+
+          function updateFilterPill() {
+            var pill = document.getElementById('filterPill');
+            pill.classList.toggle('has-inactive', !filterSpot || !filterDrop);
+          }
+
+          function toggleFilter(type) {
+            if (type === 'spot') {
+              if (filterSpot && !filterDrop) return; // prevent deactivating both
+              filterSpot = !filterSpot;
+              document.getElementById('rowSpot').classList.toggle('checked-spot', filterSpot);
+            } else {
+              if (filterDrop && !filterSpot) return;
+              filterDrop = !filterDrop;
+              document.getElementById('rowDrop').classList.toggle('checked-drop', filterDrop);
+            }
+            updateFilterPill();
+            repaintSpots();
+          }
+
+          function repaintSpots() {
+            clusterGroup.clearLayers();
+            if (!allSpots || allSpots.length === 0) return;
+            allSpots.forEach(function(spot) {
+              var isBookdrop = spot.isBookdrop ?? spot.IsBookdrop ?? false;
+              if (isBookdrop && !filterDrop) return;
+              if (!isBookdrop && !filterSpot) return;
+              var m = L.marker(
+                [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
+                { icon: isBookdrop ? createBookdropIcon() : createSpotIcon() }
+              ).on('click', function() { openModal(spot); });
+              clusterGroup.addLayer(m);
+            });
+            updateRadiusBadge();
+          }
+
+          /* ── Back to location — notifies TypeScript layer ── */
+          function updateLocationButtonVisibility() {
+            var center = map.getCenter();
+            var distToUser = map.distance([center.lat, center.lng], [userLat, userLng]);
+            postToRN(JSON.stringify({ type: 'locationButtonVisible', visible: distToUser > BACK_BTN_THRESHOLD_M }));
+          }
+
+          function backToUserLocation() {
+            map.setView([userLat, userLng], 17, { animate: true });
           }
 
           /* ── Icons ── */
@@ -277,6 +469,7 @@ export function getMapHtml(lat: number, lng: number): string {
             });
           }
 
+          // BookSpot — salmon, 32×42
           function createSpotIcon() {
             return L.divIcon({
               className: '',
@@ -293,23 +486,34 @@ export function getMapHtml(lat: number, lng: number): string {
             });
           }
 
-          // Pending (user's own proposals): amber outline pin with clock icon
+          // BookDrop — vivid orange (#f97316), bigger pin 40×52
+          function createBookdropIcon() {
+            return L.divIcon({
+              className: '',
+              html: \`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
+                <path d="M20 0 C8.954 0 0 8.954 0 20 C0 35 20 52 20 52 C20 52 40 35 40 20 C40 8.954 31.046 0 20 0Z"
+                  fill="#f97316" stroke="white" stroke-width="2.5"/>
+                <svg x="10" y="6" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                  stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </svg>\`,
+              iconSize: [40, 52], iconAnchor: [20, 52], popupAnchor: [0, -52],
+            });
+          }
+
           function createPendingIcon() {
             return L.divIcon({
               className: '',
               html: \`<svg xmlns="http://www.w3.org/2000/svg" width="34" height="46" viewBox="0 0 34 46">
-                <!-- drop shadow -->
                 <ellipse cx="17" cy="44" rx="6" ry="2.2" fill="rgba(0,0,0,0.18)"/>
-                <!-- pin body -->
                 <path d="M17 0 C8.163 0 1 7.163 1 16 C1 29 17 44 17 44 C17 44 33 29 33 16 C33 7.163 25.837 0 17 0Z"
                   fill="#f59e0b"/>
-                <!-- white inner circle -->
                 <circle cx="17" cy="15.5" r="9" fill="rgba(255,255,255,0.22)"/>
-                <!-- bookmark / pending icon: hourglass shape in white -->
                 <svg x="9" y="6" width="16" height="19" viewBox="0 0 24 24" fill="none"
                   stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 22h14"/>
-                  <path d="M5 2h14"/>
+                  <path d="M5 22h14"/><path d="M5 2h14"/>
                   <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/>
                   <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
                 </svg>
@@ -319,8 +523,7 @@ export function getMapHtml(lat: number, lng: number): string {
           }
 
           const userMarker = L.marker([${lat}, ${lng}], { icon: createUserIcon() })
-            .addTo(map)
-            .on('click', openUserModal);
+            .addTo(map).on('click', openUserModal);
 
           /* ── User location modal ── */
           async function openUserModal() {
@@ -362,47 +565,52 @@ export function getMapHtml(lat: number, lng: number): string {
             return typeof d === 'number' && isFinite(d) ? d : 0;
           }
 
-          function updateBookspots(spots, radiusKm) {
-            clusterGroup.clearLayers();
-            document.getElementById('tooFarBanner').classList.remove('visible');
-
-            if (!spots || spots.length === 0) {
+          function updateRadiusBadge() {
+            if (allSpots.length === 0) return;
+            var bounds = map.getBounds();
+            var visibleSpots = allSpots.filter(function(spot) {
+              var lat = spot.latitude ?? spot.Latitude;
+              var lng = spot.longitude ?? spot.Longitude;
+              return bounds.contains(L.latLng(lat, lng));
+            });
+            if (visibleSpots.length === 0) {
               document.getElementById('radiusText').textContent = 'Sin BookSpots cerca';
               return;
             }
-
-            var maxDist = Math.max.apply(null, spots.map(getDistKm));
-            var maxDistText = maxDist < 1
-              ? Math.round(maxDist * 1000) + ' m'
-              : maxDist.toFixed(1) + ' km';
+            var maxDist = Math.max.apply(null, visibleSpots.map(function(spot) {
+              var lat = spot.latitude ?? spot.Latitude;
+              var lng = spot.longitude ?? spot.Longitude;
+              return (map.distance([userLat, userLng], [lat, lng]) / 1000) * 1.3;
+            }));
             document.getElementById('radiusText').textContent =
-              'BookSpots hasta ' + maxDistText + ' de ti';
-
-            spots.forEach(function(spot) {
-              var m = L.marker(
-                [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
-                { icon: createSpotIcon() }
-              ).on('click', function() { openModal(spot); });
-              clusterGroup.addLayer(m);
-            });
+              'BookSpots hasta ' + formatDistKm(maxDist) + ' de ti';
           }
 
-          /* ── User's pending spots ── */
+          function updateBookspots(spots, radiusKm) {
+            allSpots = spots || [];
+            document.getElementById('tooFarBanner').classList.remove('visible');
+            if (!spots || spots.length === 0) {
+              clusterGroup.clearLayers();
+              document.getElementById('radiusText').textContent = 'Sin BookSpots cerca';
+              return;
+            }
+            repaintSpots();
+          }
+
           function updateUserPendingSpots(spots) {
             pendingLayer.clearLayers();
             if (!spots || spots.length === 0) return;
-
             spots.forEach(function(spot) {
               L.marker(
                 [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
                 { icon: createPendingIcon() }
-              ).on('click', function() { openPendingModal(spot); })
-              .addTo(pendingLayer);
+              ).on('click', function() { openPendingModal(spot); }).addTo(pendingLayer);
             });
           }
 
           function openPendingModal(spot) {
             postToRN(JSON.stringify({ type: 'mapModalOpen' }));
+            hideTopBar();
             var nombre = spot.nombre ?? spot.Nombre ?? '';
             var address = spot.addressText ?? spot.AddressText ?? '';
             var validation = spot.validationCount ?? 0;
@@ -410,7 +618,6 @@ export function getMapHtml(lat: number, lng: number): string {
             var remaining = required - validation;
             var pct = Math.min((validation / required) * 100, 100).toFixed(0);
             var created = spot.createdAt ?? spot.CreatedAt ?? '';
-
             document.getElementById('pendingModalTitle').textContent = nombre;
             document.getElementById('pendingModalAddress').textContent = address;
             document.getElementById('pendingProgressFill').style.width = pct + '%';
@@ -422,56 +629,45 @@ export function getMapHtml(lat: number, lng: number): string {
                 : '✓ ¡Listo para activarse!';
             document.getElementById('pendingCreatedAt').textContent =
               created ? 'Propuesto el ' + new Date(created).toLocaleDateString('es-ES') : '';
-
             document.getElementById('pendingModalOverlay').classList.add('active');
           }
 
           function closePendingModal() {
             postToRN(JSON.stringify({ type: 'mapModalClose' }));
             document.getElementById('pendingModalOverlay').classList.remove('active');
+            showTopBar();
           }
 
           function showTooFarMessage() {
+            allSpots = [];
             clusterGroup.clearLayers();
             document.getElementById('tooFarBanner').classList.add('visible');
             document.getElementById('radiusText').textContent = '';
           }
 
-          /* ── Pick mode ── */
           function enablePickMode() { isPicking = true; }
-
           function disablePickMode() {
             isPicking = false;
-            if (pickedMarker) {
-              try { map.removeLayer(pickedMarker); } catch(e) {}
-              pickedMarker = null;
-            }
+            if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} pickedMarker = null; }
           }
 
           map.on('click', function(e) {
             if (!isPicking) return;
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
+            const lat = e.latlng.lat; const lng = e.latlng.lng;
             if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} pickedMarker = null; }
             pickedMarker = L.marker([lat, lng], { icon: createSpotIcon() }).addTo(map);
             postToRN(JSON.stringify({ type: 'pickLocation', lat, lng }));
             isPicking = false;
           });
 
-          /* ── View change ── */
           function emitViewChange() {
             const center = map.getCenter();
             const ne = map.getBounds().getNorthEast();
             const radiusKm = map.distance(center, ne) / 1000;
             postToRN(JSON.stringify({ type: 'viewChange', lat: center.lat, lng: center.lng, radiusKm }));
           }
-          map.on('zoomend', emitViewChange);
-          map.on('moveend', emitViewChange);
-
-          /* ── Active spot modal ── */
-          function formatDist(m) {
-            return m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
-          }
+          map.on('zoomend', function() { emitViewChange(); updateRadiusBadge(); updateLocationButtonVisibility(); });
+          map.on('moveend', function() { emitViewChange(); updateRadiusBadge(); updateLocationButtonVisibility(); });
 
           function renderModeStats() {
             var r = currentMode === 'car' ? routeCar : routeWalk;
@@ -482,7 +678,7 @@ export function getMapHtml(lat: number, lng: number): string {
               timeEl.className = 'stat-value loading'; timeEl.textContent = '';
               return;
             }
-            distEl.className = 'stat-value'; distEl.textContent = formatDist(r.distanceM);
+            distEl.className = 'stat-value'; distEl.textContent = formatDistM(r.distanceM);
             timeEl.className = 'stat-value'; timeEl.textContent = Math.round(r.durationS / 60) + ' min';
           }
 
@@ -517,14 +713,20 @@ export function getMapHtml(lat: number, lng: number): string {
             routeCar  = { distanceM: null, durationS: null, geometry: null };
             routeWalk = { distanceM: null, durationS: null, geometry: null };
 
+            var isBookdrop = spot.isBookdrop ?? spot.IsBookdrop ?? false;
+            var badge = document.getElementById('modalTypeBadge');
+            badge.textContent = isBookdrop ? 'BookDrop' : 'BookSpot';
+            badge.style.background = isBookdrop ? '#fff3eb' : '#fdf0ec';
+            badge.style.color = isBookdrop ? '#f97316' : '#e07a5f';
+
             document.getElementById('btnWalk').classList.add('active');
             document.getElementById('btnCar').classList.remove('active');
             document.getElementById('modalTitle').textContent = spot.nombre ?? spot.Nombre;
             document.getElementById('modalAddress').textContent = spot.addressText ?? spot.AddressText;
             renderModeStats();
+            hideTopBar();
             postToRN(JSON.stringify({ type: 'mapModalOpen' }));
             document.getElementById('modalOverlay').classList.add('active');
-
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
 
             var spotLat = spot.latitude ?? spot.Latitude;
@@ -535,7 +737,7 @@ export function getMapHtml(lat: number, lng: number): string {
               if (result) { routeWalk = result; }
               else {
                 var dKm = getDistKm(spot);
-                routeWalk.distanceM = dKm * 1000 * 1.2;
+                routeWalk.distanceM = dKm * 1000 * 1.3;
                 routeWalk.durationS = routeWalk.distanceM / 83 * 60;
               }
               if (currentMode === 'walk') {
@@ -563,8 +765,8 @@ export function getMapHtml(lat: number, lng: number): string {
             postToRN(JSON.stringify({ type: 'mapModalClose' }));
             document.getElementById('modalOverlay').classList.remove('active');
             if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-            map.setView([userLat, userLng], map.getZoom());
             selectedSpot = null;
+            showTopBar();
           }
 
           function openGoogleMaps() {
@@ -572,16 +774,17 @@ export function getMapHtml(lat: number, lng: number): string {
             var spotLat = selectedSpot.latitude ?? selectedSpot.Latitude;
             var spotLng = selectedSpot.longitude ?? selectedSpot.Longitude;
             var travelmode = currentMode === 'car' ? 'driving' : 'walking';
-            window.location.href =
-              'https://www.google.com/maps/dir/?api=1' +
+            var url = 'https://www.google.com/maps/dir/?api=1' +
               '&origin=' + userLat + ',' + userLng +
               '&destination=' + spotLat + ',' + spotLng +
               '&travelmode=' + travelmode;
+            postToRN(JSON.stringify({ type: 'openUrl', url: url }));
           }
 
           function updateUserPosition(lat, lng) {
             userLat = lat; userLng = lng;
             userMarker.setLatLng([lat, lng]);
+            updateLocationButtonVisibility();
           }
 
           window.addEventListener('message', function(event) {
