@@ -140,10 +140,43 @@ export default function ChatListScreen() {
   const [allChats, setAllChats] = useState<ChatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const TAB_VALUES = ['Comunidades', 'Nuevos matches', 'En curso', 'Finalizados'];
+  const TAB_VALUES = ["Comunidades", "Nuevos matches", "En curso", "Finalizados"];
+  const TAB_LABELS: Record<string, string> = {
+    Comunidades: "Comunidades",
+    "Nuevos matches": "Nuevos",
+    "En curso": "Curso",
+    Finalizados: "Final",
+  };
   const [activeTab, setActiveTab] = useState<string>('Nuevos matches');
   const [search, setSearch] = useState('');
   const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([])
+
+  // Determina a qué pestaña pertenece un exchange según su estado.
+  const exchangeMatchesTab = (
+    exchange: ExchangeWithMatchDto | undefined,
+    tab: string,
+  ) => {
+    if (!exchange) return false;
+
+    const status = exchange.status as ExchangeStatus;
+
+    if (tab === "Nuevos matches") {
+      return (
+        status === "NEGOTIATING" ||
+        status === "ACCEPTED_BY_1" ||
+        status === "ACCEPTED_BY_2"
+      );
+    }
+
+    if (tab === "En curso") {
+      return status === "ACCEPTED";
+    }
+
+    // Finalizados
+    return (
+      status === "COMPLETED" || status === "REJECTED" || status === "INCIDENT"
+    );
+  };
 
   const fetchChats = useCallback(async () => {
     try {
@@ -215,33 +248,6 @@ export default function ChatListScreen() {
     setChats(byTab);
   }, [search, activeTab, allChats, exchanges, currentUserId]);
 
-  //Función que determina dónde va cada exchange según su estado
-  const exchangeMatchesTab = (
-    exchange: ExchangeWithMatchDto | undefined,
-    tab: string,
-  ) => {
-    if (!exchange) return false;
-
-    const status = exchange.status as ExchangeStatus;
-
-    if (tab === "Nuevos matches") {
-      return (
-        status === "NEGOTIATING" ||
-        status === "ACCEPTED_BY_1" ||
-        status === "ACCEPTED_BY_2"
-      );
-    }
-
-    if (tab === "En curso") {
-      return status === "ACCEPTED";
-    }
-
-    // Finalizados
-    return (
-      status === "COMPLETED" || status === "REJECTED" || status === "INCIDENT"
-    );
-  };
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -274,19 +280,23 @@ export default function ChatListScreen() {
       <Header />
       <View style={styles.topBar}>
         <View style={styles.tabsRow}>
-          {TAB_VALUES.map((tab) => {
+          {TAB_VALUES.map((tab, index) => {
             const isActive = tab === activeTab;
             return (
               <Pressable
                 key={tab}
                 onPress={() => setActiveTab(tab)}
-                style={[styles.tabItem, isActive && styles.tabItemActive]}
+                style={[
+                  styles.tabItem,
+                  index !== TAB_VALUES.length - 1 && styles.tabItemSpacing,
+                  isActive && styles.tabItemActive,
+                ]}
               >
                 <Text
                   style={[styles.tabText, isActive && styles.tabTextActive]}
                   numberOfLines={1}
                 >
-                  {tab}
+                  {TAB_LABELS[tab] ?? tab}
                 </Text>
               </Pressable>
             );
@@ -444,7 +454,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 6,
     paddingBottom: 8,
     backgroundColor: "#fbf7f4",
   },
@@ -455,22 +465,28 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "#ECE5E0",
     alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+  },
+  tabItemSpacing: {
+    marginRight: 6,
   },
   tabItemActive: {
-    borderBottomColor: "#e4715f", // color principal de la app
+    backgroundColor: "#e4715f",
+    borderColor: "#e4715f",
   },
   tabText: {
-    fontSize: 14,
-    color: "#6B7280",
-    fontWeight: "500",
+    fontSize: 12,
+    color: "#4B5563",
+    fontWeight: "600",
   },
   tabTextActive: {
-    color: "#111827",
-    fontWeight: "600",
+    color: "#ffffff",
   },
   searchBar: {
     flexDirection: "row",

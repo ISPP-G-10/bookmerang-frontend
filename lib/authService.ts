@@ -39,6 +39,20 @@ export interface UserPreferencesData {
   genreIds: number[];
 }
 
+export interface UserPreferencesResponse {
+  id: number;
+  userId: string;
+  radioKm: number;
+  extension: "SHORT" | "MEDIUM" | "LONG";
+  genreIds: number[];
+  createdAt: string;
+  updatedAt: string;
+  location: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
 export const authService = {
   async signIn(email: string, password: string) {
     const response = await apiRequest("/Auth/login", {
@@ -162,6 +176,20 @@ export const authService = {
     }
 
     return response;
+  },
+
+  async getPreferences(userId: string): Promise<UserPreferencesResponse | null> {
+    const response = await apiRequest(`/users/${userId}/preferences`);
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al obtener preferencias"));
+    }
+
+    return response.json();
   },
 
   async fetchGenres() {
