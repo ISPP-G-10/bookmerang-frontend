@@ -1,6 +1,5 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
-import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -17,10 +16,8 @@ import {
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
-  getBookDetail,
   getMyLibrary,
   toConditionLabel,
-  type BookDetail,
   type BookListItem,
 } from "../lib/books";
 import { getStoredAuthSession } from "../lib/authSession";
@@ -52,74 +49,6 @@ const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
     .filter((book) => Number.isFinite(book.id));
 };
 
-const detailConditionToMatcher: Record<
-  NonNullable<BookDetail["condition"]>,
-  NonNullable<MatcherCard["book"]["condition"]>
-> = {
-  LikeNew: "LIKE_NEW",
-  VeryGood: "VERY_GOOD",
-  Good: "GOOD",
-  Acceptable: "ACCEPTABLE",
-  Poor: "POOR",
-};
-
-function buildLibraryMatcherCard(
-  detail: BookDetail,
-  profile: any,
-): MatcherCard {
-  const now = new Date().toISOString();
-
-  return {
-    book: {
-      id: detail.id,
-      ownerId: 0,
-      isbn: detail.isbn ?? null,
-      titulo: detail.titulo ?? null,
-      autor: detail.autor ?? null,
-      editorial: detail.editorial ?? null,
-      numPaginas: detail.numPaginas ?? null,
-      cover:
-        detail.cover === "Hardcover"
-          ? "HARDCOVER"
-          : detail.cover === "Paperback"
-            ? "PAPERBACK"
-            : null,
-      condition: detail.condition
-        ? detailConditionToMatcher[detail.condition]
-        : null,
-      observaciones: detail.observaciones ?? null,
-      status: "PUBLISHED",
-      createdAt: now,
-      updatedAt: now,
-      genres: (detail.genres ?? []).map((name, index) => ({ id: index + 1, name })),
-      languages: (detail.languages ?? []).map((language, index) => ({
-        id: index + 1,
-        language,
-      })),
-      photos: (detail.photos ?? [])
-        .filter((photo) => typeof photo?.url === "string" && photo.url.trim().length > 0)
-        .map((photo, index) => ({
-          id: index + 1,
-          bookId: detail.id,
-          url: photo.url as string,
-          orden: photo.order ?? index,
-        })),
-    },
-    owner: {
-      id: 0,
-      username: profile?.username ?? profile?.name ?? "usuario",
-      nombre: profile?.name ?? profile?.username ?? "Usuario",
-      fotoPerfilUrl: profile?.avatar ?? profile?.profilePhoto ?? null,
-      plan: "FREE",
-      ratingMean: 0,
-      finishedExchanges: 0,
-      xpTotal: 0,
-    },
-    distanceKm: 0,
-    score: 0,
-  };
-}
-
 export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -129,8 +58,6 @@ export default function ProfileScreen() {
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
-  const [selectedLibraryCard, setSelectedLibraryCard] = useState<MatcherCard | null>(null);
-  const [openingLibraryBookId, setOpeningLibraryBookId] = useState<number | null>(null);
 
   // Calcular números de columnas basado en ancho de pantalla
   const numColumns = width >= 768 ? 4 : 2;
@@ -244,17 +171,9 @@ export default function ProfileScreen() {
     async (bookId: number) => {
       if (!Number.isFinite(bookId) || bookId <= 0) return;
 
-      setOpeningLibraryBookId(bookId);
-      try {
-        const detail = await getBookDetail(bookId);
-        setSelectedLibraryCard(buildLibraryMatcherCard(detail, profile));
-      } catch {
-        setLibraryError("No se pudo abrir el detalle de este libro.");
-      } finally {
-        setOpeningLibraryBookId(null);
-      }
+      router.push(`/books/${bookId}` as any);
     },
-    [profile],
+    [router],
   );
   
   const loadProfileData = useCallback(async (): Promise<any | null> => {
@@ -1031,12 +950,6 @@ export default function ProfileScreen() {
         title="Editar Preferencias"
         error={preferencesError}
         loading={preferencesLoading}
-      />
-
-      <BookDetailsScreen
-        visible={selectedLibraryCard !== null}
-        card={selectedLibraryCard}
-        onClose={() => setSelectedLibraryCard(null)}
       />
     </View>
   );
