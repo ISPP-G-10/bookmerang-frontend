@@ -17,11 +17,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 export default function EditBookScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { width } = useWindowDimensions();
   const [book, setBook] = useState<BookDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
@@ -32,6 +34,9 @@ export default function EditBookScreen() {
   const [cover, setCover] = useState("Tapa dura");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
+  const isDesktop = width >= 1024;
+  const contentMaxWidth = isDesktop ? 1080 : 420;
+  const imageColumnWidth = isDesktop ? 320 : undefined;
 
   useEffect(() => {
     const load = async () => {
@@ -79,9 +84,9 @@ export default function EditBookScreen() {
 
   return (
     <View className="flex-1 bg-[#fdfbf7]">
-      <View className="bg-white px-4 py-4 flex-row items-center gap-4 border-b border-[#f2cc8f]">
+      <View className="bg-white px-4 py-4 flex-row items-center gap-4 border-b border-[#F3E9E0]">
         <TouchableOpacity onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={22} color="#3d405b" />
+          <FontAwesome name="arrow-left" size={22} color="#e07a5f" />
         </TouchableOpacity>
         <Text
           style={{ fontFamily: "Outfit_700Bold" }}
@@ -98,50 +103,67 @@ export default function EditBookScreen() {
       ) : (
         <>
           <ScrollView
-            contentContainerStyle={{ padding: 16, paddingBottom: 120, alignItems: 'center' }}
+            contentContainerStyle={{
+              padding: 16,
+              paddingBottom: 120,
+              alignItems: "center",
+            }}
           >
-            <View className="w-full max-w-sm">
-            {error ? <Text className="text-red-500 mb-3">{error}</Text> : null}
+            <View style={{ width: "100%", maxWidth: contentMaxWidth }}>
+              {error ? <Text className="text-red-500 mb-3">{error}</Text> : null}
 
-            {book?.photos?.[0]?.url ? (
-              <View className="w-full items-center mb-4">
-                <Image
-                  source={{ uri: book.photos[0].url }}
-                  className="h-48 w-32 rounded-3xl"
-                />
+              <View
+                style={{
+                  flexDirection: isDesktop ? "row" : "column",
+                  gap: 24,
+                  alignItems: isDesktop ? "flex-start" : "stretch",
+                }}
+              >
+                {book?.photos?.[0]?.url ? (
+                  <View
+                    style={{ width: imageColumnWidth ?? "100%" }}
+                    className="items-center mb-4"
+                  >
+                    <Image
+                      source={{ uri: book.photos[0].url }}
+                      className="h-72 w-48 rounded-3xl"
+                    />
+                  </View>
+                ) : null}
+
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Título del libro *"
+                    value={title}
+                    onChangeText={setTitle}
+                  />
+                  <Field label="Autor *" value={author} onChangeText={setAuthor} />
+                  <Field
+                    label="Estado del libro *"
+                    value={condition}
+                    onChangeText={setCondition}
+                  />
+                  <Field label="Idioma" value={language} onChangeText={setLanguage} />
+                  <Field
+                    label="Número de páginas"
+                    value={pages}
+                    onChangeText={setPages}
+                    keyboardType="number-pad"
+                  />
+                  <Field label="Tipo de tapa" value={cover} onChangeText={setCover} />
+                  <Field
+                    label="Descripción"
+                    value={description}
+                    onChangeText={setDescription}
+                    multiline
+                  />
+                </View>
               </View>
-            ) : null}
-
-            <Field
-              label="Título del libro *"
-              value={title}
-              onChangeText={setTitle}
-            />
-            <Field label="Autor *" value={author} onChangeText={setAuthor} />
-            <Field
-              label="Estado del libro *"
-              value={condition}
-              onChangeText={setCondition}
-            />
-            <Field label="Idioma" value={language} onChangeText={setLanguage} />
-            <Field
-              label="Número de páginas"
-              value={pages}
-              onChangeText={setPages}
-              keyboardType="number-pad"
-            />
-            <Field label="Tipo de tapa" value={cover} onChangeText={setCover} />
-            <Field
-              label="Descripción"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-            />
             </View>
           </ScrollView>
 
-          <View className="absolute bottom-0 left-0 right-0 border-t border-[#f2cc8f] bg-white p-4 items-center">
-            <View className="w-full max-w-sm">
+          <View className="absolute bottom-0 left-0 right-0 border-t border-[#F3E9E0] bg-white p-4 items-center">
+            <View style={{ width: "100%", maxWidth: contentMaxWidth }}>
               <TouchableOpacity
                 className="bg-[#e07a5f] rounded-full py-3 items-center flex-row justify-center gap-2"
                 onPress={handleSave}
@@ -188,7 +210,7 @@ function Field({
         onChangeText={onChangeText}
         keyboardType={keyboardType ?? "default"}
         multiline={multiline}
-        className="bg-white rounded-3xl border border-[#f2cc8f] px-4 py-4 text-[#3e2723] text-xl"
+        className="bg-white rounded-3xl border border-[#F3E9E0] px-4 py-4 text-[#3e2723] text-xl"
         style={
           multiline ? { minHeight: 120, textAlignVertical: "top" } : undefined
         }

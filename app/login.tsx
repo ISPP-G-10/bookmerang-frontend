@@ -32,7 +32,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <AuthLayout title="Inicia sesión">
+    <AuthLayout title="Inicia sesión" scrollable={false}>
       <AuthInput
         icon="mail-outline"
         placeholder="Correo electrónico"
@@ -40,6 +40,7 @@ export default function LoginScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        returnKeyType="next"
       />
 
       <AuthInput
@@ -48,6 +49,8 @@ export default function LoginScreen() {
         value={password}
         onChangeText={setPassword}
         isPassword
+        returnKeyType="done"
+        onSubmitEditing={handleLogin}
       />
 
       <TouchableOpacity className="self-end mb-5">
