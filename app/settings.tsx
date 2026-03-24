@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -21,7 +21,6 @@ import { apiRequest } from "../lib/api";
 import { authService } from "../lib/authService";
 import {
   getStoredAuthSession,
-  getStoredUserId,
   updateStoredAuthUser,
 } from "../lib/authSession";
 import supabase from "../lib/supabase";
@@ -40,6 +39,58 @@ const resolveFileExtension = (asset: ImagePicker.ImagePickerAsset): string => {
 
   return "jpg";
 };
+
+const isRemoteAvatarUrl = (value: string | null | undefined): value is string =>
+  Boolean(value && /^https?:\/\//i.test(value));
+
+const normalizeAvatarValue = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
+  try {
+    const url = new URL(publicUrl);
+    const marker = `/storage/v1/object/public/${PROFILE_STORAGE_BUCKET}/`;
+    const markerIndex = url.pathname.indexOf(marker);
+
+    if (markerIndex === -1) return null;
+
+    return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+  } catch {
+    return null;
+  }
+};
+
+const toImageDataUrl = (value: string, mimeType?: string): string => {
+  const trimmed = value.trim();
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `data:${mimeType ?? "image/jpeg"};base64,${trimmed}`;
+};
+
+const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+
+    reader.onloadend = () => {
+      if (typeof reader.result === "string" && reader.result.length > 0) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("No se pudo convertir la imagen seleccionada."));
+    };
+
+    reader.readAsDataURL(blob);
+  });
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -171,12 +222,16 @@ function PhotoPickerModal({
   onClose,
   onPickGallery,
   onPickCamera,
+  onRemovePhoto,
+  hasPhoto,
   loading,
 }: {
   visible: boolean;
   onClose: () => void;
   onPickGallery: () => void;
   onPickCamera: () => void;
+  onRemovePhoto?: () => void;
+  hasPhoto?: boolean;
   loading: boolean;
 }) {
   return (
@@ -238,6 +293,31 @@ function PhotoPickerModal({
           </View>
           <FontAwesome name="camera" size={20} color="#e07a5f" />
         </TouchableOpacity>
+        {hasPhoto ? (
+          <TouchableOpacity
+            style={{
+              backgroundColor: "#fff1ed",
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+            onPress={onRemovePhoto}
+            disabled={loading}
+          >
+            <View>
+              <Text style={{ fontSize: 14, fontWeight: "900", color: "#b64b34" }}>
+                Borrar foto
+              </Text>
+              <Text style={{ fontSize: 12, color: "#8B7355", marginTop: 2 }}>
+                Quita tu foto actual del perfil
+              </Text>
+            </View>
+            <FontAwesome name="trash" size={20} color="#b64b34" />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           style={{
             backgroundColor: "#fdfbf7",
@@ -265,6 +345,7 @@ function EditProfileModal({
   onSave,
   onSelectFromGallery,
   onTakePhoto,
+  onRemovePhoto,
   photoLoading,
 }: {
   visible: boolean;
@@ -277,6 +358,7 @@ function EditProfileModal({
   }) => Promise<void>;
   onSelectFromGallery: () => Promise<void>;
   onTakePhoto: () => Promise<void>;
+  onRemovePhoto: () => void;
   photoLoading: boolean;
 }) {
   const [name, setName] = React.useState(profile?.name ?? "");
@@ -289,9 +371,26 @@ function EditProfileModal({
     if (visible) {
       setName(profile?.name ?? "");
       setUsername(profile?.username ?? "");
+    }
+  }, [visible]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+
+    if (!name && profile?.name) {
+      setName(profile.name);
+    }
+
+    if (!username && profile?.username) {
+      setUsername(profile.username);
+    }
+  }, [visible, profile?.name, profile?.username, name, username]);
+
+  React.useEffect(() => {
+    if (visible) {
       setAvatar(profile?.avatar ?? null);
     }
-  }, [visible, profile]);
+  }, [visible, profile?.avatar]);
 
   const inputStyle = {
     backgroundColor: "#fdfbf7",
@@ -418,9 +517,23 @@ function EditProfileModal({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={async () => {
+                  const trimmedName = name.trim();
+                  const trimmedUsername = username.trim();
+                  if (!trimmedName || !trimmedUsername) {
+                    Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
+                    return;
+                  }
+
                   setSaving(true);
-                  await onSave({ name, username, avatar });
-                  setSaving(false);
+                  try {
+                    await onSave({
+                      name: trimmedName,
+                      username: trimmedUsername,
+                      avatar,
+                    });
+                  } finally {
+                    setSaving(false);
+                  }
                 }}
               disabled={saving}
               style={{
@@ -451,6 +564,12 @@ function EditProfileModal({
           await onTakePhoto();
           setPhotoModal(false);
         }}
+        onRemovePhoto={() => {
+          setAvatar(null);
+          onRemovePhoto();
+          setPhotoModal(false);
+        }}
+        hasPhoto={Boolean(avatar)}
         loading={photoLoading}
       />
     </>
@@ -1004,11 +1123,13 @@ export default function SettingsScreen() {
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
+  const [persistedAvatar, setPersistedAvatar] = React.useState<string | null>(null);
   const [showCameraModal, setShowCameraModal] = React.useState(false);
   const [cameraFacing, setCameraFacing] = React.useState<CameraType>("back");
   const [capturingPhoto, setCapturingPhoto] = React.useState(false);
   const [wasEditingProfile, setWasEditingProfile] = React.useState(false);
   const cameraRef = React.useRef<CameraView | null>(null);
+  const hasUnsavedProfileDraft = React.useRef(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -1021,46 +1142,129 @@ export default function SettingsScreen() {
     showToast("Idioma actualizado correctamente");
   };
 
+  const normalizeProfile = (
+    source: any,
+    fallbackUser?: {
+      email?: string | null;
+      username?: string | null;
+      name?: string | null;
+      profilePhoto?: string | null;
+    } | null,
+  ) => {
+    const avatar =
+      source?.avatar ??
+      source?.profilePhoto ??
+      fallbackUser?.profilePhoto ??
+      null;
+
+    return {
+      ...source,
+      email: source?.email ?? fallbackUser?.email ?? "",
+      name: source?.name ?? fallbackUser?.name ?? "",
+      username: source?.username ?? fallbackUser?.username ?? "",
+      avatar: avatar || null,
+    };
+  };
+
+  const removeStoredProfilePhoto = async (avatarUrl: string | null | undefined) => {
+    if (!isRemoteAvatarUrl(avatarUrl)) return;
+
+    const storagePath = extractStoragePathFromPublicUrl(avatarUrl);
+    if (!storagePath) return;
+
+    const { error } = await supabase.storage
+      .from(PROFILE_STORAGE_BUCKET)
+      .remove([storagePath]);
+
+    if (error) {
+      console.warn("No se pudo eliminar la foto previa del storage:", error.message);
+    }
+  };
+
+  const loadProfile = React.useCallback(async () => {
+    const session = await getStoredAuthSession();
+    const user = session?.user;
+
+    if (!user) return;
+
+    setCurrentEmail(user.email ?? "");
+
+    try {
+      const res = await apiRequest("/Auth/perfil", { method: "GET" });
+      if (res.ok) {
+        const serverProfile = await res.json();
+        const normalized = normalizeProfile(serverProfile, user);
+        setPersistedAvatar(normalized.avatar);
+        setProfile((current: any) => {
+          if (!hasUnsavedProfileDraft.current) return normalized;
+
+          const currentAvatar =
+            current && Object.prototype.hasOwnProperty.call(current, "avatar")
+              ? current.avatar
+              : undefined;
+
+          return {
+            ...normalized,
+            avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
+          };
+        });
+        return;
+      }
+    } catch (error) {
+      console.error("No se pudo cargar el perfil desde el backend:", error);
+    }
+
+    const normalized = normalizeProfile({}, user);
+    setPersistedAvatar(normalized.avatar);
+    setProfile((current: any) => {
+      if (!hasUnsavedProfileDraft.current) return normalized;
+
+      const currentAvatar =
+        current && Object.prototype.hasOwnProperty.call(current, "avatar")
+          ? current.avatar
+          : undefined;
+
+      return {
+        ...normalized,
+        avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
+      };
+    });
+  }, []);
+
+  const handleCloseEditProfile = React.useCallback(() => {
+    setEditProfileOpen(false);
+
+    if (hasUnsavedProfileDraft.current) {
+      hasUnsavedProfileDraft.current = false;
+      void loadProfile();
+    }
+  }, [loadProfile]);
+
   const uploadProfileBinary = async (
     fileData: ArrayBuffer,
     extension: string,
     mimeType: string,
   ): Promise<string> => {
-    const userId = await getStoredUserId();
+    void extension;
 
-    if (!userId) {
-      throw new Error("No se pudo identificar al usuario autenticado.");
-    }
-
-    const path = `profiles/${userId}/${Date.now()}.${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(PROFILE_STORAGE_BUCKET)
-      .upload(path, fileData, {
-        contentType: mimeType,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(
-        `No se pudo subir la imagen al storage (${PROFILE_STORAGE_BUCKET}): ${uploadError.message}`,
-      );
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from(PROFILE_STORAGE_BUCKET)
-      .getPublicUrl(path);
-
-    if (!publicUrlData?.publicUrl) {
-      throw new Error("No se pudo generar la URL pública de la foto.");
-    }
-
-    return publicUrlData.publicUrl;
+    return readBlobAsDataUrl(
+      new Blob([fileData], {
+        type: mimeType || "image/jpeg",
+      }),
+    );
   };
 
   const uploadProfilePhoto = async (
     asset: ImagePicker.ImagePickerAsset,
   ): Promise<string> => {
+    if (typeof asset.base64 === "string" && asset.base64.trim().length > 0) {
+      return toImageDataUrl(asset.base64, asset.mimeType);
+    }
+
+    if (typeof asset.uri === "string" && /^data:image\//i.test(asset.uri)) {
+      return asset.uri;
+    }
+
     const extension = resolveFileExtension(asset);
     const localFile = await fetch(asset.uri);
     if (!localFile.ok) {
@@ -1105,6 +1309,7 @@ export default function SettingsScreen() {
     setPhotoLoading(true);
     try {
       const publicUrl = await uploadProfilePhoto(result.assets[0]);
+      hasUnsavedProfileDraft.current = true;
       setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
       showToast("Foto de perfil actualizada");
     } catch (e: any) {
@@ -1124,6 +1329,7 @@ export default function SettingsScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
       allowsMultipleSelection: false,
+      base64: true,
       quality: 0.8,
     });
 
@@ -1157,6 +1363,7 @@ export default function SettingsScreen() {
           file.type || "image/jpeg",
         );
 
+        hasUnsavedProfileDraft.current = true;
         setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
         showToast("Foto de perfil actualizada");
       } catch (e: any) {
@@ -1196,16 +1403,15 @@ export default function SettingsScreen() {
     setPhotoLoading(true);
 
     try {
-      const captured = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      const captured = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+      });
       if (captured?.uri) {
-        const asset = {
-          uri: captured.uri,
-          mimeType: "image/jpeg",
-          width: (captured as any).width ?? 0,
-          height: (captured as any).height ?? 0,
-        } as ImagePicker.ImagePickerAsset;
-
-        const publicUrl = await uploadProfilePhoto(asset);
+         const publicUrl = await uploadProfilePhoto({
+           ...captured,
+           mimeType: "image/jpeg",
+         } as ImagePicker.ImagePickerAsset);
+        hasUnsavedProfileDraft.current = true;
         setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
         showToast("Foto de perfil actualizada");
         closeCameraModal();
@@ -1219,19 +1425,14 @@ export default function SettingsScreen() {
   };
 
   React.useEffect(() => {
-    (async () => {
-      const session = await getStoredAuthSession();
-      const user = session?.user;
-      if (user) {
-        setCurrentEmail(user.email ?? "");
-        setProfile({
-          name: user.name ?? "",
-          username: user.username ?? "",
-          avatar: user.profilePhoto ?? null,
-        });
-      }
-    })();
-  }, []);
+    void loadProfile();
+  }, [loadProfile]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const handleSaveProfile = async (data: {
     name: string;
@@ -1239,20 +1440,32 @@ export default function SettingsScreen() {
     avatar?: string | null;
   }) => {
     try {
+      const nextAvatar = normalizeAvatarValue(data.avatar);
+      const nextName = data.name.trim();
+      const nextUsername = data.username.trim();
+
+      if (!nextName || !nextUsername) {
+        Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
+        return;
+      }
+
+      let savedProfile: any = null;
+
       // First: update backend app profile record
       try {
         const patchRes = await apiRequest("/Auth/perfil", {
           method: "PATCH",
           body: JSON.stringify({
-            username: data.username,
-            name: data.name,
-            profilePhoto: data.avatar ?? null,
+            username: nextUsername,
+            name: nextName,
+            profilePhoto: nextAvatar === null ? "" : nextAvatar,
           }),
         });
         if (!patchRes.ok) {
           const txt = await patchRes.text().catch(() => "");
           throw new Error(txt || "Error actualizando perfil en el servidor");
         }
+        savedProfile = await patchRes.json().catch(() => null);
       } catch (err: any) {
         console.error("Backend PATCH error:", err);
         Alert.alert("Error", err?.message || "No se pudo actualizar el perfil en el servidor");
@@ -1260,19 +1473,35 @@ export default function SettingsScreen() {
       }
 
       // Update local state so Settings shows new values
-      const out: any = { ...profile };
-      out.name = data.name;
-      out.username = data.username;
-      if (data.avatar && typeof data.avatar === "string" && /^https?:\/\//i.test(data.avatar)) {
-        out.avatar = data.avatar;
-      }
+      const out = normalizeProfile(
+        {
+          ...(profile ?? {}),
+          ...(savedProfile ?? {}),
+          name: nextName,
+          username: nextUsername,
+          avatar: nextAvatar,
+          profilePhoto: nextAvatar ?? "",
+        },
+        {
+          email: currentEmail,
+          name: nextName,
+          username: nextUsername,
+          profilePhoto: nextAvatar ?? "",
+        },
+      );
 
       await updateStoredAuthUser({
-        name: data.name,
-        username: data.username,
-        profilePhoto: out.avatar,
+        name: nextName,
+        username: nextUsername,
+        profilePhoto: nextAvatar ?? "",
       });
 
+      if (persistedAvatar && persistedAvatar !== nextAvatar) {
+        await removeStoredProfilePhoto(persistedAvatar);
+      }
+
+      hasUnsavedProfileDraft.current = false;
+      setPersistedAvatar(nextAvatar);
       setProfile(out);
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
@@ -1620,11 +1849,15 @@ export default function SettingsScreen() {
 
       <EditProfileModal
         visible={editProfileOpen}
-        onClose={() => setEditProfileOpen(false)}
+        onClose={handleCloseEditProfile}
         profile={profile}
         onSave={handleSaveProfile}
         onSelectFromGallery={handleSelectFromGallery}
         onTakePhoto={handleTakePhoto}
+        onRemovePhoto={() => {
+          hasUnsavedProfileDraft.current = true;
+          setProfile((current: any) => ({ ...(current ?? {}), avatar: null }));
+        }}
         photoLoading={photoLoading}
       />
       <ChangeEmailModal
