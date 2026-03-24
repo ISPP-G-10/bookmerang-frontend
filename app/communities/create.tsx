@@ -1,14 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createCommunity } from '@/lib/communityApi';
 import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
 
 export default function CreateCommunityScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<number | null>(null);
   const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
@@ -52,7 +54,7 @@ export default function CreateCommunityScreen() {
         name: name.trim(),
         referenceBookspotId: selectedSpot,
       });
-      router.back();
+      router.replace('/(tabs)/comunidades' as any);
     } catch (error: any) {
       setErrorMessage(error.message || 'Error al crear la comunidad');
     } finally {
@@ -64,7 +66,7 @@ export default function CreateCommunityScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 8 : 12 }]}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#333" />
           </Pressable>
@@ -72,7 +74,7 @@ export default function CreateCommunityScreen() {
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView style={styles.content}>
+        <View style={styles.content}>
           {errorMessage && (
             <View style={styles.errorContainer}>
               <Ionicons name="alert-circle" size={20} color="#DC2626" />
@@ -94,49 +96,61 @@ export default function CreateCommunityScreen() {
 
           <Text style={styles.label}>BookSpot de Referencia</Text>
           <Text style={styles.subLabel}>Este será el lugar principal para los encuentros.</Text>
-          
-          {initialLoading ? (
-            <ActivityIndicator size="small" color="#e4715f" style={{ marginVertical: 20 }} />
-          ) : bookspots.length === 0 ? (
-            <Text style={styles.emptyText}>No hay BookSpots activos disponibles en este momento.</Text>
-          ) : (
-            bookspots.map((spot) => (
-              <Pressable
-                key={spot.id}
-                style={[
-                  styles.spotItem,
-                  selectedSpot === spot.id && styles.spotItemSelected
-                ]}
-                onPress={() => {
-                  setSelectedSpot(spot.id);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-              >
-                <View style={styles.spotInfo}>
-                  <Text style={[styles.spotName, selectedSpot === spot.id && styles.spotNameSelected]}>
-                    {spot.nombre}
-                  </Text>
-                  <Text style={styles.spotAddress}>{spot.addressText}</Text>
-                </View>
-                {selectedSpot === spot.id && (
-                  <Ionicons name="checkmark-circle" size={24} color="#e4715f" />
-                )}
-              </Pressable>
-            ))
-          )}
 
-          <Pressable 
-            style={[styles.createBtn, (!name.trim() || !selectedSpot || loading || initialLoading) && styles.createBtnDisabled]}
-            onPress={handleCreate}
-            disabled={!name.trim() || !selectedSpot || loading || initialLoading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
+          <View style={styles.spotsSection}>
+            {initialLoading ? (
+              <ActivityIndicator size="small" color="#e4715f" style={styles.loadingIndicator} />
             ) : (
-              <Text style={styles.createBtnText}>Crear Comunidad</Text>
+              <ScrollView
+                style={styles.spotsScroll}
+                contentContainerStyle={bookspots.length === 0 ? styles.spotsEmptyContent : styles.spotsScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {bookspots.length === 0 ? (
+                  <Text style={styles.emptyText}>No hay BookSpots activos disponibles en este momento.</Text>
+                ) : (
+                  bookspots.map((spot) => (
+                    <Pressable
+                      key={spot.id}
+                      style={[
+                        styles.spotItem,
+                        selectedSpot === spot.id && styles.spotItemSelected
+                      ]}
+                      onPress={() => {
+                        setSelectedSpot(spot.id);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
+                    >
+                      <View style={styles.spotInfo}>
+                        <Text style={[styles.spotName, selectedSpot === spot.id && styles.spotNameSelected]}>
+                          {spot.nombre}
+                        </Text>
+                        <Text style={styles.spotAddress}>{spot.addressText}</Text>
+                      </View>
+                      {selectedSpot === spot.id && (
+                        <Ionicons name="checkmark-circle" size={24} color="#e4715f" />
+                      )}
+                    </Pressable>
+                  ))
+                )}
+              </ScrollView>
             )}
-          </Pressable>
-        </ScrollView>
+          </View>
+
+          <View style={[styles.footer, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 16 }]}>
+            <Pressable
+              style={[styles.createBtn, (!name.trim() || !selectedSpot || loading || initialLoading) && styles.createBtnDisabled]}
+              onPress={handleCreate}
+              disabled={!name.trim() || !selectedSpot || loading || initialLoading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.createBtnText}>Crear Comunidad</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
       </View>
     </>
   );
@@ -152,7 +166,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
@@ -168,7 +181,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    minHeight: 0,
   },
   errorContainer: {
     flexDirection: 'row',
@@ -207,6 +222,23 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
   },
+  spotsSection: {
+    flex: 1,
+    minHeight: 0,
+  },
+  spotsScroll: {
+    flex: 1,
+  },
+  spotsScrollContent: {
+    paddingBottom: 8,
+  },
+  spotsEmptyContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  loadingIndicator: {
+    marginVertical: 20,
+  },
   spotItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -237,19 +269,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginVertical: 20,
+  footer: {
+    paddingTop: 12,
+    backgroundColor: '#fdfbf7',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
   },
   createBtn: {
     backgroundColor: '#e4715f',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 40,
   },
   createBtnDisabled: {
     opacity: 0.6,
@@ -258,5 +288,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
 });
