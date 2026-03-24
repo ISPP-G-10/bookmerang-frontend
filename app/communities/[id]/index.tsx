@@ -15,12 +15,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities } from '@/lib/communityApi';
-import { getBookspotById } from '@/lib/bookspotApi';
+import { getBookspotById, BookspotDTO } from '@/lib/bookspotApi';
 import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
 import { ChatParticipantDto } from '@/types/chat';
-import { Bookspot } from '@/lib/mockBookspots';
 import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
 
 const MAX_MEMBERS = 10;
@@ -40,7 +39,7 @@ export default function CommunityDetailScreen() {
   const communityId = Number(id);
 
   const [community, setCommunity] = useState<CommunityDto | null>(null);
-  const [bookspot, setBookspot] = useState<Bookspot | null>(null);
+  const [bookspot, setBookspot] = useState<BookspotDTO | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<SectionKey>('biblioteca');

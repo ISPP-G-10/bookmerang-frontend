@@ -7,12 +7,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Header from '@/components/Header';
 import { exploreCommunities, getMyCommunities, joinCommunity, leaveCommunity, deleteCommunity } from '@/lib/communityApi';
-import { getActiveBookspots } from '@/lib/bookspotApi';
+import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
 import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
 import { ChatParticipantDto } from '@/types/chat';
-import { Bookspot } from '@/lib/mockBookspots';
 import PlatformMap from '@/components/communities/PlatformMap';
 
 const DEFAULT_LOCATION = {
@@ -28,7 +27,7 @@ export default function ComunidadesScreen() {
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
-  const [bookspots, setBookspots] = useState<Bookspot[]>([]);
+  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Admin Modal state
@@ -52,7 +51,7 @@ export default function ComunidadesScreen() {
       const [allComms, myComms, allBookspots] = await Promise.all([
         exploreCommunities(lat, lon, 50),
         getMyCommunities(),
-        getActiveBookspots()
+        getUserActiveBookspots()
       ]);
       setCommunities(allComms);
       setMyCommunities(myComms);
@@ -182,7 +181,7 @@ const handleJoin = async (communityId: number) => {
   const communitiesWithLocation = communities.map(c => {
     const spot = bookspots.find(b => b.id === c.referenceBookspotId);
     return { ...c, spot };
-  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: Bookspot })[];
+  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: BookspotPendingDTO })[];
 
   const isCreator = selectedAdminComm?.creatorId === currentUserId;
 

@@ -5,14 +5,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { createCommunity } from '@/lib/communityApi';
-import { getActiveBookspots } from '@/lib/bookspotApi';
-import { Bookspot } from '@/lib/mockBookspots';
+import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
 
 export default function CreateCommunityScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<number | null>(null);
-  const [bookspots, setBookspots] = useState<Bookspot[]>([]);
+  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -20,7 +19,7 @@ export default function CreateCommunityScreen() {
   const fetchBookspots = useCallback(async () => {
     try {
       setInitialLoading(true);
-      const data = await getActiveBookspots();
+      const data = await getUserActiveBookspots();
       setBookspots(data);
     } catch (error: any) {
       console.error(error);
