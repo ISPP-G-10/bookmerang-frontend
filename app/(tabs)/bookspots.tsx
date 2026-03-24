@@ -19,8 +19,10 @@ import {
   getUserPendingBookspots,
   updateBookspotName,
 } from "@/lib/bookspotApi";
+import { authService } from "@/lib/authService";
+import { fetchMyBackendUserId } from "@/lib/api";
+import { getStoredUserId, updateStoredAuthUser } from "@/lib/authSession";
 
-import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -81,58 +83,45 @@ export default function BookSpotsScreen() {
 
   // ── Ubicación ─────────────────
   useEffect(() => {
-    if (Platform.OS === "web") {
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => {
-          const coords = {
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-          };
-          locationRef.current = coords;
-          setLocation(coords);
-          setLoading(false);
-        },
-        () => {
+    (async () => {
+      try {
+        const storedUserId = await getStoredUserId();
+        const backendUserId = await fetchMyBackendUserId();
+        const userId = backendUserId ?? storedUserId;
+
+        if (!userId) {
           setPermissionDenied(true);
           setLoading(false);
-        },
-      );
-      return;
-    }
-    let subscription: Location.LocationSubscription | null = null;
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
+          return;
+        }
+
+        // Tras resets de BD puede quedar un id antiguo en storage.
+        if (backendUserId && backendUserId !== storedUserId) {
+          await updateStoredAuthUser({ id: backendUserId });
+        }
+
+        const preferences = await authService.getPreferences(userId);
+        const lat = preferences?.location?.latitude;
+        const lng = preferences?.location?.longitude;
+
+        if (typeof lat !== "number" || typeof lng !== "number") {
+          setPermissionDenied(true);
+          setLoading(false);
+          return;
+        }
+
+        const coords = {
+          latitude: lat,
+          longitude: lng,
+        };
+        locationRef.current = coords;
+        setLocation(coords);
+      } catch {
         setPermissionDenied(true);
-        setLoading(false);
-        return;
       }
-      const current = await Location.getCurrentPositionAsync({});
-      const coords = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      };
-      locationRef.current = coords;
-      setLocation(coords);
       setLoading(false);
-      subscription = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 1000,
-          distanceInterval: 2,
-        },
-        (newLoc) => {
-          const { latitude, longitude } = newLoc.coords;
-          locationRef.current = { latitude, longitude };
-          webViewRef.current?.injectJavaScript(
-            `updateUserPosition(${latitude}, ${longitude}); true;`,
-          );
-        },
-      );
     })();
-    return () => {
-      subscription?.remove();
-    };
+    return () => {};
   }, []);
 
   // ── Validacion ─────────────────
@@ -349,8 +338,8 @@ export default function BookSpotsScreen() {
             Ubicación necesaria
           </Text>
           <Text className="text-sm text-[#9e9aad] text-center leading-6">
-            Necesitamos acceso a tu ubicación para mostrarte los BookSpots
-            cercanos. Actívala desde los ajustes del dispositivo.
+            No se ha encontrado una ubicación guardada en tu perfil.
+            Configúrala en ajustes para mostrarte BookSpots cercanos.
           </Text>
         </View>
       </View>
