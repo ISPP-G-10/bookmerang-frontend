@@ -44,6 +44,16 @@ export default function CommunityDetailScreen() {
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<SectionKey>('biblioteca');
+  const [adminModalVisible, setAdminModalVisible] = useState(false);
+  const [adminMembers, setAdminMembers] = useState<ChatParticipantDto[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({
+    title: '',
+    message: '',
+    isDestructive: false,
+    onConfirm: async () => {},
+  });
 
   // ... rest of state
 

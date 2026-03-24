@@ -1,26 +1,13 @@
-import supabase from './supabase';
 import { CommunityDto, CreateCommunityRequest, CommunityLibraryBookDto } from '@/types/community';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
-
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+import { apiRequest } from './api';
 
 export async function exploreCommunities(latitude: number, longitude: number, radiusKm: number = 50): Promise<CommunityDto[]> {
-  const headers = await getAuthHeaders();
-  const url = new URL(`${API_URL}/communities/explore`);
-  url.searchParams.append('latitude', latitude.toString());
-  url.searchParams.append('longitude', longitude.toString());
-  url.searchParams.append('radiusKm', radiusKm.toString());
-
-  const res = await fetch(url.toString(), { headers });
+  const params = new URLSearchParams({
+    latitude: latitude.toString(),
+    longitude: longitude.toString(),
+    radiusKm: radiusKm.toString(),
+  });
+  const res = await apiRequest(`/communities/explore?${params.toString()}`);
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -31,8 +18,7 @@ export async function exploreCommunities(latitude: number, longitude: number, ra
 }
 
 export async function getMyCommunities(): Promise<CommunityDto[]> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/me`, { headers });
+  const res = await apiRequest('/communities/me');
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -43,8 +29,7 @@ export async function getMyCommunities(): Promise<CommunityDto[]> {
 }
 
 export async function getCommunity(communityId: number): Promise<CommunityDto> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/${communityId}`, { headers });
+  const res = await apiRequest(`/communities/${communityId}`);
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -55,10 +40,8 @@ export async function getCommunity(communityId: number): Promise<CommunityDto> {
 }
 
 export async function createCommunity(request: CreateCommunityRequest): Promise<CommunityDto> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities`, {
+  const res = await apiRequest('/communities', {
     method: 'POST',
-    headers,
     body: JSON.stringify(request),
   });
 
@@ -76,10 +59,8 @@ export async function createCommunity(request: CreateCommunityRequest): Promise<
 }
 
 export async function joinCommunity(communityId: number): Promise<CommunityDto> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/${communityId}/join`, {
+  const res = await apiRequest(`/communities/${communityId}/join`, {
     method: 'POST',
-    headers,
   });
 
   if (!res.ok) {
@@ -101,10 +82,8 @@ export async function joinCommunity(communityId: number): Promise<CommunityDto> 
 }
 
 export async function deleteCommunity(communityId: number): Promise<void> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/${communityId}`, {
+  const res = await apiRequest(`/communities/${communityId}`, {
     method: 'DELETE',
-    headers,
   });
 
   if (!res.ok) {
@@ -114,10 +93,8 @@ export async function deleteCommunity(communityId: number): Promise<void> {
 }
 
 export async function leaveCommunity(communityId: number): Promise<void> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/${communityId}/leave`, {
+  const res = await apiRequest(`/communities/${communityId}/leave`, {
     method: 'POST',
-    headers,
   });
 
   if (!res.ok) {
@@ -133,12 +110,11 @@ export async function getCommunityLibrary(
   page: number = 1,
   pageSize: number = 20
 ): Promise<CommunityLibraryBookDto[]> {
-  const headers = await getAuthHeaders();
-  const url = new URL(`${API_URL}/communities/${communityId}/library`);
-  url.searchParams.append('page', page.toString());
-  url.searchParams.append('pageSize', pageSize.toString());
-
-  const res = await fetch(url.toString(), { headers });
+  const params = new URLSearchParams({
+    page: page.toString(),
+    pageSize: pageSize.toString(),
+  });
+  const res = await apiRequest(`/communities/${communityId}/library?${params.toString()}`);
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -149,10 +125,8 @@ export async function getCommunityLibrary(
 }
 
 export async function toggleBookLike(communityId: number, bookId: number): Promise<void> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/communities/${communityId}/library/${bookId}/like`, {
+  const res = await apiRequest(`/communities/${communityId}/library/${bookId}/like`, {
     method: 'POST',
-    headers,
   });
 
   if (!res.ok) {

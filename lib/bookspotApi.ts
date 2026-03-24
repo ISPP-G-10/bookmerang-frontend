@@ -1,21 +1,8 @@
-import supabase from './supabase';
+import { apiRequest } from './api';
 import { Bookspot } from './mockBookspots';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
-
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
 export async function getActiveBookspots(): Promise<Bookspot[]> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/bookspots/active`, { headers });
+  const res = await apiRequest('/bookspots/active');
 
   if (!res.ok) {
     const errorText = await res.text();
@@ -26,8 +13,7 @@ export async function getActiveBookspots(): Promise<Bookspot[]> {
 }
 
 export async function getBookspotById(id: number): Promise<Bookspot> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}/bookspots/${id}`, { headers });
+  const res = await apiRequest(`/bookspots/${id}`);
 
   if (!res.ok) {
     const errorText = await res.text();

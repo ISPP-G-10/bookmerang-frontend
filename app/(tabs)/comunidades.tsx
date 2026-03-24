@@ -100,13 +100,7 @@ const handleJoin = async (communityId: number) => {
   try {
     setLoading(true);
     await joinCommunity(communityId);
-    
-    if (Platform.OS === 'web') {
-      window.alert('¡Éxito! Te has unido a la comunidad.');
-    } else {
-      Alert.alert('¡Éxito!', 'Te has unido a la comunidad.');
-    }
-    
+
     await loadLocationAndData(); 
   } catch (error: any) {
     console.error('Error joining community:', error);
