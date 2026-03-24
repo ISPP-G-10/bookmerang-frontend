@@ -129,6 +129,16 @@ export default function CommunityLibraryTab({ communityId }: Props) {
             </Text>
           </View>
 
+          {(item.genres ?? []).length > 0 && (
+            <View style={styles.genreRow}>
+              {(item.genres ?? []).slice(0, 3).map(genre => (
+                <View key={genre} style={styles.genreChip}>
+                  <Text style={styles.genreChipText}>{genre}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
         </View>
 
         <Pressable style={styles.likeButton} onPress={() => handleToggleLike(item.bookId)}>
@@ -323,6 +333,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6b7280',
     marginTop: 1,
+  },
+  genreRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  genreChip: {
+    backgroundColor: '#f5f0e8',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  genreChipText: {
+    fontSize: 11,
+    color: '#6b7280',
   },
   ownerRow: {
     flexDirection: 'row',

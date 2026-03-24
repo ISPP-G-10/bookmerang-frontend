@@ -90,38 +90,53 @@ export default function CommunityDetailScreen() {
         </View>
       </View>
 
-      {/* Tabs de secciones */}
-      <View style={styles.tabBar}>
-        {SECTIONS.map(section => {
-          const isActive = activeSection === section.key;
-          const isDisabled = section.key !== 'biblioteca';
-          return (
-            <Pressable
-              key={section.key}
-              style={[styles.tab, isActive && styles.tabActive]}
-              onPress={() => !isDisabled && setActiveSection(section.key)}
-              disabled={isDisabled}
-            >
-              <Ionicons
-                name={section.icon}
-                size={20}
-                color={isActive ? '#e4715f' : isDisabled ? '#d1ccc3' : '#9ca3af'}
-              />
-              <Text style={[
-                styles.tabLabel,
-                isActive && styles.tabLabelActive,
-                isDisabled && styles.tabLabelDisabled,
-              ]}>
-                {section.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {community.status !== 'ACTIVE' ? (
+        <View style={styles.inactiveContainer}>
+          <Ionicons name="people-outline" size={48} color="#d1ccc3" />
+          <Text style={styles.inactiveTitle}>Comunidad en formación</Text>
+          <Text style={styles.inactiveText}>
+            Se necesitan al menos 3 miembros para desbloquear las funcionalidades de la comunidad.
+          </Text>
+          <Text style={styles.inactiveCount}>
+            {community.memberCount}/3 miembros
+          </Text>
+        </View>
+      ) : (
+        <>
+          {/* Tabs de secciones */}
+          <View style={styles.tabBar}>
+            {SECTIONS.map(section => {
+              const isActive = activeSection === section.key;
+              const isDisabled = section.key !== 'biblioteca';
+              return (
+                <Pressable
+                  key={section.key}
+                  style={[styles.tab, isActive && styles.tabActive]}
+                  onPress={() => !isDisabled && setActiveSection(section.key)}
+                  disabled={isDisabled}
+                >
+                  <Ionicons
+                    name={section.icon}
+                    size={20}
+                    color={isActive ? '#e4715f' : isDisabled ? '#d1ccc3' : '#9ca3af'}
+                  />
+                  <Text style={[
+                    styles.tabLabel,
+                    isActive && styles.tabLabelActive,
+                    isDisabled && styles.tabLabelDisabled,
+                  ]}>
+                    {section.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-      {/* Contenido de la sección activa */}
-      {activeSection === 'biblioteca' && (
-        <CommunityLibraryTab communityId={communityId} />
+          {/* Contenido de la sección activa */}
+          {activeSection === 'biblioteca' && (
+            <CommunityLibraryTab communityId={communityId} />
+          )}
+        </>
       )}
     </View>
   );
@@ -208,5 +223,29 @@ const styles = StyleSheet.create({
   },
   tabLabelDisabled: {
     color: '#d1ccc3',
+  },
+  inactiveContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  inactiveTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginTop: 16,
+  },
+  inactiveText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  inactiveCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#e4715f',
+    marginTop: 12,
   },
 });
