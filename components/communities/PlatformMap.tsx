@@ -15,52 +15,93 @@ type Props = {
 };
 
 export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin, onLibrary }: Props) {
+  // Group communities by spot.id to ensure ONLY ONE marker per spot
+  const grouped = new Map<number, { spot: Bookspot, communities: (CommunityDto & { spot: Bookspot })[] }>();
+  
+  communities.forEach(comm => {
+    const spotId = comm.spot.id;
+    if (!grouped.has(spotId)) {
+      grouped.set(spotId, {
+        spot: comm.spot,
+        communities: []
+      });
+    }
+    grouped.get(spotId)!.communities.push(comm);
+  });
+
+  const groupedList = Array.from(grouped.values());
+
   return (
     <MapView
       style={styles.map}
       initialRegion={location}
       showsUserLocation={true}
     >
-      {communities.map((comm) => {
-        const isMine = myCommunities.some(mc => mc.id === comm.id);
+      {groupedList.map(({ spot, communities: spotComms }) => {
+        const hasMyComm = spotComms.some(comm => myCommunities.some(mc => mc.id === comm.id));
+        const multipleComms = spotComms.length > 1;
+
         return (
           <Marker
-            key={comm.id}
+            key={`spot-${spot.id}`}
             coordinate={{
-              latitude: comm.spot.latitude,
-              longitude: comm.spot.longitude,
+              latitude: spot.latitude,
+              longitude: spot.longitude,
             }}
+            tracksViewChanges={false}
           >
-            <View style={[styles.markerContainer, isMine ? styles.myMarker : styles.otherMarker]}>
-              <Ionicons name={isMine ? "people" : "location"} size={20} color="#fff" />
+            <View style={[
+              styles.markerContainer, 
+              hasMyComm ? styles.myMarker : styles.otherMarker,
+              multipleComms && styles.multipleMarker
+            ]}>
+              <Ionicons 
+                name={multipleComms ? "layers" : (hasMyComm ? "people" : "location")} 
+                size={20} 
+                color="#fff" 
+              />
+              {multipleComms && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{spotComms.length}</Text>
+                </View>
+              )}
             </View>
             <Callout tooltip={true}>
-              <View style={styles.calloutContent}>
-                <Text style={styles.commName}>{comm.name}</Text>
-                <Text style={styles.commSpot}>{comm.spot.nombre}</Text>
-                <Text style={styles.commMembers}>{comm.memberCount} miembros</Text>
-                <Text style={styles.commStatus}>Estado: {comm.status}</Text>
-                
-                {!isMine ? (
-                  <CalloutSubview onPress={() => onJoin(comm.id)}>
-                    <View style={styles.joinBtn}>
-                      <Text style={styles.joinBtnText}>Toca para Unirte</Text>
-                    </View>
-                  </CalloutSubview>
-                ) : (
-                  <View style={styles.myCommButtons}>
-                    <CalloutSubview onPress={() => onAdmin(comm)}>
-                      <View style={[styles.joinBtn, { backgroundColor: '#3d405b' }]}>
-                        <Text style={styles.joinBtnText}>Administrar</Text>
+              <View style={[styles.calloutContent, multipleComms && styles.calloutContentMultiple]}>
+                <Text style={styles.commSpot}>{spot.nombre}</Text>
+                <ScrollView 
+                  style={multipleComms ? { maxHeight: 250 } : {}}
+                  showsVerticalScrollIndicator={multipleComms}
+                >
+                  {spotComms.map((comm, index) => {
+                    const isMine = myCommunities.some(mc => mc.id === comm.id);
+                    return (
+                      <View key={`comm-${comm.id}`} style={[
+                        styles.commItem, 
+                        index < spotComms.length - 1 && styles.commItemBorder
+                      ]}>
+                        <Text style={styles.commName}>{comm.name}</Text>
+                        <Text style={styles.commMembers}>{comm.memberCount} miembros</Text>
+                        
+                        {!isMine ? (
+                          <CalloutSubview onPress={async () => await onJoin(comm.id)}>
+                            <View style={styles.joinBtn}>
+                              <Text style={styles.joinBtnText}>Unirse</Text>
+                            </View>
+                          </CalloutSubview>
+                        ) : (
+
+                          <CalloutSubview onPress={() => onLibrary(comm.id)}>
+                            <View style={[styles.joinBtn, { backgroundColor: '#e4715f' }]}>
+                              <Text style={styles.joinBtnText}>Ver Comunidad</Text>
+                            </View>
+                          </CalloutSubview>
+
+                        )}
                       </View>
-                    </CalloutSubview>
-                    <CalloutSubview onPress={() => onLibrary(comm.id)}>
-                      <View style={[styles.joinBtn, { backgroundColor: '#e4715f' }]}>
-                        <Text style={styles.joinBtnText}>Ver Comunidad</Text>
-                      </View>
-                    </CalloutSubview>
-                  </View>
-                )}
+                    );
+                  })}
+                </ScrollView>
               </View>
             </Callout>
           </Marker>
@@ -89,6 +130,29 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
+  multipleMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4757',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
   myMarker: {
     backgroundColor: '#e4715f',
   },
@@ -98,28 +162,41 @@ const styles = StyleSheet.create({
   calloutContent: {
     backgroundColor: '#fff',
     borderRadius: 10,
-    padding: 15,
-    width: 200,
+    padding: 12,
+    width: 220,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
   },
+  calloutContentMultiple: {
+    width: 250,
+    maxHeight: 400,
+  },
+  commItem: {
+    paddingVertical: 8,
+  },
+  commItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
   commName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   commSpot: {
     fontSize: 12,
     color: '#666',
-    marginBottom: 4,
+    fontWeight: '600',
+    marginBottom: 6,
+    textAlign: 'center',
   },
   commMembers: {
     fontSize: 12,
     color: '#333',
-    marginBottom: 2,
+    marginBottom: 6,
   },
   commStatus: {
     fontSize: 12,
@@ -128,12 +205,13 @@ const styles = StyleSheet.create({
   },
   joinBtn: {
     backgroundColor: '#e4715f',
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 6,
     alignItems: 'center',
   },
   joinBtnText: {
     color: '#fff',
+    fontSize: 12,
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -145,7 +223,7 @@ const styles = StyleSheet.create({
   },
   myCommButtons: {
     flexDirection: 'column',
-    gap: 6,
+    gap: 4,
   },
   myCommBtn: {
     width: '100%',
