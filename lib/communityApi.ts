@@ -84,11 +84,16 @@ export async function joinCommunity(communityId: number): Promise<CommunityDto> 
 
   if (!res.ok) {
     const errorText = await res.text();
-    let message = errorText;
+    let message = `Error al unirse: ${res.status}`;
+    
     try {
       const errorJson = JSON.parse(errorText);
-      message = errorJson.message || errorJson.error || errorText;
-    } catch {}
+      message = errorJson.error || errorJson.message || errorJson.detail || errorText;
+    } catch {
+      message = errorText || `Error ${res.status}`;
+    }
+    
+    console.error('Backend Join Error:', message);
     throw new Error(message);
   }
 

@@ -1,17 +1,40 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { StyleSheet, View, Text, TextInput, Pressable, ActivityIndicator, ScrollView, Alert } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { createCommunity } from '@/lib/communityApi';
-import { mockBookspots } from '@/lib/mockBookspots';
+import { getActiveBookspots } from '@/lib/bookspotApi';
+import { Bookspot } from '@/lib/mockBookspots';
 
 export default function CreateCommunityScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<number | null>(null);
+  const [bookspots, setBookspots] = useState<Bookspot[]>([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchBookspots = useCallback(async () => {
+    try {
+      setInitialLoading(true);
+      const data = await getActiveBookspots();
+      setBookspots(data);
+    } catch (error: any) {
+      console.error(error);
+      setErrorMessage('No se pudieron cargar los BookSpots disponibles.');
+    } finally {
+      setInitialLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchBookspots();
+    }, [fetchBookspots])
+  );
 
   const handleCreate = async () => {
     setErrorMessage(null);
@@ -73,34 +96,40 @@ export default function CreateCommunityScreen() {
           <Text style={styles.label}>BookSpot de Referencia</Text>
           <Text style={styles.subLabel}>Este será el lugar principal para los encuentros.</Text>
           
-          {mockBookspots.map((spot) => (
-            <Pressable
-              key={spot.id}
-              style={[
-                styles.spotItem,
-                selectedSpot === spot.id && styles.spotItemSelected
-              ]}
-              onPress={() => {
-                setSelectedSpot(spot.id);
-                if (errorMessage) setErrorMessage(null);
-              }}
-            >
-              <View style={styles.spotInfo}>
-                <Text style={[styles.spotName, selectedSpot === spot.id && styles.spotNameSelected]}>
-                  {spot.nombre}
-                </Text>
-                <Text style={styles.spotAddress}>{spot.addressText}</Text>
-              </View>
-              {selectedSpot === spot.id && (
-                <Ionicons name="checkmark-circle" size={24} color="#e4715f" />
-              )}
-            </Pressable>
-          ))}
+          {initialLoading ? (
+            <ActivityIndicator size="small" color="#e4715f" style={{ marginVertical: 20 }} />
+          ) : bookspots.length === 0 ? (
+            <Text style={styles.emptyText}>No hay BookSpots activos disponibles en este momento.</Text>
+          ) : (
+            bookspots.map((spot) => (
+              <Pressable
+                key={spot.id}
+                style={[
+                  styles.spotItem,
+                  selectedSpot === spot.id && styles.spotItemSelected
+                ]}
+                onPress={() => {
+                  setSelectedSpot(spot.id);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+              >
+                <View style={styles.spotInfo}>
+                  <Text style={[styles.spotName, selectedSpot === spot.id && styles.spotNameSelected]}>
+                    {spot.nombre}
+                  </Text>
+                  <Text style={styles.spotAddress}>{spot.addressText}</Text>
+                </View>
+                {selectedSpot === spot.id && (
+                  <Ionicons name="checkmark-circle" size={24} color="#e4715f" />
+                )}
+              </Pressable>
+            ))
+          )}
 
           <Pressable 
-            style={[styles.createBtn, (!name.trim() || !selectedSpot || loading) && styles.createBtnDisabled]}
+            style={[styles.createBtn, (!name.trim() || !selectedSpot || loading || initialLoading) && styles.createBtnDisabled]}
             onPress={handleCreate}
-            disabled={!name.trim() || !selectedSpot || loading}
+            disabled={!name.trim() || !selectedSpot || loading || initialLoading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />

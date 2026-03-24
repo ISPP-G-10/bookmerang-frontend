@@ -7,11 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Header from '@/components/Header';
 import { exploreCommunities, getMyCommunities, joinCommunity, leaveCommunity, deleteCommunity } from '@/lib/communityApi';
+import { getActiveBookspots } from '@/lib/bookspotApi';
 import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
 import { ChatParticipantDto } from '@/types/chat';
-import { mockBookspots } from '@/lib/mockBookspots';
+import { Bookspot } from '@/lib/mockBookspots';
 import PlatformMap from '@/components/communities/PlatformMap';
 
 const DEFAULT_LOCATION = {
@@ -27,6 +28,7 @@ export default function ComunidadesScreen() {
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
+  const [bookspots, setBookspots] = useState<Bookspot[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Admin Modal state
@@ -47,12 +49,14 @@ export default function ComunidadesScreen() {
   const fetchCommunities = useCallback(async (lat: number, lon: number) => {
     try {
       setLoading(true);
-      const [allComms, myComms] = await Promise.all([
+      const [allComms, myComms, allBookspots] = await Promise.all([
         exploreCommunities(lat, lon, 50),
-        getMyCommunities()
+        getMyCommunities(),
+        getActiveBookspots()
       ]);
       setCommunities(allComms);
       setMyCommunities(myComms);
+      setBookspots(allBookspots);
     } catch (error: any) {
       console.error(error);
       Alert.alert('Error', error.message || 'No se pudieron cargar las comunidades');
@@ -92,18 +96,33 @@ export default function ComunidadesScreen() {
       loadLocationAndData();
     }, [loadLocationAndData])
   );
-
-  const handleJoin = async (communityId: number) => {
-    try {
-      setLoading(true);
-      await joinCommunity(communityId);
+const handleJoin = async (communityId: number) => {
+  try {
+    setLoading(true);
+    await joinCommunity(communityId);
+    
+    if (Platform.OS === 'web') {
+      window.alert('¡Éxito! Te has unido a la comunidad.');
+    } else {
       Alert.alert('¡Éxito!', 'Te has unido a la comunidad.');
-      await loadLocationAndData(); // Refresh to update myCommunities status
-    } catch (error: any) {
-      Alert.alert('Error al unirte', error.message || 'Error desconocido');
-      setLoading(false);
     }
-  };
+    
+    await loadLocationAndData(); 
+  } catch (error: any) {
+    console.error('Error joining community:', error);
+    const errorMessage = error.message || 'No se pudo unir a la comunidad';
+    
+    if (Platform.OS === 'web') {
+      // Forzamos el alert nativo del navegador para depuración inmediata
+      window.alert(`No se pudo unir: ${errorMessage}`);
+    } else {
+      Alert.alert('No se pudo unir', errorMessage);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleAdmin = async (comm: CommunityDto) => {
     setSelectedAdminComm(comm);
@@ -167,9 +186,9 @@ export default function ComunidadesScreen() {
 
   // Agrupar comunidades por bookspot para renderizar en el mapa
   const communitiesWithLocation = communities.map(c => {
-    const spot = mockBookspots.find(b => b.id === c.referenceBookspotId);
+    const spot = bookspots.find(b => b.id === c.referenceBookspotId);
     return { ...c, spot };
-  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: typeof mockBookspots[0] })[];
+  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: Bookspot })[];
 
   const isCreator = selectedAdminComm?.creatorId === currentUserId;
 
