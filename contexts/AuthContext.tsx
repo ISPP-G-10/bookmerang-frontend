@@ -1,5 +1,5 @@
 import { fetchMyBackendUserId } from '@/lib/api';
-import supabase from '@/lib/supabase';
+import { clearStoredAuthSession, getStoredAuthSession } from '@/lib/authSession';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, {
@@ -13,15 +13,14 @@ import React, {
 
 // ── Tipos ──────────────────────────────────────────────
 interface AuthContextType {
-  /** Sesión de Supabase (contiene JWT, user, etc.) */
+  /** Sesión local (contiene access token y datos básicos del usuario) */
   session: any | null;
 
   /** ID interno del usuario en el backend (≠ Supabase UUID).
    *  Puede ser null si aún no se ha resuelto. */
   backendUserId: string | null;
 
-  /** ID utilizable para identificar al usuario actual.
-   *  Usa backendUserId si existe, si no el UUID de Supabase. */
+  /** ID utilizable para identificar al usuario actual. */
   currentUserId: string | null;
 
   /** true mientras se está comprobando la sesión inicial */
@@ -30,7 +29,7 @@ interface AuthContextType {
   /** Fija el ID interno del backend (resolverlo desde datos de chat, registro, etc.) */
   setBackendUserId: (id: string) => void;
 
-  /** Cierra sesión de Supabase y limpia el estado */
+  /** Cierra sesión local y limpia el estado */
   signOut: () => Promise<void>;
 }
 
@@ -44,7 +43,7 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 // ── Helper ─────────────────────────────────────────────
-const storageKey = (supabaseId: string) => `backendUserId_${supabaseId}`;
+const storageKey = (userId: string) => `backendUserId_${userId}`;
 
 // ── Provider ───────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -79,30 +78,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setBackendUserId = useCallback((id: string) => {
     setBackendUserIdState(id);
-    // Persistir para sobrevivir reinicios de app
-    void supabase.auth.getSession().then(({ data }: { data: any }) => {
-      const supabaseId = data?.session?.user?.id;
-      if (supabaseId) {
-        return safeSetStorageItem(storageKey(supabaseId), id);
-      }
-      return Promise.resolve();
-    });
-  }, [safeSetStorageItem]);
+    const userId = session?.user?.id;
+    if (userId) {
+      void safeSetStorageItem(storageKey(userId), id);
+    }
+  }, [safeSetStorageItem, session]);
 
   const signOut = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    const supabaseId = data?.session?.user?.id;
-    if (supabaseId) {
-      await safeRemoveStorageItem(storageKey(supabaseId));
+    const userId = session?.user?.id;
+    if (userId) {
+      await safeRemoveStorageItem(storageKey(userId));
     }
     setBackendUserIdState(null);
-    await supabase.auth.signOut();
-  }, [safeRemoveStorageItem]);
+    setSession(null);
+    await clearStoredAuthSession();
+    router.replace('/login' as any);
+  }, [safeRemoveStorageItem, session]);
 
   // Intenta resolver el backendUserId desde el backend o desde AsyncStorage
-  const resolveBackendUserId = useCallback(async (supabaseId: string) => {
+  const resolveBackendUserId = useCallback(async (userId: string) => {
     // Primero intentar desde AsyncStorage
-    const stored = await safeGetStorageItem(storageKey(supabaseId));
+    const stored = await safeGetStorageItem(storageKey(userId));
     if (stored) {
       setBackendUserIdState(stored);
       return;
@@ -117,49 +113,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (resolved) {
       setBackendUserIdState(resolved);
-      await safeSetStorageItem(storageKey(supabaseId), resolved);
+      await safeSetStorageItem(storageKey(userId), resolved);
     }
   }, [safeGetStorageItem, safeSetStorageItem]);
 
   useEffect(() => {
-    // 1. Obtener sesión inicial y restaurar backendUserId persistido
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
-      setSession(session);
+    getStoredAuthSession().then((storedSession) => {
+      const restoredSession = storedSession
+        ? {
+            access_token: storedSession.accessToken,
+            user: {
+              id: storedSession.user.id,
+              email: storedSession.user.email,
+            },
+          }
+        : null;
+
+      // 1. Obtener sesión inicial y restaurar backendUserId persistido
+      setSession(restoredSession);
       setLoading(false);
 
-      if (!session) {
+      if (!restoredSession) {
         router.replace('/login' as any);
       } else {
-        const supabaseId = session.user?.id;
-        if (supabaseId) {
-          void resolveBackendUserId(supabaseId);
+        const userId = restoredSession.user?.id;
+        if (userId) {
+          void resolveBackendUserId(userId);
         }
       }
     });
-
-    // 2. Escuchar cambios de sesión (login, logout, token refresh)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
-      setSession(session);
-
-      if (!session) {
-        // Limpiar userId al cerrar sesión
-        setBackendUserIdState(null);
-        router.replace('/login' as any);
-      } else {
-        // Al iniciar sesión, resolver backendUserId
-        const supabaseId = session.user?.id;
-        if (supabaseId) {
-          void resolveBackendUserId(supabaseId);
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [resolveBackendUserId]);
 
-  // ID utilizable: backendUserId si existe, si no el UUID de Supabase
+  // ID utilizable: backendUserId si existe, si no el id de sesión local
   const currentUserId = backendUserId ?? session?.user?.id ?? null;
 
   return (

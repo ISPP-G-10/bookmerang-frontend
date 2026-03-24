@@ -219,6 +219,25 @@ export default function MatcherScreen() {
     setSelectedCard(null);
   };
 
+  if (matchInfo) {
+    return (
+      <MatchOverlay
+        data={matchInfo}
+        onClose={() => {
+          setMatchInfo(null);
+          setMatchResult(null);
+        }}
+        onChat={() => {
+          setMatchInfo(null);
+          if (matchResult?.chatId) {
+            router.push(`/chat/${matchResult.chatId}` as any);
+          }
+          setMatchResult(null);
+        }}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -342,23 +361,6 @@ export default function MatcherScreen() {
           onClose={handleCloseDetails}
           onChat={handleChat}
         />
-
-        {matchInfo && (
-          <MatchOverlay
-            data={matchInfo}
-            onClose={() => {
-              setMatchInfo(null);
-              setMatchResult(null);
-            }}
-            onChat={() => {
-              setMatchInfo(null);
-              if (matchResult?.chatId) {
-                router.push(`/chat/${matchResult.chatId}` as any);
-              }
-              setMatchResult(null);
-            }}
-          />
-        )}
 
         {swipeError && (
           <View style={{

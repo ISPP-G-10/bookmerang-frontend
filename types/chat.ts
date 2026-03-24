@@ -22,6 +22,7 @@ export interface ChatDto {
   createdAt: string;
   participants: ChatParticipantDto[];
   lastMessage: MessageDto | null;
+  name?: string;
 }
 
 export interface TypingUserDto {

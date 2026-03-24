@@ -18,6 +18,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
+import { authService } from "../lib/authService";
+import {
+  getStoredAuthSession,
+  updateStoredAuthUser,
+} from "../lib/authSession";
 import supabase from "../lib/supabase";
 
 const PROFILE_STORAGE_BUCKET =
@@ -38,6 +43,12 @@ const resolveFileExtension = (asset: ImagePicker.ImagePickerAsset): string => {
 const isRemoteAvatarUrl = (value: string | null | undefined): value is string =>
   Boolean(value && /^https?:\/\//i.test(value));
 
+const normalizeAvatarValue = (value: string | null | undefined): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
   try {
     const url = new URL(publicUrl);
@@ -51,6 +62,26 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
     return null;
   }
 };
+
+const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => {
+      reject(new Error("No se pudo leer la imagen seleccionada."));
+    };
+
+    reader.onloadend = () => {
+      if (typeof reader.result === "string" && reader.result.length > 0) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("No se pudo convertir la imagen seleccionada."));
+    };
+
+    reader.readAsDataURL(blob);
+  });
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -165,7 +196,9 @@ function FloatingModal({
             maxHeight: "85%",
             overflow: "hidden",
           }}
-          onPress={() => {}}
+          onPress={(event) => {
+            event.stopPropagation();
+          }}
         >
           {children}
         </Pressable>
@@ -539,10 +572,12 @@ function ChangeEmailModal({
   visible,
   onClose,
   currentEmail,
+  onEmailChanged,
 }: {
   visible: boolean;
   onClose: () => void;
   currentEmail: string;
+  onEmailChanged?: (email: string) => void;
 }) {
   const [newEmail, setNewEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -562,22 +597,20 @@ function ChangeEmailModal({
   }, [visible]);
 
   const handleSave = async () => {
-    if (!newEmail.trim()) return setError("Introduce el nuevo email");
-    if (!password.trim()) return setError("Introduce tu contraseña actual");
+    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail) return setError("Introduce el nuevo email");
+    if (!normalizedPassword) return setError("Introduce tu contraseña actual");
+
     setSaving(true);
     setError("");
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentEmail,
-        password,
-      });
-      if (signInError) throw new Error("Contraseña incorrecta");
-      const { error: updateError } = await supabase.auth.updateUser({
-        email: newEmail,
-      });
-      if (updateError) throw updateError;
+      const updatedUser = await authService.patchEmail(normalizedEmail, normalizedPassword);
+      onEmailChanged?.(updatedUser?.email ?? normalizedEmail);
       setSuccess(true);
     } catch (e: any) {
+      console.error("[ChangeEmailModal.handleSave]", e);
       setError(e?.message ?? "Error al cambiar el email");
     } finally {
       setSaving(false);
@@ -642,7 +675,7 @@ function ChangeEmailModal({
                 marginBottom: 8,
               }}
             >
-              ¡Email enviado!
+              ¡Email actualizado!
             </Text>
             <Text
               style={{
@@ -652,8 +685,7 @@ function ChangeEmailModal({
                 marginBottom: 24,
               }}
             >
-              Revisa tu bandeja de entrada en {newEmail} para confirmar el
-              cambio.
+              Tu correo se ha actualizado correctamente a {newEmail}.
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -804,15 +836,7 @@ function ChangePasswordModal({
     setSaving(true);
     setError("");
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: currentEmail,
-        password: currentPassword,
-      });
-      if (signInError) throw new Error("Contraseña actual incorrecta");
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-      if (updateError) throw updateError;
+      await authService.patchPassword(currentPassword, newPassword);
       setSuccess(true);
     } catch (e: any) {
       setError(e?.message ?? "Error al cambiar la contraseña");
@@ -1096,6 +1120,7 @@ export default function SettingsScreen() {
   const [capturingPhoto, setCapturingPhoto] = React.useState(false);
   const [wasEditingProfile, setWasEditingProfile] = React.useState(false);
   const cameraRef = React.useRef<CameraView | null>(null);
+  const hasUnsavedProfileDraft = React.useRef(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -1110,20 +1135,24 @@ export default function SettingsScreen() {
 
   const normalizeProfile = (
     source: any,
-    fallbackUser?: { email?: string | null; user_metadata?: Record<string, any> | null } | null,
+    fallbackUser?: {
+      email?: string | null;
+      username?: string | null;
+      name?: string | null;
+      profilePhoto?: string | null;
+    } | null,
   ) => {
-    const fallbackMetadata = fallbackUser?.user_metadata ?? {};
     const avatar =
       source?.avatar ??
       source?.profilePhoto ??
-      fallbackMetadata?.avatar_url ??
+      fallbackUser?.profilePhoto ??
       null;
 
     return {
       ...source,
       email: source?.email ?? fallbackUser?.email ?? "",
-      name: source?.name ?? fallbackMetadata?.name ?? "",
-      username: source?.username ?? fallbackMetadata?.username ?? "",
+      name: source?.name ?? fallbackUser?.name ?? "",
+      username: source?.username ?? fallbackUser?.username ?? "",
       avatar: avatar || null,
     };
   };
@@ -1144,9 +1173,8 @@ export default function SettingsScreen() {
   };
 
   const loadProfile = React.useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const session = await getStoredAuthSession();
+    const user = session?.user;
 
     if (!user) return;
 
@@ -1158,7 +1186,19 @@ export default function SettingsScreen() {
         const serverProfile = await res.json();
         const normalized = normalizeProfile(serverProfile, user);
         setPersistedAvatar(normalized.avatar);
-        setProfile(normalized);
+        setProfile((current: any) => {
+          if (!hasUnsavedProfileDraft.current) return normalized;
+
+          const currentAvatar =
+            current && Object.prototype.hasOwnProperty.call(current, "avatar")
+              ? current.avatar
+              : undefined;
+
+          return {
+            ...normalized,
+            avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
+          };
+        });
         return;
       }
     } catch (error) {
@@ -1167,51 +1207,51 @@ export default function SettingsScreen() {
 
     const normalized = normalizeProfile({}, user);
     setPersistedAvatar(normalized.avatar);
-    setProfile(normalized);
+    setProfile((current: any) => {
+      if (!hasUnsavedProfileDraft.current) return normalized;
+
+      const currentAvatar =
+        current && Object.prototype.hasOwnProperty.call(current, "avatar")
+          ? current.avatar
+          : undefined;
+
+      return {
+        ...normalized,
+        avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
+      };
+    });
   }, []);
+
+  const handleCloseEditProfile = React.useCallback(() => {
+    setEditProfileOpen(false);
+
+    if (hasUnsavedProfileDraft.current) {
+      hasUnsavedProfileDraft.current = false;
+      void loadProfile();
+    }
+  }, [loadProfile]);
 
   const uploadProfileBinary = async (
     fileData: ArrayBuffer,
     extension: string,
     mimeType: string,
   ): Promise<string> => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    void extension;
 
-    if (!user) {
-      throw new Error("No se pudo identificar al usuario autenticado.");
-    }
-
-    const path = `profiles/${user.id}/${Date.now()}.${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(PROFILE_STORAGE_BUCKET)
-      .upload(path, fileData, {
-        contentType: mimeType,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(
-        `No se pudo subir la imagen al storage (${PROFILE_STORAGE_BUCKET}): ${uploadError.message}`,
-      );
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from(PROFILE_STORAGE_BUCKET)
-      .getPublicUrl(path);
-
-    if (!publicUrlData?.publicUrl) {
-      throw new Error("No se pudo generar la URL pública de la foto.");
-    }
-
-    return publicUrlData.publicUrl;
+    return readBlobAsDataUrl(
+      new Blob([fileData], {
+        type: mimeType || "image/jpeg",
+      }),
+    );
   };
 
   const uploadProfilePhoto = async (
     asset: ImagePicker.ImagePickerAsset,
   ): Promise<string> => {
+    if (asset.base64) {
+      return `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`;
+    }
+
     const extension = resolveFileExtension(asset);
     const localFile = await fetch(asset.uri);
     if (!localFile.ok) {
@@ -1256,6 +1296,7 @@ export default function SettingsScreen() {
     setPhotoLoading(true);
     try {
       const publicUrl = await uploadProfilePhoto(result.assets[0]);
+      hasUnsavedProfileDraft.current = true;
       setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
       showToast("Foto de perfil actualizada");
     } catch (e: any) {
@@ -1275,6 +1316,7 @@ export default function SettingsScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
       allowsMultipleSelection: false,
+      base64: true,
       quality: 0.8,
     });
 
@@ -1308,6 +1350,7 @@ export default function SettingsScreen() {
           file.type || "image/jpeg",
         );
 
+        hasUnsavedProfileDraft.current = true;
         setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
         showToast("Foto de perfil actualizada");
       } catch (e: any) {
@@ -1347,16 +1390,25 @@ export default function SettingsScreen() {
     setPhotoLoading(true);
 
     try {
-      const captured = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+      const captured = await cameraRef.current.takePictureAsync({
+        quality: 0.8,
+        base64: true,
+      });
       if (captured?.uri) {
+        const dataUrl =
+          captured.base64 != null
+            ? `data:image/jpeg;base64,${captured.base64}`
+            : null;
         const asset = {
           uri: captured.uri,
+          base64: captured.base64,
           mimeType: "image/jpeg",
           width: (captured as any).width ?? 0,
           height: (captured as any).height ?? 0,
         } as ImagePicker.ImagePickerAsset;
 
-        const publicUrl = await uploadProfilePhoto(asset);
+        const publicUrl = dataUrl ?? (await uploadProfilePhoto(asset));
+        hasUnsavedProfileDraft.current = true;
         setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
         showToast("Foto de perfil actualizada");
         closeCameraModal();
@@ -1385,7 +1437,7 @@ export default function SettingsScreen() {
     avatar?: string | null;
   }) => {
     try {
-      const nextAvatar = isRemoteAvatarUrl(data.avatar) ? data.avatar : null;
+      const nextAvatar = normalizeAvatarValue(data.avatar);
       const nextName = data.name.trim();
       const nextUsername = data.username.trim();
 
@@ -1417,21 +1469,6 @@ export default function SettingsScreen() {
         return;
       }
 
-      // Then: update Supabase auth user metadata
-      const updateData: any = {
-        name: nextName,
-        username: nextUsername,
-        avatar_url: nextAvatar,
-      };
-
-      const res = await supabase.auth.updateUser({ data: updateData });
-      console.log("supabase.updateUser res:", res);
-      if (res.error) {
-        console.error("Error updating user in Supabase:", res.error);
-        Alert.alert("Error", res.error.message || "No se pudo actualizar el perfil en Supabase");
-        return;
-      }
-
       // Update local state so Settings shows new values
       const out = normalizeProfile(
         {
@@ -1444,14 +1481,23 @@ export default function SettingsScreen() {
         },
         {
           email: currentEmail,
-          user_metadata: updateData,
+          name: nextName,
+          username: nextUsername,
+          profilePhoto: nextAvatar ?? "",
         },
       );
+
+      await updateStoredAuthUser({
+        name: nextName,
+        username: nextUsername,
+        profilePhoto: nextAvatar ?? "",
+      });
 
       if (persistedAvatar && persistedAvatar !== nextAvatar) {
         await removeStoredProfilePhoto(persistedAvatar);
       }
 
+      hasUnsavedProfileDraft.current = false;
       setPersistedAvatar(nextAvatar);
       setProfile(out);
       setEditProfileOpen(false);
@@ -1468,7 +1514,7 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await authService.signOut();
     router.replace("/login" as any);
   };
 
@@ -1510,17 +1556,13 @@ export default function SettingsScreen() {
       if (!ok) return;
 
       try {
-        const { data: session } = await supabase.auth.getSession();
-        const userId = session.session?.user.id;
-        const accessToken = session.session?.access_token;
-
         const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
         if (!res.ok) {
           const text = await res.text().catch(() => "");
           throw new Error(text || "Error borrando la cuenta en el servidor");
         }
 
-        await supabase.auth.signOut();
+        await authService.signOut();
         window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
       } catch (e: any) {
         console.error("Error borrando cuenta en backend:", e);
@@ -1541,10 +1583,6 @@ export default function SettingsScreen() {
           onPress: async () => {
             console.log('Eliminar: confirm pressed');
             try {
-              const { data: session } = await supabase.auth.getSession();
-              const userId = session.session?.user.id;
-              const accessToken = session.session?.access_token;
-
               // Llama al backend para borrar el baseUser; el backend debe encargarse
               // de eliminar el usuario en Supabase de forma administrativa.
               try {
@@ -1555,7 +1593,7 @@ export default function SettingsScreen() {
                 }
 
                 // Si el backend respondió OK, cierra sesión y notifica.
-                await supabase.auth.signOut();
+                await authService.signOut();
                 Alert.alert("Cuenta eliminada", "Tu cuenta ha sido eliminada correctamente.");
               } catch (e: any) {
                 console.error("Error borrando cuenta en backend:", e);
@@ -1806,22 +1844,24 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-    <EditProfileModal
-      visible={editProfileOpen}
-      onClose={() => setEditProfileOpen(false)}
-      profile={profile}
-      onSave={handleSaveProfile}
-      onSelectFromGallery={handleSelectFromGallery}
-      onTakePhoto={handleTakePhoto}
-      onRemovePhoto={() =>
-        setProfile((current: any) => ({ ...(current ?? {}), avatar: null }))
-      }
-      photoLoading={photoLoading}
-    />
+      <EditProfileModal
+        visible={editProfileOpen}
+        onClose={handleCloseEditProfile}
+        profile={profile}
+        onSave={handleSaveProfile}
+        onSelectFromGallery={handleSelectFromGallery}
+        onTakePhoto={handleTakePhoto}
+        onRemovePhoto={() => {
+          hasUnsavedProfileDraft.current = true;
+          setProfile((current: any) => ({ ...(current ?? {}), avatar: null }));
+        }}
+        photoLoading={photoLoading}
+      />
       <ChangeEmailModal
         visible={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}
         currentEmail={currentEmail}
+        onEmailChanged={(email) => setCurrentEmail(email)}
       />
       <ChangePasswordModal
         visible={changePasswordOpen}
