@@ -24,29 +24,26 @@ type Props = {
 };
 
 export default function CommunityLibraryTab({ communityId }: Props) {
-  const { currentUserId } = useAuth();
+  const { currentUserId, userPlan } = useAuth();
 
   const [books, setBooks] = useState<CommunityLibraryBookDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedGenre, setSelectedGenre] = useState(GENRE_ALL);
-  const [premiumRequired, setPremiumRequired] = useState(false);
+
+  const isFreeUser = userPlan === 'FREE';
 
   const fetchLibrary = useCallback(async () => {
+    if (isFreeUser) return;
     try {
       setLoading(true);
-      setPremiumRequired(false);
       const data = await getCommunityLibrary(communityId, 1, 100);
       setBooks(data);
     } catch (error: any) {
-      if (error.message?.includes('403')) {
-        setPremiumRequired(true);
-      } else {
-        Alert.alert('Error', error.message || 'No se pudo cargar la biblioteca');
-      }
+      Alert.alert('Error', error.message || 'No se pudo cargar la biblioteca');
     } finally {
       setLoading(false);
     }
-  }, [communityId]);
+  }, [communityId, isFreeUser]);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,7 +160,7 @@ export default function CommunityLibraryTab({ communityId }: Props) {
     );
   }
 
-  if (premiumRequired) {
+  if (isFreeUser) {
     return (
       <View style={styles.centered}>
         <Ionicons name="lock-closed-outline" size={48} color="#e4715f" />

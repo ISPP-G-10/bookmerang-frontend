@@ -190,7 +190,15 @@ export default function CommunityDetailScreen() {
         </View>
       </View>
 
-      {community.status !== 'ACTIVE' ? (
+      {!isMember ? (
+        <View style={styles.inactiveContainer}>
+          <Ionicons name="lock-closed-outline" size={48} color="#d1ccc3" />
+          <Text style={styles.inactiveTitle}>Acceso restringido</Text>
+          <Text style={styles.inactiveText}>
+            Debes ser miembro de esta comunidad para acceder a sus funcionalidades.
+          </Text>
+        </View>
+      ) : community.status !== 'ACTIVE' ? (
         <View style={styles.inactiveContainer}>
           <Ionicons name="people-outline" size={48} color="#d1ccc3" />
           <Text style={styles.inactiveTitle}>Comunidad en formación</Text>
