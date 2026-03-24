@@ -238,6 +238,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
   },
+  emptyText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginVertical: 20,
+  },
   createBtn: {
     backgroundColor: '#e4715f',
     padding: 16,

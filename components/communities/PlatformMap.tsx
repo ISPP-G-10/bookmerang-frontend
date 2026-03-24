@@ -1,9 +1,11 @@
-import React from 'react';
-import { View, StyleSheet, Text, Pressable } from 'react-native';
-import MapView, { Marker, Callout, CalloutSubview } from 'react-native-maps';
+import React, { useMemo, useState } from 'react';
+import { View, StyleSheet, Text } from 'react-native';
+import MapView, { Callout, CalloutSubview, Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { CommunityDto } from '@/types/community';
 import { Bookspot } from '@/lib/mockBookspots';
+import CommunityRouletteModal from './CommunityRouletteModal';
+import { GroupedCommunitySpot, groupCommunitiesBySpot } from './communityMapUtils';
 
 type Props = {
   location: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
@@ -11,107 +13,118 @@ type Props = {
   myCommunities: CommunityDto[];
   onJoin: (communityId: number) => void;
   onAdmin: (comm: CommunityDto) => void;
-  onLibrary: (communityId: number) => void;
+  onLibrary?: (communityId: number) => void;
 };
 
-export default function PlatformMap({ location, communities, myCommunities, onJoin, onAdmin, onLibrary }: Props) {
-  // Group communities by spot.id to ensure ONLY ONE marker per spot
-  const grouped = new Map<number, { spot: Bookspot, communities: (CommunityDto & { spot: Bookspot })[] }>();
-  
-  communities.forEach(comm => {
-    const spotId = comm.spot.id;
-    if (!grouped.has(spotId)) {
-      grouped.set(spotId, {
-        spot: comm.spot,
-        communities: []
-      });
-    }
-    grouped.get(spotId)!.communities.push(comm);
-  });
-
-  const groupedList = Array.from(grouped.values());
+export default function PlatformMap({
+  location,
+  communities,
+  myCommunities,
+  onJoin,
+  onAdmin,
+  onLibrary,
+}: Props) {
+  const [rouletteGroup, setRouletteGroup] = useState<GroupedCommunitySpot | null>(null);
+  const groupedMarkers = useMemo(
+    () => groupCommunitiesBySpot(communities, myCommunities),
+    [communities, myCommunities]
+  );
+  const myCommunityIds = useMemo(() => new Set(myCommunities.map((comm) => comm.id)), [myCommunities]);
 
   return (
-    <MapView
-      style={styles.map}
-      initialRegion={location}
-      showsUserLocation={true}
-    >
-      {groupedList.map(({ spot, communities: spotComms }) => {
-        const hasMyComm = spotComms.some(comm => myCommunities.some(mc => mc.id === comm.id));
-        const multipleComms = spotComms.length > 1;
-
-        return (
-          <Marker
-            key={`spot-${spot.id}`}
-            coordinate={{
-              latitude: spot.latitude,
-              longitude: spot.longitude,
-            }}
-            tracksViewChanges={false}
-          >
-            <View style={[
-              styles.markerContainer, 
-              hasMyComm ? styles.myMarker : styles.otherMarker,
-              multipleComms && styles.multipleMarker
-            ]}>
-              <Ionicons 
-                name={multipleComms ? "layers" : (hasMyComm ? "people" : "location")} 
-                size={20} 
-                color="#fff" 
-              />
-              {multipleComms && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{spotComms.length}</Text>
+    <View style={styles.wrapper}>
+      <MapView style={styles.map} initialRegion={location} showsUserLocation>
+        {groupedMarkers.map((group) => {
+          if (group.communities.length > 1) {
+            return (
+              <Marker
+                key={group.key}
+                coordinate={{
+                  latitude: group.spot.latitude,
+                  longitude: group.spot.longitude,
+                }}
+                onPress={() => setRouletteGroup(group)}
+              >
+                <View style={[styles.multiMarker, group.hasMine ? styles.multiMarkerMine : styles.multiMarkerOther]}>
+                  <Ionicons name="layers" size={18} color="#fff" />
+                  <View style={styles.multiMarkerBadge}>
+                    <Text style={styles.multiMarkerBadgeText}>{group.communities.length}</Text>
+                  </View>
                 </View>
-              )}
-            </View>
-            <Callout tooltip={true}>
-              <View style={[styles.calloutContent, multipleComms && styles.calloutContentMultiple]}>
-                <Text style={styles.commSpot}>{spot.nombre}</Text>
-                <ScrollView 
-                  style={multipleComms ? { maxHeight: 250 } : {}}
-                  showsVerticalScrollIndicator={multipleComms}
-                >
-                  {spotComms.map((comm, index) => {
-                    const isMine = myCommunities.some(mc => mc.id === comm.id);
-                    return (
-                      <View key={`comm-${comm.id}`} style={[
-                        styles.commItem, 
-                        index < spotComms.length - 1 && styles.commItemBorder
-                      ]}>
-                        <Text style={styles.commName}>{comm.name}</Text>
-                        <Text style={styles.commMembers}>{comm.memberCount} miembros</Text>
-                        
-                        {!isMine ? (
-                          <CalloutSubview onPress={async () => await onJoin(comm.id)}>
-                            <View style={styles.joinBtn}>
-                              <Text style={styles.joinBtnText}>Unirse</Text>
-                            </View>
-                          </CalloutSubview>
-                        ) : (
+              </Marker>
+            );
+          }
 
-                          <CalloutSubview onPress={() => onLibrary(comm.id)}>
-                            <View style={[styles.joinBtn, { backgroundColor: '#e4715f' }]}>
-                              <Text style={styles.joinBtnText}>Ver Comunidad</Text>
-                            </View>
-                          </CalloutSubview>
+          const comm = group.communities[0];
+          const isMine = myCommunityIds.has(comm.id);
 
-                        )}
-                      </View>
-                    );
-                  })}
-                </ScrollView>
+          return (
+            <Marker
+              key={comm.id}
+              coordinate={{
+                latitude: comm.spot.latitude,
+                longitude: comm.spot.longitude,
+              }}
+            >
+              <View style={[styles.markerContainer, isMine ? styles.myMarker : styles.otherMarker]}>
+                <Ionicons name={isMine ? 'people' : 'location'} size={20} color="#fff" />
               </View>
-            </Callout>
-          </Marker>
-        );
-      })}
-    </MapView>
+
+              <Callout tooltip>
+                <View style={styles.calloutContent}>
+                  <Text style={styles.commName}>{comm.name}</Text>
+                  <Text style={styles.commSpot}>{comm.spot.nombre}</Text>
+                  <Text style={styles.commMembers}>{comm.memberCount} miembros</Text>
+                  <Text style={styles.commStatus}>Estado: {comm.status}</Text>
+
+                  {!isMine ? (
+                    <CalloutSubview onPress={() => onJoin(comm.id)}>
+                      <View style={styles.joinBtn}>
+                        <Text style={styles.joinBtnText}>Toca para Unirte</Text>
+                      </View>
+                    </CalloutSubview>
+                  ) : (
+                    <View style={styles.myCommButtons}>
+                      <CalloutSubview onPress={() => onAdmin(comm)}>
+                        <View style={[styles.joinBtn, { backgroundColor: '#3d405b' }]}>
+                          <Text style={styles.joinBtnText}>Administrar</Text>
+                        </View>
+                      </CalloutSubview>
+
+                      {onLibrary ? (
+                        <CalloutSubview onPress={() => onLibrary(comm.id)}>
+                          <View style={[styles.joinBtn, { backgroundColor: '#e4715f' }]}>
+                            <Text style={styles.joinBtnText}>Ver Comunidad</Text>
+                          </View>
+                        </CalloutSubview>
+                      ) : null}
+                    </View>
+                  )}
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
+      </MapView>
+
+      <CommunityRouletteModal
+        visible={rouletteGroup !== null}
+        group={rouletteGroup}
+        myCommunities={myCommunities}
+        onClose={() => setRouletteGroup(null)}
+        onJoin={onJoin}
+        onAdmin={onAdmin}
+        onLibrary={onLibrary}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    width: '100%',
+    height: '100%',
+  },
   map: {
     width: '100%',
     height: '100%',
@@ -130,34 +143,50 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
-  multipleMarker: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  badge: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#ff4757',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#fff',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
   myMarker: {
     backgroundColor: '#e4715f',
   },
   otherMarker: {
     backgroundColor: '#3d405b',
+  },
+  multiMarker: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  multiMarkerMine: {
+    backgroundColor: '#e4715f',
+  },
+  multiMarkerOther: {
+    backgroundColor: '#3d405b',
+  },
+  multiMarkerBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#f59e0b',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    paddingHorizontal: 4,
+  },
+  multiMarkerBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   calloutContent: {
     backgroundColor: '#fff',
@@ -169,17 +198,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
-  },
-  calloutContentMultiple: {
-    width: 250,
-    maxHeight: 400,
-  },
-  commItem: {
-    paddingVertical: 8,
-  },
-  commItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   commName: {
     fontSize: 15,
@@ -215,17 +233,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  alreadyJoined: {
-    color: '#e4715f',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 4,
-  },
   myCommButtons: {
     flexDirection: 'column',
     gap: 4,
-  },
-  myCommBtn: {
-    width: '100%',
   },
 });

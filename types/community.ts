@@ -9,6 +9,10 @@ export interface CommunityDto {
   createdAt: string;
   chatId?: number;
   memberCount: number;
+  avatarUrl?: string | null;
+  profilePhoto?: string | null;
+  iconUrl?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface CreateCommunityRequest {
