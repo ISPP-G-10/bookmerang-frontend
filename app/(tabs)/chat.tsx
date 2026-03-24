@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   FlatList,
@@ -8,17 +8,17 @@ import {
   Pressable,
   View as RNView,
   StyleSheet,
-  TextInput
-} from 'react-native';
+  TextInput,
+} from "react-native";
 
-import { Text, View } from '@/components/Themed';
-import Header from '@/components/Header';
-import { useAuth } from '@/contexts/AuthContext';
-import { getMyChats, resolveUserIdFromChats } from '@/lib/chatApi';
-import { ChatDto } from '@/types/chat';
-import { getExchangeByChatIdWithMatch } from '@/lib/exchangeApi';
-import { ExchangeWithMatchDto, ExchangeStatus } from '@/types/exchange';
-import { FontAwesome } from '@expo/vector-icons';
+import { Text, View } from "@/components/Themed";
+import Header from "@/components/Header";
+import { useAuth } from "@/contexts/AuthContext";
+import { getMyChats, resolveUserIdFromChats } from "@/lib/chatApi";
+import { ChatDto } from "@/types/chat";
+import { getExchangeByChatIdWithMatch } from "@/lib/exchangeApi";
+import { ExchangeWithMatchDto, ExchangeStatus } from "@/types/exchange";
+import { FontAwesome } from "@expo/vector-icons";
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -29,16 +29,16 @@ function formatTime(dateStr: string): string {
   yesterday.setDate(yesterday.getDate() - 1);
 
   if (date.toDateString() === today) {
-    return date.toLocaleTimeString('es-ES', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } else if (date.toDateString() === yesterday.toDateString()) {
-    return 'Ayer';
+    return "Ayer";
   } else if (now.getTime() - date.getTime() < 7 * 24 * 60 * 60 * 1000) {
-    return date.toLocaleDateString('es-ES', { weekday: 'short' });
+    return date.toLocaleDateString("es-ES", { weekday: "short" });
   }
-  return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+  return date.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
 }
 
 function ChatListItem({
@@ -56,25 +56,25 @@ function ChatListItem({
   let avatarUrl: string | null = null;
 
   const otherParticipant = chat.participants.find(
-    (p) => p.userId !== currentUserId
+    (p) => p.userId !== currentUserId,
   );
 
   if (chat.type === 'COMMUNITY') {
     // Usar el nombre de la comunidad devuelto por el backend
     displayName = chat.name ?? 'Comunidad';
   } else {
-    displayName = otherParticipant?.username ?? 'Usuario';
+    displayName = otherParticipant?.username ?? "Usuario";
     avatarUrl = otherParticipant?.profilePhoto || null;
   }
 
   // Para mensajes de grupo, mostrar quién envió el último mensaje
-  let lastMessagePreview = '';
+  let lastMessagePreview = "";
   if (lastMessage) {
-    if (chat.type === 'COMMUNITY') {
+    if (chat.type === "COMMUNITY") {
       const senderName =
         lastMessage.senderId === currentUserId
-          ? 'Tú'
-          : lastMessage.senderUsername?.split(' ')[0] ?? 'Usuario';
+          ? "Tú"
+          : (lastMessage.senderUsername?.split(" ")[0] ?? "Usuario");
       lastMessagePreview = `${senderName}: ${lastMessage.body}`;
     } else {
       lastMessagePreview =
@@ -85,10 +85,10 @@ function ChatListItem({
   }
 
   const initials = displayName
-    .split(' ')
+    .split(" ")
     .slice(0, 2)
     .map((w) => w[0])
-    .join('')
+    .join("")
     .toUpperCase();
 
   return (
@@ -134,6 +134,7 @@ function ChatListItem({
 }
 
 export default function ChatListScreen() {
+  const router = useRouter();
   const { currentUserId, backendUserId, setBackendUserId } = useAuth();
   const [chats, setChats] = useState<ChatDto[]>([]);
   const [allChats, setAllChats] = useState<ChatDto[]>([]);
@@ -172,20 +173,20 @@ export default function ChatListScreen() {
       setAllChats(sorted);
       setChats(sorted);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar chats');
+      setError(err instanceof Error ? err.message : "Error al cargar chats");
     } finally {
       setLoading(false);
     }
   }, [backendUserId, setBackendUserId]);
 
-  useFocusEffect( //Esto hace que fetchChats se ejecute cada vez que se entra en esta pantalla (útil que se actualicen las pestañas dinámicamente)
+  useFocusEffect(
+    //Esto hace que fetchChats se ejecute cada vez que se entra en esta pantalla (útil que se actualicen las pestañas dinámicamente)
     React.useCallback(() => {
-      fetchChats();     
-    }, [fetchChats])
+      fetchChats();
+    }, [fetchChats]),
   );
 
   useEffect(() => {
-
     // filtrar por texto (barra de búsqueda)
     const bySearch = allChats.filter((c) => {
       if (c.type === 'COMMUNITY') {
@@ -193,7 +194,7 @@ export default function ChatListScreen() {
         return name.toLowerCase().includes(search.toLowerCase());
       }
       const other = c.participants.find((p) => p.userId !== currentUserId);
-      const name = (other?.username ?? 'Usuario desconocido').toLowerCase();
+      const name = (other?.username ?? "Usuario desconocido").toLowerCase();
       return name.includes(search.toLowerCase());
     });
 
@@ -215,28 +216,29 @@ export default function ChatListScreen() {
   }, [search, activeTab, allChats, exchanges, currentUserId]);
 
   //Función que determina dónde va cada exchange según su estado
-  const exchangeMatchesTab = (exchange: ExchangeWithMatchDto | undefined, tab: string) => {
+  const exchangeMatchesTab = (
+    exchange: ExchangeWithMatchDto | undefined,
+    tab: string,
+  ) => {
     if (!exchange) return false;
 
     const status = exchange.status as ExchangeStatus;
 
-    if (tab === 'Nuevos matches') {
+    if (tab === "Nuevos matches") {
       return (
-        status === 'NEGOTIATING' ||
-        status === 'ACCEPTED_BY_1' ||
-        status === 'ACCEPTED_BY_2'
+        status === "NEGOTIATING" ||
+        status === "ACCEPTED_BY_1" ||
+        status === "ACCEPTED_BY_2"
       );
     }
 
-    if (tab === 'En curso') {
-      return status === 'ACCEPTED';
+    if (tab === "En curso") {
+      return status === "ACCEPTED";
     }
 
     // Finalizados
     return (
-      status === 'COMPLETED' ||
-      status === 'REJECTED' ||
-      status === 'INCIDENT'
+      status === "COMPLETED" || status === "REJECTED" || status === "INCIDENT"
     );
   };
 
@@ -256,9 +258,11 @@ export default function ChatListScreen() {
       <View style={styles.container}>
         <Header />
         <View style={styles.centered}>
-          <Text style={{ color: '#6B7280', marginBottom: 12 }}>{error}</Text>
+          <Text style={{ color: "#6B7280", marginBottom: 12 }}>{error}</Text>
           <Pressable onPress={fetchChats}>
-            <Text style={{ color: '#e4715f', fontWeight: '600' }}>Reintentar</Text>
+            <Text style={{ color: "#e4715f", fontWeight: "600" }}>
+              Reintentar
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -304,14 +308,52 @@ export default function ChatListScreen() {
         data={chats}
         keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
-          <ChatListItem chat={item} currentUserId={currentUserId ?? ''} />
+          <ChatListItem chat={item} currentUserId={currentUserId ?? ""} />
         )}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={() => (
-          <View style={styles.centered}>
-            <Text style={{ color: '#6B7280' }}>No tienes chats todavía</Text>
-          </View>
-        )}
+        contentContainerStyle={[
+          styles.listContent,
+          chats.length === 0 && { flex: 1 },
+        ]}
+        ListEmptyComponent={() => {
+          let iconName = "comments-o";
+          let title = "No tienes chats todavía";
+          let subtitle =
+            "Cuando hagas match con otros usuarios o te unas a comunidades, tus conversaciones aparecerán aquí.";
+
+          if (activeTab === "En curso") {
+            iconName = "handshake-o";
+            title = "Sin intercambios en curso";
+            subtitle =
+              "Aquí aparecerán los chats de los intercambios que hayas aceptado.";
+          } else if (activeTab === "Finalizados") {
+            iconName = "history";
+            title = "No hay chats finalizados";
+            subtitle =
+              "Aquí verás el historial de tus intercambios completados o desestimados.";
+          }
+
+          return (
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconContainer}>
+                <FontAwesome name={iconName as any} size={42} color="#e4715f" />
+              </View>
+              <Text style={styles.emptyTitle}>{title}</Text>
+              <Text style={styles.emptySubtitle}>{subtitle}</Text>
+
+              {activeTab === "Nuevos matches" && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.emptyButton,
+                    pressed && styles.emptyButtonPressed,
+                  ]}
+                  onPress={() => router.push("/(tabs)/matcher")}
+                >
+                  <Text style={styles.emptyButtonText}>Ir a buscar libros</Text>
+                </Pressable>
+              )}
+            </View>
+          );
+        }}
       />
     </View>
   );
@@ -320,28 +362,28 @@ export default function ChatListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fbf7f4',
+    backgroundColor: "#fbf7f4",
   },
   listContent: {
     paddingVertical: 8,
     paddingHorizontal: 12,
   },
   chatItem: {
-    flexDirection: 'row',
+    flexDirection: "row",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
+    alignItems: "center",
+    backgroundColor: "#ffffff",
     borderRadius: 12,
     marginBottom: 8,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   chatItemPressed: {
-    backgroundColor: '#fef5f2',
+    backgroundColor: "#fef5f2",
   },
   avatarWrapper: {
     marginRight: 14,
@@ -350,90 +392,90 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: "#D1D5DB",
   },
   avatarPlaceholder: {
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#e4715f',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#e4715f",
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatarText: {
-    color: '#000000',
+    color: "#000000",
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.5,
   },
   chatContent: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 3,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   chatName: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: "700",
+    color: "#111827",
     flex: 1,
     marginRight: 8,
   },
   chatTime: {
     fontSize: 12,
-    color: '#6B7280',
-    fontWeight: '400',
+    color: "#6B7280",
+    fontWeight: "400",
   },
   chatPreview: {
     fontSize: 13,
-    color: '#6B7280',
+    color: "#6B7280",
     marginBottom: 6,
     lineHeight: 18,
   },
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   topBar: {
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
-    backgroundColor: '#fbf7f4',
+    backgroundColor: "#fbf7f4",
   },
   tabsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   tabItem: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 6,
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderBottomColor: "transparent",
   },
   tabItemActive: {
-    borderBottomColor: '#e4715f', // color principal de la app
+    borderBottomColor: "#e4715f", // color principal de la app
   },
   tabText: {
     fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: "#6B7280",
+    fontWeight: "500",
   },
   tabTextActive: {
-    color: '#111827',
-    fontWeight: '600',
+    color: "#111827",
+    fontWeight: "600",
   },
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -441,13 +483,63 @@ const styles = StyleSheet.create({
   searchPlaceholderIcon: {
     fontSize: 16,
     marginRight: 6,
-    color: '#9CA3AF',
+    color: "#9CA3AF",
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111827',
+    color: "#111827",
     paddingVertical: 2,
     marginLeft: 6,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    paddingTop: 80,
+    backgroundColor: "transparent",
+  },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#fef5f2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 15,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  emptyButton: {
+    backgroundColor: "#e4715f",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 24,
+    shadowColor: "#e4715f",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  emptyButtonPressed: {
+    opacity: 0.8,
+  },
+  emptyButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

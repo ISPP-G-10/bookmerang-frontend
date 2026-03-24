@@ -1,6 +1,5 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
-import { BookDetailsScreen } from "@/components/matcher/BookDetails";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -17,13 +16,11 @@ import {
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import {
-  getBookDetail,
   getMyLibrary,
   toConditionLabel,
-  type BookDetail,
   type BookListItem,
 } from "../lib/books";
-import supabase from "../lib/supabase";
+import { getStoredAuthSession } from "../lib/authSession";
 import { MatcherCard } from "@/types/matcher";
 
 const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
@@ -52,74 +49,6 @@ const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
     .filter((book) => Number.isFinite(book.id));
 };
 
-const detailConditionToMatcher: Record<
-  NonNullable<BookDetail["condition"]>,
-  NonNullable<MatcherCard["book"]["condition"]>
-> = {
-  LikeNew: "LIKE_NEW",
-  VeryGood: "VERY_GOOD",
-  Good: "GOOD",
-  Acceptable: "ACCEPTABLE",
-  Poor: "POOR",
-};
-
-function buildLibraryMatcherCard(
-  detail: BookDetail,
-  profile: any,
-): MatcherCard {
-  const now = new Date().toISOString();
-
-  return {
-    book: {
-      id: detail.id,
-      ownerId: 0,
-      isbn: detail.isbn ?? null,
-      titulo: detail.titulo ?? null,
-      autor: detail.autor ?? null,
-      editorial: detail.editorial ?? null,
-      numPaginas: detail.numPaginas ?? null,
-      cover:
-        detail.cover === "Hardcover"
-          ? "HARDCOVER"
-          : detail.cover === "Paperback"
-            ? "PAPERBACK"
-            : null,
-      condition: detail.condition
-        ? detailConditionToMatcher[detail.condition]
-        : null,
-      observaciones: detail.observaciones ?? null,
-      status: "PUBLISHED",
-      createdAt: now,
-      updatedAt: now,
-      genres: (detail.genres ?? []).map((name, index) => ({ id: index + 1, name })),
-      languages: (detail.languages ?? []).map((language, index) => ({
-        id: index + 1,
-        language,
-      })),
-      photos: (detail.photos ?? [])
-        .filter((photo) => typeof photo?.url === "string" && photo.url.trim().length > 0)
-        .map((photo, index) => ({
-          id: index + 1,
-          bookId: detail.id,
-          url: photo.url as string,
-          orden: photo.order ?? index,
-        })),
-    },
-    owner: {
-      id: 0,
-      username: profile?.username ?? profile?.name ?? "usuario",
-      nombre: profile?.name ?? profile?.username ?? "Usuario",
-      fotoPerfilUrl: profile?.avatar ?? profile?.profilePhoto ?? null,
-      plan: "FREE",
-      ratingMean: 0,
-      finishedExchanges: 0,
-      xpTotal: 0,
-    },
-    distanceKm: 0,
-    score: 0,
-  };
-}
-
 export default function ProfileScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -129,8 +58,6 @@ export default function ProfileScreen() {
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
-  const [selectedLibraryCard, setSelectedLibraryCard] = useState<MatcherCard | null>(null);
-  const [openingLibraryBookId, setOpeningLibraryBookId] = useState<number | null>(null);
 
   // Calcular números de columnas basado en ancho de pantalla
   const numColumns = width >= 768 ? 4 : 2;
@@ -168,14 +95,13 @@ export default function ProfileScreen() {
       setUserLocation({ latitude: lat, longitude: lon });
 
       // Update backend
-      const { data: { session } } = await supabase.auth.getSession();
       const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
-      if (session && userId) {
+      if (userId) {
         await apiRequest(`/users/${userId}/preferences`, {
           method: "PUT",
           body: JSON.stringify({
-            latitud: lat,
-            longitud: lon,
+            latitude: lat,
+            longitude: lon,
             radioKm: preferences.distanceKm || 10,
             extension: preferences.bookLength.includes("0-200") ? "SHORT" : preferences.bookLength.includes("400+") ? "LONG" : "MEDIUM",
             genreIds: availableGenres.filter(g => preferences.genres.includes(g.name)).map(g => g.id),
@@ -245,21 +171,14 @@ export default function ProfileScreen() {
     async (bookId: number) => {
       if (!Number.isFinite(bookId) || bookId <= 0) return;
 
-      setOpeningLibraryBookId(bookId);
-      try {
-        const detail = await getBookDetail(bookId);
-        setSelectedLibraryCard(buildLibraryMatcherCard(detail, profile));
-      } catch {
-        setLibraryError("No se pudo abrir el detalle de este libro.");
-      } finally {
-        setOpeningLibraryBookId(null);
-      }
+      router.push(`/books/${bookId}` as any);
     },
-    [profile],
+    [router],
   );
   
   const loadProfileData = useCallback(async (): Promise<any | null> => {
-  const { data: { user: currentUser } = {} } = await supabase.auth.getUser();
+  const session = await getStoredAuthSession();
+  const currentUser = session?.user;
   if (!currentUser) {
     router.replace("/login" as any);
     return null;
@@ -307,21 +226,21 @@ export default function ProfileScreen() {
       return json;
     }
 
-    const { data: { user: u } = {} } = await supabase.auth.getUser();
+    const u = session?.user;
     setProfile({
       email: u?.email,
-      name: u?.user_metadata?.name ?? "",
-      username: u?.user_metadata?.username ?? "",
-      avatar: u?.user_metadata?.avatar_url ?? null,
+      name: u?.name ?? "",
+      username: u?.username ?? "",
+      avatar: u?.profilePhoto ?? null,
     });
     return null;
   } catch {
-    const { data: { user: u } = {} } = await supabase.auth.getUser();
+    const u = session?.user;
     setProfile({
       email: u?.email,
-      name: u?.user_metadata?.name ?? "",
-      username: u?.user_metadata?.username ?? "",
-      avatar: u?.user_metadata?.avatar_url ?? null,
+      name: u?.name ?? "",
+      username: u?.username ?? "",
+      avatar: u?.profilePhoto ?? null,
     });
     return null;
   }
@@ -330,8 +249,8 @@ export default function ProfileScreen() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const { data: { user: currentUser } = {} } =
-        await supabase.auth.getUser();
+      const currentSession = await getStoredAuthSession();
+      const currentUser = currentSession?.user;
       if (!currentUser) {
         setLoading(false);
         return router.replace("/login" as any);
@@ -340,16 +259,9 @@ export default function ProfileScreen() {
       // 1️⃣ Cargar géneros PRIMERO
       let loadedGenres: any[] = [];
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
         const genreRes = await fetch(
           `${process.env.EXPO_PUBLIC_API_URL}/genres`,
-          {
-            headers: session?.access_token
-              ? { Authorization: `Bearer ${session.access_token}` }
-              : {},
-          },
+          { headers: {} },
         );
         if (genreRes.ok) {
           const genres = await genreRes.json();
@@ -368,22 +280,12 @@ export default function ProfileScreen() {
         await loadLibrary(profileData);
 
         try {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
+          const userId = profileData.id ?? profileData.userId ?? profileData.user_id;
 
-          if (session) {
-            const userId = profileData.id ?? profileData.userId ?? profileData.user_id;
-
-            if (userId) {
-              const prefsRes = await fetch(
-                `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${session.access_token}`,
-                  },
-                },
-              );
+          if (userId) {
+            const prefsRes = await apiRequest(`/users/${userId}/preferences`, {
+              method: "GET",
+            });
 
               if (prefsRes.ok) {
                 const prefs = await prefsRes.json();
@@ -411,7 +313,6 @@ export default function ProfileScreen() {
                   bookLength: bookLengths,
                 });
               }
-            }
           }
         } catch {}
       } else {
@@ -440,15 +341,12 @@ export default function ProfileScreen() {
     setPreferencesLoading(true);
     setPreferencesError("");
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
+      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
+      if (!userId) {
         setPreferencesError("No autorizado");
         setPreferencesLoading(false);
         return;
       }
-      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
       const latitude = userLocation?.latitude || 40.4168;
       const longitude = userLocation?.longitude || -3.7038;
       const radioKm = newPreferences.distanceKm || 5;
@@ -469,23 +367,16 @@ export default function ProfileScreen() {
         else if (lengths.includes("200-400")) extension = "MEDIUM";
         else if (lengths.includes("400+")) extension = "LONG";
       }
-      const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL}/users/${userId}/preferences`,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            latitud: latitude,
-            longitud: longitude,
-            radioKm,
-            extension,
-            genreIds,
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        },
-      );
+      const res = await apiRequest(`/users/${userId}/preferences`, {
+        method: "PUT",
+        body: JSON.stringify({
+          latitude,
+          longitude,
+          radioKm,
+          extension,
+          genreIds,
+        }),
+      });
       if (res.ok) {
         setPreferences(newPreferences);
         setProfile({ ...profile, preferences: newPreferences });
@@ -1059,12 +950,6 @@ export default function ProfileScreen() {
         title="Editar Preferencias"
         error={preferencesError}
         loading={preferencesLoading}
-      />
-
-      <BookDetailsScreen
-        visible={selectedLibraryCard !== null}
-        card={selectedLibraryCard}
-        onClose={() => setSelectedLibraryCard(null)}
       />
     </View>
   );

@@ -17,6 +17,7 @@ import {
   consumeUploadFlowResetFlag,
   markUploadFlowResetNeeded,
 } from "@/lib/uploadFlowState";
+import { getStoredUserId } from "@/lib/authSession";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
@@ -333,12 +334,8 @@ export default function SubirScreen() {
   };
 
   const uploadPhotoToStorage = async (photo: LocalPhoto): Promise<string> => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     const extension = fileExtension(photo);
-    const owner = user?.id ?? "anonymous";
+    const owner = (await getStoredUserId()) ?? "anonymous";
     // Nombre único para evitar colisiones entre subidas repetidas.
     const path = `books/${owner}/${buildPhotoId()}.${extension}`;
 
