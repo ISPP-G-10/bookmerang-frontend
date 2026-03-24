@@ -1,18 +1,45 @@
 import {
-    BookspotPendingDTO,
-    deleteBookspot,
-    getUserPendingBookspots,
+  BookspotPendingDTO,
+  deleteBookspot,
+  getUserActiveBookspots,
+  getUserPendingBookspots,
+  updateBookspotName,
 } from "@/lib/bookspotApi";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import Svg, { Circle, Path } from "react-native-svg";
+
+function LocationPin({
+  color = "#9e9aad",
+  size = 12,
+}: {
+  color?: string;
+  size?: number;
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"
+        stroke={color}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="12" cy="10" r="3" stroke={color} strokeWidth={2.5} />
+    </Svg>
+  );
+}
+
+type Section = "pending" | "active";
 
 interface Props {
   visible: boolean;
@@ -25,21 +52,29 @@ export default function MyPendingBookSpotsModal({
   onClose,
   onRefresh,
 }: Props) {
-  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
+  const [section, setSection] = useState<Section>("pending");
+  const [pendingSpots, setPendingSpots] = useState<BookspotPendingDTO[]>([]);
+  const [activeSpots, setActiveSpots] = useState<BookspotPendingDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  // confirmingId: shows the inline "¿Seguro?" row for this spot
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [savingId, setSavingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPending = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getUserPendingBookspots();
-      setBookspots(data);
+      const [pending, active] = await Promise.all([
+        getUserPendingBookspots(),
+        getUserActiveBookspots(),
+      ]);
+      setPendingSpots(pending);
+      setActiveSpots(active);
     } catch {
-      setError("No se pudieron cargar tus propuestas");
+      setError("No se pudieron cargar tus bookspots");
     } finally {
       setLoading(false);
     }
@@ -48,14 +83,18 @@ export default function MyPendingBookSpotsModal({
   useEffect(() => {
     if (!visible) {
       setConfirmingId(null);
+      setEditingId(null);
+      setEditName("");
       return;
     }
-    fetchPending();
+    fetchAll();
   }, [visible]);
 
   const handleRefresh = async () => {
     setConfirmingId(null);
-    await fetchPending();
+    setEditingId(null);
+    setEditName("");
+    await fetchAll();
     onRefresh?.();
   };
 
@@ -64,13 +103,48 @@ export default function MyPendingBookSpotsModal({
     setDeletingId(id);
     try {
       await deleteBookspot(id);
-      setBookspots((prev) => prev.filter((s) => s.id !== id));
+      setPendingSpots((prev) => prev.filter((s) => s.id !== id));
+      setActiveSpots((prev) => prev.filter((s) => s.id !== id));
+      onRefresh?.();
     } catch {
-      setError("No se pudo eliminar la propuesta. Inténtalo de nuevo.");
+      setError("No se pudo eliminar. Inténtalo de nuevo.");
     } finally {
       setDeletingId(null);
     }
   };
+
+  const startEdit = (spot: BookspotPendingDTO) => {
+    setEditingId(spot.id);
+    setEditName(spot.nombre);
+    setConfirmingId(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+  };
+
+  const saveEdit = async (id: number) => {
+    const trimmed = editName.trim();
+    if (!trimmed || trimmed.length < 3) return;
+    setSavingId(id);
+    try {
+      const updated = await updateBookspotName(id, trimmed);
+      setPendingSpots((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, nombre: updated.nombre } : s)),
+      );
+      setEditingId(null);
+      setEditName("");
+      onRefresh?.();
+    } catch {
+      setError("No se pudo guardar el nombre. Inténtalo de nuevo.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const spots = section === "pending" ? pendingSpots : activeSpots;
+  const isValidated = section === "active";
 
   return (
     <Modal visible={visible} animationType="fade" transparent>
@@ -88,7 +162,7 @@ export default function MyPendingBookSpotsModal({
             backgroundColor: "#fdfbf7",
             borderRadius: 24,
             width: "100%",
-            maxHeight: "85%",
+            maxHeight: "88%",
             overflow: "hidden",
           }}
         >
@@ -106,7 +180,7 @@ export default function MyPendingBookSpotsModal({
             }}
           >
             <Text style={{ fontSize: 20, fontWeight: "900", color: "#3e2723" }}>
-              Mis propuestas
+              Mis BookSpots
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -125,12 +199,74 @@ export default function MyPendingBookSpotsModal({
             </TouchableOpacity>
           </View>
 
+          {/* Section tabs */}
+          <View
+            style={{
+              flexDirection: "row",
+              paddingHorizontal: 24,
+              paddingTop: 16,
+              paddingBottom: 4,
+              gap: 8,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                setSection("pending");
+                setConfirmingId(null);
+                setEditingId(null);
+              }}
+              style={{
+                flex: 1,
+                paddingVertical: 9,
+                borderRadius: 10,
+                alignItems: "center",
+                backgroundColor: section === "pending" ? "#e07a5f" : "#f5f3ef",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "800",
+                  color: section === "pending" ? "#fff" : "#9e9aad",
+                }}
+              >
+                Propuestas
+                {pendingSpots.length > 0 ? ` (${pendingSpots.length})` : ""}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setSection("active");
+                setConfirmingId(null);
+                setEditingId(null);
+              }}
+              style={{
+                flex: 1,
+                paddingVertical: 9,
+                borderRadius: 10,
+                alignItems: "center",
+                backgroundColor: section === "active" ? "#4caf50" : "#f5f3ef",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "800",
+                  color: section === "active" ? "#fff" : "#9e9aad",
+                }}
+              >
+                Validados
+                {activeSpots.length > 0 ? ` (${activeSpots.length})` : ""}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Content */}
           <ScrollView
             contentContainerStyle={{ padding: 24, paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
           >
-            {loading && !bookspots.length ? (
+            {loading && !spots.length ? (
               <View style={{ alignItems: "center", paddingVertical: 24 }}>
                 <ActivityIndicator size="large" color="#e07a5f" />
               </View>
@@ -147,7 +283,7 @@ export default function MyPendingBookSpotsModal({
               >
                 <Text style={{ color: "#dc2626", fontSize: 13 }}>{error}</Text>
               </View>
-            ) : bookspots.length === 0 ? (
+            ) : spots.length === 0 ? (
               <View style={{ alignItems: "center", paddingVertical: 32 }}>
                 <Text
                   style={{
@@ -157,7 +293,9 @@ export default function MyPendingBookSpotsModal({
                     textAlign: "center",
                   }}
                 >
-                  No tienes propuestas pendientes
+                  {isValidated
+                    ? "Aún no tienes BookSpots validados"
+                    : "No tienes propuestas pendientes"}
                 </Text>
                 <Text
                   style={{
@@ -166,93 +304,248 @@ export default function MyPendingBookSpotsModal({
                     textAlign: "center",
                   }}
                 >
-                  Las nuevas propuestas aparecerán aquí
+                  {isValidated
+                    ? "Cuando la comunidad valide tus propuestas aparecerán aquí"
+                    : "Las nuevas propuestas aparecerán aquí"}
                 </Text>
               </View>
             ) : (
               <View style={{ gap: 12 }}>
-                {bookspots.map((spot) => {
+                {spots.map((spot) => {
                   const isDeleting = deletingId === spot.id;
                   const isConfirming = confirmingId === spot.id;
-                  const progress = Math.min(
-                    spot.validationCount / spot.requiredValidations,
-                    1,
-                  );
-                  const remaining =
-                    spot.requiredValidations - spot.validationCount;
+                  const isEditing = editingId === spot.id;
+                  const isSaving = savingId === spot.id;
+                  const count = spot.validationCount ?? 0;
+                  const required = spot.requiredValidations ?? 5;
+                  const progress = Math.min(count / required, 1);
+                  const remaining = required - count;
 
                   return (
                     <View
                       key={spot.id}
                       style={{
-                        borderWidth: 1,
-                        borderColor: "#F3E9E0",
+                        borderWidth: 1.5,
+                        borderColor: isValidated ? "#a5d6a7" : "#F3E9E0",
                         borderRadius: 12,
                         padding: 16,
-                        backgroundColor: "#ffffff",
+                        backgroundColor: isValidated ? "#f9fef9" : "#ffffff",
                         opacity: isDeleting ? 0.5 : 1,
                       }}
                     >
+                      {/* Status badge */}
+                      <View
+                        style={{
+                          alignSelf: "flex-start",
+                          backgroundColor: isValidated ? "#e8f5e9" : "#fffbeb",
+                          borderRadius: 6,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: "800",
+                            letterSpacing: 0.8,
+                            color: isValidated ? "#2e7d32" : "#d97706",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {isValidated
+                            ? "✓ Validado"
+                            : "Pendiente de validación"}
+                        </Text>
+                      </View>
+
                       {/* Name row */}
                       <View
                         style={{
                           flexDirection: "row",
                           justifyContent: "space-between",
                           alignItems: "flex-start",
-                          marginBottom: 4,
+                          marginBottom: isEditing ? 10 : 4,
                         }}
                       >
-                        <Text
-                          style={{
-                            fontSize: 16,
-                            fontWeight: "900",
-                            color: "#3e2723",
-                            flex: 1,
-                            marginRight: 8,
-                          }}
-                        >
-                          {spot.nombre}
-                        </Text>
-                        {isDeleting ? (
-                          <ActivityIndicator size="small" color="#ef4444" />
-                        ) : (
-                          <TouchableOpacity
-                            onPress={() =>
-                              setConfirmingId(isConfirming ? null : spot.id)
-                            }
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: 14,
-                              borderWidth: 1.5,
-                              borderColor: "#fca5a5",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <FontAwesome
-                              name="trash"
-                              size={12}
-                              color="#ef4444"
+                        {isEditing ? (
+                          <View style={{ flex: 1 }}>
+                            <TextInput
+                              value={editName}
+                              onChangeText={setEditName}
+                              autoFocus
+                              style={{
+                                borderWidth: 1.5,
+                                borderColor: "#e07a5f",
+                                borderRadius: 10,
+                                padding: 10,
+                                fontSize: 15,
+                                fontWeight: "600",
+                                color: "#3e2723",
+                                marginBottom: 8,
+                                backgroundColor: "#fff",
+                              }}
+                              placeholder="Nombre del lugar"
+                              placeholderTextColor="#ccc"
                             />
-                          </TouchableOpacity>
+                            <View style={{ flexDirection: "row", gap: 8 }}>
+                              <TouchableOpacity
+                                onPress={cancelEdit}
+                                disabled={isSaving}
+                                style={{
+                                  flex: 1,
+                                  borderWidth: 1.5,
+                                  borderColor: "#e0d5cc",
+                                  borderRadius: 8,
+                                  padding: 9,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: "700",
+                                    color: "#9e9aad",
+                                  }}
+                                >
+                                  Cancelar
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={() => saveEdit(spot.id)}
+                                disabled={
+                                  isSaving || editName.trim().length < 3
+                                }
+                                style={{
+                                  flex: 1,
+                                  backgroundColor:
+                                    editName.trim().length < 3
+                                      ? "#f4c4b8"
+                                      : "#e07a5f",
+                                  borderRadius: 8,
+                                  padding: 9,
+                                  alignItems: "center",
+                                }}
+                              >
+                                {isSaving ? (
+                                  <ActivityIndicator
+                                    size="small"
+                                    color="#fff"
+                                  />
+                                ) : (
+                                  <Text
+                                    style={{
+                                      fontSize: 13,
+                                      fontWeight: "700",
+                                      color: "#ffffff",
+                                    }}
+                                  >
+                                    Guardar
+                                  </Text>
+                                )}
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        ) : (
+                          <>
+                            <Text
+                              style={{
+                                fontSize: 16,
+                                fontWeight: "900",
+                                color: "#3e2723",
+                                flex: 1,
+                                marginRight: 8,
+                              }}
+                            >
+                              {spot.nombre}
+                            </Text>
+                            <View style={{ flexDirection: "row", gap: 6 }}>
+                              {/* Edit button — solo visible para propuestas pendientes */}
+                              {!isValidated && (
+                                <TouchableOpacity
+                                  onPress={() => startEdit(spot)}
+                                  disabled={isDeleting}
+                                  style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 8,
+                                    borderWidth: 1.5,
+                                    borderColor: "#e0d5cc",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <FontAwesome
+                                    name="pencil"
+                                    size={12}
+                                    color="#9e9aad"
+                                  />
+                                </TouchableOpacity>
+                              )}
+                              {/* Delete button */}
+                              {isDeleting ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color="#ef4444"
+                                />
+                              ) : (
+                                <TouchableOpacity
+                                  onPress={() =>
+                                    setConfirmingId(
+                                      isConfirming ? null : spot.id,
+                                    )
+                                  }
+                                  style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 8,
+                                    borderWidth: 1.5,
+                                    borderColor: "#fca5a5",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <FontAwesome
+                                    name="trash"
+                                    size={12}
+                                    color="#ef4444"
+                                  />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </>
                         )}
                       </View>
 
                       {/* Address */}
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: "#9e9aad",
-                          marginBottom: 14,
-                        }}
-                        numberOfLines={2}
-                      >
-                        📍 {spot.addressText}
-                      </Text>
+                      {!isEditing && (
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            marginBottom: 14,
+                          }}
+                        >
+                          <LocationPin
+                            color={isValidated ? "#81c784" : "#9e9aad"}
+                            size={12}
+                          />
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: isValidated ? "#81c784" : "#9e9aad",
+                              flex: 1,
+                            }}
+                            numberOfLines={2}
+                          >
+                            {spot.addressText}
+                          </Text>
+                        </View>
+                      )}
 
-                      {/* Inline delete confirmation */}
-                      {isConfirming && (
+                      {/* Delete confirmation */}
+                      {isConfirming && !isEditing && (
                         <View
                           style={{
                             backgroundColor: "#fff5f5",
@@ -271,7 +564,7 @@ export default function MyPendingBookSpotsModal({
                               marginBottom: 4,
                             }}
                           >
-                            ¿Eliminar esta propuesta?
+                            ¿Estás seguro de querer borrarlo?
                           </Text>
                           <Text
                             style={{
@@ -280,8 +573,9 @@ export default function MyPendingBookSpotsModal({
                               marginBottom: 12,
                             }}
                           >
-                            Se liberará uno de tus cupos del mes. Esta acción no
-                            se puede deshacer.
+                            {isValidated
+                              ? "En caso de eliminarlo, tendrá que volver a ser validado por la comunidad para reaparecer en el mapa."
+                              : "Se liberará uno de tus cupos del mes. Esta acción no se puede deshacer."}
                           </Text>
                           <View style={{ flexDirection: "row", gap: 8 }}>
                             <TouchableOpacity
@@ -329,85 +623,153 @@ export default function MyPendingBookSpotsModal({
                         </View>
                       )}
 
-                      {/* Progress label */}
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          fontWeight: "900",
-                          letterSpacing: 1,
-                          color: "#e07a5f",
-                          marginBottom: 8,
-                          textTransform: "uppercase",
-                        }}
-                      >
-                        Validaciones
-                      </Text>
-
-                      {/* Progress bar */}
-                      <View
-                        style={{
-                          height: 8,
-                          backgroundColor: "#F3E9E0",
-                          borderRadius: 4,
-                          overflow: "hidden",
-                          marginBottom: 8,
-                        }}
-                      >
+                      {/* Validated: green badge */}
+                      {!isEditing && isValidated && (
                         <View
                           style={{
-                            height: "100%",
-                            backgroundColor: "#e07a5f",
-                            width: `${progress * 100}%`,
-                            borderRadius: 4,
-                          }}
-                        />
-                      </View>
-
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "600",
-                          color: "#3e2723",
-                        }}
-                      >
-                        {spot.validationCount}/{spot.requiredValidations}{" "}
-                        personas han validado tu BookSpot
-                      </Text>
-
-                      {remaining > 0 ? (
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: "#c9b5a3",
-                            marginTop: 3,
+                            backgroundColor: "#e8f5e9",
+                            borderWidth: 1,
+                            borderColor: "#a5d6a7",
+                            borderRadius: 10,
+                            padding: 12,
+                            marginBottom: 12,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
                           }}
                         >
-                          Aún quedan {remaining} persona
-                          {remaining !== 1 ? "s" : ""} más por validarlo
-                        </Text>
-                      ) : (
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: "#4caf50",
-                            marginTop: 3,
-                            fontWeight: "600",
-                          }}
-                        >
-                          ✓ BookSpot validado — ¡Próximamente activo!
-                        </Text>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: "800",
+                                color: "#2e7d32",
+                              }}
+                            >
+                              BookSpot validado
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#4caf50",
+                                marginTop: 1,
+                              }}
+                            >
+                              Ya aparece en el mapa para la comunidad
+                            </Text>
+                          </View>
+                        </View>
                       )}
 
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: "#d4c4b9",
-                          marginTop: 10,
-                        }}
-                      >
-                        Propuesto el{" "}
-                        {new Date(spot.createdAt).toLocaleDateString("es-ES")}
-                      </Text>
+                      {/* Pending: progress */}
+                      {!isEditing &&
+                        !isValidated &&
+                        (() => {
+                          return (
+                            <>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 5,
+                                  marginBottom: 8,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: "700",
+                                    letterSpacing: 1,
+                                    color: "#e07a5f",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  Validaciones
+                                </Text>
+                              </View>
+
+                              <View
+                                style={{
+                                  height: 8,
+                                  backgroundColor: "#F3E9E0",
+                                  borderRadius: 4,
+                                  overflow: "hidden",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    height: "100%",
+                                    backgroundColor: "#e07a5f",
+                                    width: `${progress * 100}%`,
+                                    borderRadius: 4,
+                                  }}
+                                />
+                              </View>
+
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "600",
+                                  color: "#3e2723",
+                                }}
+                              >
+                                {count}/{required} personas han validado tu
+                                BookSpot
+                              </Text>
+
+                              {remaining > 0 ? (
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#c9b5a3",
+                                    marginTop: 3,
+                                  }}
+                                >
+                                  Aún quedan {remaining} persona
+                                  {remaining !== 1 ? "s" : ""} más por validarlo
+                                </Text>
+                              ) : (
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#4caf50",
+                                    marginTop: 3,
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  ✓ BookSpot validado — ¡Próximamente activo!
+                                </Text>
+                              )}
+                            </>
+                          );
+                        })()}
+
+                      {/* Dates */}
+                      {!isEditing && (
+                        <View style={{ marginTop: 10, gap: 2 }}>
+                          <Text style={{ fontSize: 11, color: "#d4c4b9" }}>
+                            Propuesto el{" "}
+                            {new Date(spot.createdAt).toLocaleDateString(
+                              "es-ES",
+                            )}
+                          </Text>
+                          {isValidated && spot.validatedAt && (
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                color: "#81c784",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Validado e incorporado el{" "}
+                              {new Date(spot.validatedAt).toLocaleDateString(
+                                "es-ES",
+                              )}
+                            </Text>
+                          )}
+                        </View>
+                      )}
                     </View>
                   );
                 })}
@@ -443,7 +805,6 @@ export default function MyPendingBookSpotsModal({
                 {loading ? "..." : "Actualizar"}
               </Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               onPress={onClose}
               disabled={loading}

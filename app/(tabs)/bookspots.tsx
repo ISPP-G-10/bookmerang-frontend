@@ -3,19 +3,25 @@ import BookSpotActionMenu from "@/components/bookspots/BookSpotActionMenu";
 import CreateBookspotModal from "@/components/bookspots/CreateBookspotModal";
 import { getMapHtml } from "@/components/bookspots/MapHtml";
 import MyPendingBookSpotsModal from "@/components/bookspots/MyPendingBookSpotsModal";
+import ValidationCard, {
+  getSeenSpotIds,
+} from "@/components/bookspots/ValidationCard";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 import {
   DEFAULT_RADIUS_KM,
   MAX_RADIUS_KM,
+  deleteBookspot,
   getAddressFromCoordinates,
   getNearbyBookspots,
+  getRandomPendingBookspot,
+  getUserActiveBookspots,
   getUserPendingBookspots,
+  updateBookspotName,
 } from "@/lib/bookspotApi";
 
 import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import {
   ActivityIndicator,
   Linking,
@@ -24,7 +30,6 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { WebView } from "react-native-webview";
 
 // FAB: bottom: 20, height: 52 → center at bottom: 46
@@ -35,12 +40,17 @@ const FAB_CENTER = FAB_BOTTOM + FAB_HEIGHT / 2; // 46
 const LOC_BTN_HEIGHT = 40;
 const LOC_BTN_BOTTOM = FAB_CENTER - LOC_BTN_HEIGHT / 2; // 26
 
+interface SpotToValidate {
+  id: number;
+  nombre: string;
+  addressText: string;
+}
+
 export default function BookSpotsScreen() {
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
@@ -55,6 +65,11 @@ export default function BookSpotsScreen() {
     lng: number;
     address?: string;
   } | null>(null);
+  const [spotToValidate, setSpotToValidate] = useState<SpotToValidate | null>(
+    null,
+  );
+  const [pendingName, setPendingName] = useState("");
+  const [createModalKey, setCreateModalKey] = useState(0);
 
   const webViewRef = useRef<WebView>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -62,7 +77,9 @@ export default function BookSpotsScreen() {
   const locationRef = useRef<{ latitude: number; longitude: number } | null>(
     null,
   );
+  const validationFetchedRef = useRef(false);
 
+  // ── Ubicación ─────────────────
   useEffect(() => {
     if (Platform.OS === "web") {
       navigator.geolocation?.getCurrentPosition(
@@ -82,9 +99,7 @@ export default function BookSpotsScreen() {
       );
       return;
     }
-
     let subscription: Location.LocationSubscription | null = null;
-
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
@@ -92,7 +107,6 @@ export default function BookSpotsScreen() {
         setLoading(false);
         return;
       }
-
       const current = await Location.getCurrentPositionAsync({});
       const coords = {
         latitude: current.coords.latitude,
@@ -101,7 +115,6 @@ export default function BookSpotsScreen() {
       locationRef.current = coords;
       setLocation(coords);
       setLoading(false);
-
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -117,12 +130,42 @@ export default function BookSpotsScreen() {
         },
       );
     })();
-
     return () => {
       subscription?.remove();
     };
   }, []);
 
+  // ── Validacion ─────────────────
+  const fetchNextValidation = useCallback(async (delayMs = 0) => {
+    const loc = locationRef.current;
+    if (!loc) return;
+    try {
+      const spot = await getRandomPendingBookspot(
+        loc.latitude,
+        loc.longitude,
+        DEFAULT_RADIUS_KM,
+      );
+      if (!spot) return;
+      const seenIds = await getSeenSpotIds();
+      if (seenIds.includes(spot.id)) return;
+      const show = () =>
+        setSpotToValidate({
+          id: spot.id,
+          nombre: spot.nombre,
+          addressText: spot.addressText,
+        });
+      if (delayMs > 0) setTimeout(show, delayMs);
+      else show();
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!location || validationFetchedRef.current) return;
+    validationFetchedRef.current = true;
+    fetchNextValidation(1400);
+  }, [location, fetchNextValidation]);
+
+  // ── Mapeado de comunicaciones ───────────────────────
   const sendToMap = useCallback((js: string) => {
     if (Platform.OS !== "web") {
       webViewRef.current?.injectJavaScript(`${js}; true;`);
@@ -154,10 +197,14 @@ export default function BookSpotsScreen() {
 
   const fetchUserPending = useCallback(async () => {
     try {
-      const pending = await getUserPendingBookspots();
+      const [pending, active] = await Promise.all([
+        getUserPendingBookspots(),
+        getUserActiveBookspots(),
+      ]);
       sendToMap(`updateUserPendingSpots(${JSON.stringify(pending)})`);
+      sendToMap(`updateUserActiveSpots(${JSON.stringify(active)})`);
     } catch (e: any) {
-      console.warn("[BookSpots] pending error:", e?.message ?? e);
+      console.warn("[BookSpots] pending/active error:", e?.message ?? e);
     }
   }, [sendToMap]);
 
@@ -177,7 +224,7 @@ export default function BookSpotsScreen() {
     }
   }, [fetchNearby, fetchUserPending]);
 
-  // Shared message handler logic
+  // ── Logica de handler de mensaje ───────────────────────
   const handleMapMessage = useCallback(
     (msg: any) => {
       if (msg.type === "mapModalOpen") {
@@ -200,6 +247,7 @@ export default function BookSpotsScreen() {
         }
         return;
       }
+
       if (msg.type === "viewChange") {
         if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
         fetchDebounceRef.current = setTimeout(
@@ -208,17 +256,49 @@ export default function BookSpotsScreen() {
         );
         return;
       }
+
       if (msg.type === "pickLocation") {
         (async () => {
           const address = await getAddressFromCoordinates(msg.lat, msg.lng);
           setPickedLocation({ lat: msg.lat, lng: msg.lng, address });
           setCreateModalOpen(true);
         })();
+        return;
+      }
+
+      if (msg.type === "pickCancelled") {
+        setCreateModalOpen(true);
+        return;
+      }
+
+      if (msg.type === "deletePendingSpot") {
+        (async () => {
+          try {
+            await deleteBookspot(msg.id);
+            fetchUserPending();
+          } catch (e: any) {
+            console.warn("[BookSpots] delete error:", e?.message ?? e);
+          }
+        })();
+        return;
+      }
+
+      if (msg.type === "editPendingSpotName") {
+        (async () => {
+          try {
+            await updateBookspotName(msg.id, msg.nombre);
+            fetchUserPending();
+          } catch (e: any) {
+            console.warn("[BookSpots] rename error:", e?.message ?? e);
+          }
+        })();
+        return;
       }
     },
-    [fetchNearby],
+    [fetchNearby, fetchUserPending],
   );
 
+  // ── Mensajes web ────────────────────────────
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const handleMessage = (event: MessageEvent) => {
@@ -232,6 +312,7 @@ export default function BookSpotsScreen() {
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMapMessage]);
 
+  // ── Mensajes nativos ────────────────
   const handleNativeMessage = useCallback(
     (event: any) => {
       try {
@@ -247,6 +328,7 @@ export default function BookSpotsScreen() {
     fetchUserPending();
   }, [fetchUserPending]);
 
+  // ── Render ─────────────────────────
   if (loading) {
     return (
       <View className="flex-1 bg-[#fdfbf7]">
@@ -417,30 +499,50 @@ export default function BookSpotsScreen() {
           {LocationButton}
           {AddButton}
         </View>
+        <ValidationCard
+          spot={spotToValidate}
+          userLocation={location}
+          onDone={() => {
+            setSpotToValidate(null);
+            fetchNextValidation(800);
+          }}
+        />
         <BookSpotActionMenu
           visible={menuOpen}
           onClose={() => setMenuOpen(false)}
           onProposeNew={() => {
             setPickedLocation(null);
+            setPendingName("");
+            setCreateModalKey((k) => k + 1);
             setCreateModalOpen(true);
           }}
           onViewPending={() => setPendingModalOpen(true)}
         />
         <CreateBookspotModal
+          key={createModalKey}
           visible={createModalOpen}
+          name={pendingName}
+          onNameChange={setPendingName}
           onClose={() => {
             setCreateModalOpen(false);
+            setPickedLocation(null);
+            setPendingName("");
+            setCreateModalKey((k) => k + 1); // resetea el estado del modal state
             fetchUserPending();
+            sendToMap("disablePickMode()");
           }}
           pickedLocation={pickedLocation}
           onPickOnMap={() => {
+            setPickedLocation(null); // quita la ubicación seleccionada
             setCreateModalOpen(false);
+            // se mantiene el nombre
             sendToMap("enablePickMode()");
           }}
         />
         <MyPendingBookSpotsModal
           visible={pendingModalOpen}
           onClose={handlePendingModalClose}
+          onRefresh={fetchUserPending}
         />
       </View>
     );
@@ -462,23 +564,41 @@ export default function BookSpotsScreen() {
         {LocationButton}
         {AddButton}
       </View>
+      <ValidationCard
+        spot={spotToValidate}
+        userLocation={location}
+        onDone={() => {
+          setSpotToValidate(null);
+          fetchNextValidation(800);
+        }}
+      />
       <BookSpotActionMenu
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
         onProposeNew={() => {
           setPickedLocation(null);
+          setPendingName("");
+          setCreateModalKey((k) => k + 1);
           setCreateModalOpen(true);
         }}
         onViewPending={() => setPendingModalOpen(true)}
       />
       <CreateBookspotModal
+        key={createModalKey}
         visible={createModalOpen}
+        name={pendingName}
+        onNameChange={setPendingName}
         onClose={() => {
           setCreateModalOpen(false);
+          setPickedLocation(null);
+          setPendingName("");
+          setCreateModalKey((k) => k + 1);
           fetchUserPending();
+          sendToMap("disablePickMode()");
         }}
         pickedLocation={pickedLocation}
         onPickOnMap={() => {
+          setPickedLocation(null);
           setCreateModalOpen(false);
           sendToMap("enablePickMode()");
         }}
@@ -486,6 +606,7 @@ export default function BookSpotsScreen() {
       <MyPendingBookSpotsModal
         visible={pendingModalOpen}
         onClose={handlePendingModalClose}
+        onRefresh={fetchUserPending}
       />
     </View>
   );
