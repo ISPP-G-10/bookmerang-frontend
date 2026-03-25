@@ -2,12 +2,15 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface HeaderProps {
   showBack?: boolean;
 }
 
 export default function Header({ showBack = false }: HeaderProps) {
+  const insets = useSafeAreaInsets();
+
   const handleLeftPress = () => {
     if (showBack) {
       router.back();
@@ -17,13 +20,13 @@ export default function Header({ showBack = false }: HeaderProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
       {/* Izquierda: flecha atrás o foto de perfil */}
       <TouchableOpacity onPress={handleLeftPress}>
         <View style={styles.profileButton}>
           <FontAwesome
             name={showBack ? "arrow-left" : "user"}
-            size={20}
+            size={18}
             color="#fdfbf7"
           />
         </View>
@@ -32,7 +35,7 @@ export default function Header({ showBack = false }: HeaderProps) {
       {/* Logo y nombre */}
       <View style={styles.logoContainer}>
         <View style={styles.logoIcon}>
-          <FontAwesome name="book" size={18} color="#fdfbf7" />
+          <FontAwesome name="book" size={16} color="#fdfbf7" />
         </View>
         <Text style={styles.logoText}>
           Bookmerang
@@ -51,15 +54,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#e07a5f',
     alignItems: 'center',
     justifyContent: 'center',
@@ -70,19 +73,19 @@ const styles = StyleSheet.create({
   },
   logoIcon: {
     backgroundColor: '#e07a5f',
-    borderRadius: 8,
-    width: 36,
-    height: 36,
+    borderRadius: 7,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
   logoText: {
     fontFamily: 'Outfit_700Bold',
-    fontSize: 20,
+    fontSize: 18,
     color: '#e07a5f',
   },
   spacer: {
-    width: 40,
+    width: 36,
   },
 });

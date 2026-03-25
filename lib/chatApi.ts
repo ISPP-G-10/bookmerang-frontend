@@ -1,9 +1,11 @@
-import supabase from '@/lib/supabase';
+import { getAccessToken } from '@/lib/authSession';
+import { encryptMessage, decryptMessage } from '@/lib/crypto';
 import {
   ChatDto,
   CreateChatRequest,
   MessageDto,
   SendMessageRequest,
+  TypingUserDto,
 } from '@/types/chat';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
@@ -37,8 +39,7 @@ export function resolveUserIdFromChats(chats: ChatDto[]): string | null {
  * Obtiene el token JWT del usuario autenticado en Supabase.
  */
 async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  const token = await getAccessToken();
 
   return {
     'Content-Type': 'application/json',
@@ -58,7 +59,13 @@ export async function getMyChats(): Promise<ChatDto[]> {
     throw new Error(`Error al obtener chats: ${res.status}`);
   }
 
-  return res.json();
+  const chats: ChatDto[] = await res.json();
+  return chats.map(chat => {
+    if (chat.lastMessage) {
+      chat.lastMessage.body = decryptMessage(chat.lastMessage.body);
+    }
+    return chat;
+  });
 }
 
 /**
@@ -73,7 +80,11 @@ export async function getChat(chatId: number): Promise<ChatDto> {
     throw new Error(`Error al obtener chat ${chatId}: ${res.status}`);
   }
 
-  return res.json();
+  const chat: ChatDto = await res.json();
+  if (chat.lastMessage) {
+    chat.lastMessage.body = decryptMessage(chat.lastMessage.body);
+  }
+  return chat;
 }
 
 /**
@@ -99,7 +110,11 @@ export async function getMessages(
     throw new Error(`Error al obtener mensajes del chat ${chatId}: ${res.status}`);
   }
 
-  return res.json();
+  const messages: MessageDto[] = await res.json();
+  return messages.map(msg => ({
+    ...msg,
+    body: decryptMessage(msg.body)
+  }));
 }
 
 /**
@@ -113,7 +128,8 @@ export async function sendMessage(
   body: string
 ): Promise<MessageDto> {
   const headers = await getAuthHeaders();
-  const request: SendMessageRequest = { body };
+  const encryptedBody = encryptMessage(body);
+  const request: SendMessageRequest = { body: encryptedBody };
 
   const res = await fetch(`${API_URL}/chat/${chatId}/messages`, {
     method: 'POST',
@@ -125,7 +141,9 @@ export async function sendMessage(
     throw new Error(`Error al enviar mensaje: ${res.status}`);
   }
 
-  return res.json();
+  const message: MessageDto = await res.json();
+  message.body = decryptMessage(message.body);
+  return message;
 }
 
 /**
@@ -147,6 +165,56 @@ export async function createChat(
 
   if (!res.ok) {
     throw new Error(`Error al crear chat: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * Indica que el usuario está escribiendo en un chat.
+ * POST /api/chat/{chatId}/typing
+ */
+export async function startTyping(chatId: number): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
+    method: 'POST',
+    headers,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error al iniciar typing indicator: ${res.status}`);
+  }
+}
+
+/**
+ * Indica que el usuario dejó de escribir en un chat.
+ * DELETE /api/chat/{chatId}/typing
+ */
+export async function stopTyping(chatId: number): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
+    method: 'DELETE',
+    headers,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error al detener typing indicator: ${res.status}`);
+  }
+}
+
+/**
+ * Obtiene los usuarios que están escribiendo en un chat.
+ * GET /api/chat/{chatId}/typing
+ */
+export async function getTypingUsers(chatId: number): Promise<TypingUserDto[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error al obtener typing users: ${res.status}`);
   }
 
   return res.json();

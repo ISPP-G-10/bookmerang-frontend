@@ -18,9 +18,19 @@ interface FeedBookDto {
   condition: string | null;
   observaciones: string | null;
   genres: string[];
+  languages: string[];
   photos: string[];
   score: number;
   isPriority: boolean;
+  distanceKm: number;
+}
+
+/** Resultado paginado de GET /api/matcher/feed */
+interface FeedResultDto {
+  items: FeedBookDto[];
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
 }
 
 /** Resultado de POST /api/matcher/swipe */
@@ -57,7 +67,10 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
       createdAt: '',
       updatedAt: '',
       genres: dto.genres.map((name, i) => ({ id: i, name })),
-      languages: [],
+      languages: (dto.languages ?? []).map((language, i) => ({
+        id: i,
+        language,
+      })),
       photos: dto.photos.map((url, i) => ({
         id: i,
         bookId: dto.id,
@@ -75,7 +88,7 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
       finishedExchanges: 0,
       xpTotal: 0,
     },
-    distanceKm: 0,
+    distanceKm: dto.distanceKm ?? 0,
     score: dto.score,
   };
 }
@@ -84,13 +97,18 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
 // Llamadas a la API
 // ──────────────────────────────────────────────
 
+export interface FeedResult {
+  cards: MatcherCard[];
+  hasMore: boolean;
+}
+
 /**
  * Obtiene el feed paginado de libros candidatos para el matcher.
  */
 export async function fetchFeed(
   page: number = 0,
   size: number = 20,
-): Promise<MatcherCard[]> {
+): Promise<FeedResult> {
   const res = await apiRequest(`/matcher/feed?page=${page}&size=${size}`);
 
   if (!res.ok) {
@@ -98,8 +116,11 @@ export async function fetchFeed(
     throw new Error(body.message ?? `Error al cargar el feed (${res.status})`);
   }
 
-  const data: FeedBookDto[] = await res.json();
-  return data.map(mapFeedBookToMatcherCard);
+  const data: FeedResultDto = await res.json();
+  return {
+    cards: data.items.map(mapFeedBookToMatcherCard),
+    hasMore: data.hasMore,
+  };
 }
 
 /**
@@ -121,4 +142,19 @@ export async function sendSwipe(
   }
 
   return res.json();
+}
+
+/**
+ * Deshace el último swipe del usuario (si no generó match).
+ */
+export async function undoLastSwipe(): Promise<{ message: string }> {
+  const res = await apiRequest('/matcher/undo', {
+    method: 'POST',
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.message ?? `Error al deshacer swipe (${res.status})`);
+  }
+  return body;
 }
