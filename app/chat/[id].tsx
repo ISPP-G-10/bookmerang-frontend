@@ -1,7 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   ActivityIndicator,
@@ -22,7 +22,9 @@ import { Text, View } from "@/components/Themed";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchMyBackendUser } from "@/lib/api";
+import { authService } from "@/lib/authService";
 import { BookDetail, getBookDetail } from "@/lib/books";
+import { BookspotDTO, getActiveBookspots } from "@/lib/bookspotApi";
 import {
   sendMessage as apiSendMessage,
   getChat as fetchChat,
@@ -109,6 +111,93 @@ type LocationSuggestion = {
   lon: number;
 };
 
+type UserLocation = {
+  latitude: number;
+  longitude: number;
+};
+
+type RankedBookspot = {
+  id: number;
+  nombre: string;
+  addressText: string;
+  latitude: number;
+  longitude: number;
+  distanceUser1Km: number;
+  distanceUser2Km: number;
+  furthestDistanceKm: number;
+  fairnessGapKm: number;
+  averageDistanceKm: number;
+};
+
+const toRadians = (value: number) => (value * Math.PI) / 180;
+
+const haversineDistanceKm = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) => {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+};
+
+const rankBookspotsByFairDistance = (
+  bookspots: BookspotDTO[],
+  user1Location: UserLocation,
+  user2Location: UserLocation,
+): RankedBookspot[] =>
+  bookspots
+    .map((bookspot) => {
+      const distanceUser1Km = haversineDistanceKm(
+        user1Location.latitude,
+        user1Location.longitude,
+        bookspot.latitude,
+        bookspot.longitude,
+      );
+      const distanceUser2Km = haversineDistanceKm(
+        user2Location.latitude,
+        user2Location.longitude,
+        bookspot.latitude,
+        bookspot.longitude,
+      );
+
+      return {
+        id: bookspot.id,
+        nombre: bookspot.nombre,
+        addressText: bookspot.addressText,
+        latitude: bookspot.latitude,
+        longitude: bookspot.longitude,
+        distanceUser1Km,
+        distanceUser2Km,
+        furthestDistanceKm: Math.max(distanceUser1Km, distanceUser2Km),
+        fairnessGapKm: Math.abs(distanceUser1Km - distanceUser2Km),
+        averageDistanceKm: (distanceUser1Km + distanceUser2Km) / 2,
+      };
+    })
+    .sort((a, b) => {
+      if (a.furthestDistanceKm !== b.furthestDistanceKm) {
+        return a.furthestDistanceKm - b.furthestDistanceKm;
+      }
+      if (a.fairnessGapKm !== b.fairnessGapKm) {
+        if (a.averageDistanceKm !== b.averageDistanceKm) {
+          return a.averageDistanceKm - b.averageDistanceKm;
+        }
+        return a.fairnessGapKm - b.fairnessGapKm;
+      }
+      return a.averageDistanceKm - b.averageDistanceKm;
+    });
+
+const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
+
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
   const chatId = parseInt(id ?? "0", 10);
@@ -165,6 +254,18 @@ export default function ChatDetailScreen() {
   const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
   const [locationSuggestionFeedback, setLocationSuggestionFeedback] = useState<string | null>(null);
   const [selectedLocationSuggestion, setSelectedLocationSuggestion] = useState<LocationSuggestion | null>(null);
+  const [rankedBookspots, setRankedBookspots] = useState<RankedBookspot[]>([]);
+  const [recommendedBookspots, setRecommendedBookspots] = useState<RankedBookspot[]>([]);
+  const [selectedBookspot, setSelectedBookspot] = useState<RankedBookspot | null>(null);
+  const [bookspotSearchQuery, setBookspotSearchQuery] = useState("");
+  const [isLoadingBookspots, setIsLoadingBookspots] = useState(false);
+  const [bookspotSuggestionFeedback, setBookspotSuggestionFeedback] = useState<string | null>(null);
+  const [rankedBookdrops, setRankedBookdrops] = useState<RankedBookspot[]>([]);
+  const [recommendedBookdrops, setRecommendedBookdrops] = useState<RankedBookspot[]>([]);
+  const [selectedBookdrop, setSelectedBookdrop] = useState<RankedBookspot | null>(null);
+  const [bookdropSearchQuery, setBookdropSearchQuery] = useState("");
+  const [isLoadingBookdrops, setIsLoadingBookdrops] = useState(false);
+  const [bookdropSuggestionFeedback, setBookdropSuggestionFeedback] = useState<string | null>(null);
   const locationRequestSeqRef = useRef(0);
   const locationCacheRef = useRef<Record<string, LocationSuggestion[]>>({});
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
@@ -226,6 +327,7 @@ export default function ChatDetailScreen() {
     a.getDate() === b.getDate();
 
   const pad2 = (value: number) => value.toString().padStart(2, "0");
+  const MIN_MEETING_LEAD_MINUTES = 5;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -305,9 +407,27 @@ export default function ChatDetailScreen() {
   };
 
   const getTodayMinAllowedDateTime = () => {
-    const min = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const min = new Date();
+    min.setMinutes(min.getMinutes() + MIN_MEETING_LEAD_MINUTES);
     min.setSeconds(0, 0);
     return min;
+  };
+
+  const hasAvailableMinutesToday = () => {
+    const selected = parseMeetingDate(meetingDate);
+    const now = new Date();
+    if (!selected || !isSameCalendarDay(selected, now)) return true;
+
+    const endOfToday = new Date(
+      selected.getFullYear(),
+      selected.getMonth(),
+      selected.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
+    return endOfToday >= getTodayMinAllowedDateTime();
   };
 
   const isWebTimeOptionDisabled = (hour: number, minute: number) => {
@@ -317,10 +437,17 @@ export default function ChatDetailScreen() {
     const now = new Date();
     if (!isSameCalendarDay(selected, now)) return false;
 
-    const min = getTodayMinAllowedDateTime();
-    if (hour < min.getHours()) return true;
-    if (hour === min.getHours() && minute < min.getMinutes()) return true;
-    return false;
+    const candidate = new Date(
+      selected.getFullYear(),
+      selected.getMonth(),
+      selected.getDate(),
+      hour,
+      minute,
+      0,
+      0,
+    );
+
+    return candidate < getTodayMinAllowedDateTime();
   };
 
   const getSameDayMinTimeLabel = () => {
@@ -329,6 +456,7 @@ export default function ChatDetailScreen() {
     if (!selected || !isSameCalendarDay(selected, now)) return null;
 
     const min = getTodayMinAllowedDateTime();
+    if (!isSameCalendarDay(min, selected)) return null;
     return `${pad2(min.getHours())}:${pad2(min.getMinutes())}`;
   };
 
@@ -343,7 +471,7 @@ export default function ChatDetailScreen() {
     const minToday = getTodayMinAllowedDateTime();
 
     if (isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
-      setError("Si propones para hoy, la hora debe ser al menos 2 horas posterior a la actual.");
+      setError("Si propones para hoy, la hora debe ser al menos 5 minutos posterior a la actual.");
       return false;
     }
 
@@ -368,20 +496,35 @@ export default function ChatDetailScreen() {
   };
 
   const openTimeSelector = () => {
+    const selectedDate = parseMeetingDate(meetingDate);
+    const now = new Date();
+
+    if (selectedDate && isSameCalendarDay(selectedDate, now) && !hasAvailableMinutesToday()) {
+      setError("Para hoy ya no quedan horas disponibles. Elige una fecha posterior.");
+      setWebTimePanelVisible(false);
+      setTimePickerVisible(false);
+      return;
+    }
+
     if (Platform.OS === "web") {
       const parsed = parseMeetingTime(meetingTime);
-      const now = new Date();
-      const selectedDate = parseMeetingDate(meetingDate);
       const minToday = getTodayMinAllowedDateTime();
 
       let initialHour = parsed?.hour ?? now.getHours();
       let initialMinute = parsed?.minute ?? now.getMinutes();
 
       if (selectedDate && isSameCalendarDay(selectedDate, now)) {
-        if (
-          initialHour < minToday.getHours() ||
-          (initialHour === minToday.getHours() && initialMinute < minToday.getMinutes())
-        ) {
+        const initialCandidate = new Date(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+          initialHour,
+          initialMinute,
+          0,
+          0,
+        );
+
+        if (initialCandidate < minToday) {
           initialHour = minToday.getHours();
           initialMinute = minToday.getMinutes();
         }
@@ -410,8 +553,52 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    if (meetingType === "BOOKSPOT" && !selectedBookspot) {
+      setError("Selecciona un BookSpot recomendado o busca uno manualmente.");
+      return;
+    }
+
+    if (meetingType === "BOOKDROP" && !selectedBookdrop) {
+      setError("Selecciona uno de los BookDrops recomendados.");
+      return;
+    }
+
     setError(null);
-    Alert.alert("Propuesta lista", "Fecha y hora válidas. Ya puedes conectar el endpoint de creación de encuentro.");
+    const locationSummary =
+      meetingType === "BOOKSPOT"
+        ? `BookSpot elegido: ${selectedBookspot?.nombre ?? "(sin seleccionar)"}`
+        : meetingType === "BOOKDROP"
+          ? `BookDrop elegido: ${selectedBookdrop?.nombre ?? "(sin seleccionar)"}`
+        : `Ubicación: ${meetingLocation}`;
+    Alert.alert(
+      "Propuesta lista",
+      `Fecha y hora válidas. ${locationSummary}. Ya puedes conectar el endpoint de creación de encuentro.`,
+    );
+  };
+
+  const currentDistanceInfoForBookspot = useCallback(
+    (spot: RankedBookspot) => {
+      if (!exchange || !backendUserId) {
+        return {
+          myDistanceKm: spot.distanceUser1Km,
+          otherDistanceKm: spot.distanceUser2Km,
+        };
+      }
+
+      const iAmUser1 = exchange.user1Id === backendUserId;
+      return {
+        myDistanceKm: iAmUser1 ? spot.distanceUser1Km : spot.distanceUser2Km,
+        otherDistanceKm: iAmUser1 ? spot.distanceUser2Km : spot.distanceUser1Km,
+      };
+    },
+    [backendUserId, exchange],
+  );
+
+  const handleSelectBookspot = (spot: RankedBookspot) => {
+    setSelectedBookspot(spot);
+    setMeetingLocation(spot.addressText);
+    setSelectedLocationSuggestion(null);
+    setError(null);
   };
 
   const searchLocationSuggestions = useCallback(async (query: string) => {
@@ -498,6 +685,188 @@ export default function ChatDetailScreen() {
     return () => clearTimeout(handler);
   }, [meetingLocation, meetingType, searchLocationSuggestions]);
 
+  useEffect(() => {
+    if (meetingType !== "BOOKSPOT") {
+      setBookspotSearchQuery("");
+      setBookspotSuggestionFeedback(null);
+      return;
+    }
+
+    if (!exchange) {
+      setBookspotSuggestionFeedback("No se pudo obtener el intercambio para sugerir BookSpots.");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadBookspotSuggestions = async () => {
+      try {
+        setIsLoadingBookspots(true);
+        setBookspotSuggestionFeedback(null);
+
+        const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
+          authService.getPreferences(exchange.user1Id),
+          authService.getPreferences(exchange.user2Id),
+          getActiveBookspots(),
+        ]);
+
+        if (cancelled) return;
+
+        const user1Location = user1Prefs?.location;
+        const user2Location = user2Prefs?.location;
+
+        if (!user1Location || !user2Location) {
+          setRankedBookspots([]);
+          setRecommendedBookspots([]);
+          setBookspotSuggestionFeedback(
+            "No hay ubicación suficiente de ambos usuarios para calcular sugerencias equitativas.",
+          );
+          return;
+        }
+
+        const ranked = rankBookspotsByFairDistance(
+          activeBookspots,
+          user1Location,
+          user2Location,
+        );
+        setRankedBookspots(ranked);
+        setRecommendedBookspots(ranked.slice(0, 5));
+
+        if (ranked.length === 0) {
+          setBookspotSuggestionFeedback("No hay BookSpots activos disponibles en este momento.");
+          return;
+        }
+
+        if (selectedBookspot) {
+          const refreshedSelection = ranked.find((spot) => spot.id === selectedBookspot.id) ?? null;
+          setSelectedBookspot(refreshedSelection);
+        }
+      } catch {
+        if (cancelled) return;
+        setRankedBookspots([]);
+        setRecommendedBookspots([]);
+        setBookspotSuggestionFeedback("No se pudieron cargar los BookSpots. Intentalo de nuevo.");
+      } finally {
+        if (!cancelled) {
+          setIsLoadingBookspots(false);
+        }
+      }
+    };
+
+    loadBookspotSuggestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exchange, meetingType]);
+
+  useEffect(() => {
+    if (meetingType !== "BOOKDROP") {
+      setBookdropSearchQuery("");
+      setBookdropSuggestionFeedback(null);
+      return;
+    }
+
+    if (!exchange) {
+      setBookdropSuggestionFeedback("No se pudo obtener el intercambio para sugerir BookDrops.");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadBookdropSuggestions = async () => {
+      try {
+        setIsLoadingBookdrops(true);
+        setBookdropSuggestionFeedback(null);
+
+        const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
+          authService.getPreferences(exchange.user1Id),
+          authService.getPreferences(exchange.user2Id),
+          getActiveBookspots(),
+        ]);
+
+        if (cancelled) return;
+
+        const user1Location = user1Prefs?.location;
+        const user2Location = user2Prefs?.location;
+
+        if (!user1Location || !user2Location) {
+          setRankedBookdrops([]);
+          setRecommendedBookdrops([]);
+          setBookdropSuggestionFeedback(
+            "No hay ubicación suficiente de ambos usuarios para calcular sugerencias de BookDrop.",
+          );
+          return;
+        }
+
+        const onlyBookdrops = activeBookspots.filter((spot) => spot.isBookdrop);
+        const ranked = rankBookspotsByFairDistance(
+          onlyBookdrops,
+          user1Location,
+          user2Location,
+        );
+        setRankedBookdrops(ranked);
+        setRecommendedBookdrops(ranked.slice(0, 5));
+
+        if (ranked.length === 0) {
+          setBookdropSuggestionFeedback("No hay BookDrops activos disponibles en este momento.");
+          return;
+        }
+
+        if (selectedBookdrop) {
+          const refreshedSelection = ranked.find((drop) => drop.id === selectedBookdrop.id) ?? null;
+          setSelectedBookdrop(refreshedSelection);
+        }
+      } catch {
+        if (cancelled) return;
+        setRankedBookdrops([]);
+        setRecommendedBookdrops([]);
+        setBookdropSuggestionFeedback("No se pudieron cargar los BookDrops. Intentalo de nuevo.");
+      } finally {
+        if (!cancelled) {
+          setIsLoadingBookdrops(false);
+        }
+      }
+    };
+
+    loadBookdropSuggestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exchange, meetingType]);
+
+  const handleSelectBookdrop = (bookdrop: RankedBookspot) => {
+    setSelectedBookdrop(bookdrop);
+    setMeetingLocation(bookdrop.addressText);
+    setSelectedLocationSuggestion(null);
+    setError(null);
+  };
+
+  const filteredBookspotSearchResults = useMemo(() => {
+    const normalizedQuery = bookspotSearchQuery.trim().toLowerCase();
+    if (normalizedQuery.length < 2) return [];
+
+    return rankedBookspots
+      .filter((spot) => {
+        const haystack = `${spot.nombre} ${spot.addressText}`.toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+      .slice(0, 10);
+  }, [bookspotSearchQuery, rankedBookspots]);
+
+  const filteredBookdropSearchResults = useMemo(() => {
+    const normalizedQuery = bookdropSearchQuery.trim().toLowerCase();
+    if (normalizedQuery.length < 2) return [];
+
+    return rankedBookdrops
+      .filter((drop) => {
+        const haystack = `${drop.nombre} ${drop.addressText}`.toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+      .slice(0, 10);
+  }, [bookdropSearchQuery, rankedBookdrops]);
+
   const handleLocationInputChange = (value: string) => {
     setMeetingLocation(value);
     setSelectedLocationSuggestion(null);
@@ -530,7 +899,7 @@ export default function ChatDetailScreen() {
 
   const applyWebTimeSelection = () => {
     if (isWebTimeOptionDisabled(webHourDraft, webMinuteDraft)) {
-      setError("Para hoy, elige una hora al menos 2 horas posterior a la actual.");
+      setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
       return;
     }
 
@@ -1658,7 +2027,12 @@ export default function ChatDetailScreen() {
                   )}
                   {getSameDayMinTimeLabel() && (
                     <Text style={styles.meetingInfoText}>
-                      Para hoy, la hora minima disponible es {getSameDayMinTimeLabel()} (2h desde ahora).
+                      Para hoy, la hora minima disponible es {getSameDayMinTimeLabel()} (5 min desde ahora).
+                    </Text>
+                  )}
+                  {!!meetingDate && !hasAvailableMinutesToday() && (
+                    <Text style={styles.locationSuggestionFeedbackText}>
+                      Para hoy ya no quedan horas disponibles. Elige una fecha posterior.
                     </Text>
                   )}
                 </View>
@@ -1713,6 +2087,260 @@ export default function ChatDetailScreen() {
                   </View>
                 )}
 
+                {meetingType === "BOOKSPOT" && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.meetingSectionLabel}>BookSpots recomendados</Text>
+                    <Text style={styles.meetingInfoText}>
+                      Se muestran los 5 que minimizan la distancia para ambos, priorizando equilibrio.
+                    </Text>
+
+                    {isLoadingBookspots && (
+                      <View style={styles.bookspotLoadingRow}>
+                        <ActivityIndicator size="small" color="#e4715f" />
+                        <Text style={styles.bookspotLoadingText}>Calculando sugerencias...</Text>
+                      </View>
+                    )}
+
+                    {!isLoadingBookspots && recommendedBookspots.length > 0 && (
+                      <View style={styles.bookspotRecommendedList}>
+                        {recommendedBookspots.map((spot) => {
+                          const distanceInfo = currentDistanceInfoForBookspot(spot);
+                          const isSelected = selectedBookspot?.id === spot.id;
+
+                          return (
+                            <Pressable
+                              key={`recommended-bookspot-${spot.id}`}
+                              style={[
+                                styles.bookspotItem,
+                                isSelected && styles.bookspotItemSelected,
+                              ]}
+                              onPress={() => handleSelectBookspot(spot)}
+                            >
+                              <Text
+                                style={[
+                                  styles.bookspotItemTitle,
+                                  isSelected && styles.bookspotItemTitleSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {spot.nombre}
+                              </Text>
+                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                                {spot.addressText}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Diferencia: {formatDistanceKm(spot.fairnessGapKm)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    <Text style={[styles.meetingSectionLabel, { marginTop: 10 }]}>Buscar otro BookSpot</Text>
+                    <TextInput
+                      style={styles.locationInput}
+                      value={bookspotSearchQuery}
+                      onChangeText={setBookspotSearchQuery}
+                      placeholder="Buscar por nombre o direccion"
+                      placeholderTextColor="#9CA3AF"
+                    />
+
+                    {bookspotSearchQuery.trim().length > 0 && bookspotSearchQuery.trim().length < 2 && (
+                      <Text style={styles.meetingInfoText}>Escribe al menos 2 caracteres para buscar.</Text>
+                    )}
+
+                    {filteredBookspotSearchResults.length > 0 && (
+                      <View style={styles.bookspotSearchResultsList}>
+                        {filteredBookspotSearchResults.map((spot) => {
+                          const distanceInfo = currentDistanceInfoForBookspot(spot);
+                          const isSelected = selectedBookspot?.id === spot.id;
+
+                          return (
+                            <Pressable
+                              key={`search-bookspot-${spot.id}`}
+                              style={[
+                                styles.bookspotSearchResultItem,
+                                isSelected && styles.bookspotSearchResultItemSelected,
+                              ]}
+                              onPress={() => handleSelectBookspot(spot)}
+                            >
+                              <Text
+                                style={[
+                                  styles.bookspotSearchResultTitle,
+                                  isSelected && styles.bookspotSearchResultTitleSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {spot.nombre}
+                              </Text>
+                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                                {spot.addressText}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {bookspotSearchQuery.trim().length >= 2 &&
+                      filteredBookspotSearchResults.length === 0 &&
+                      !isLoadingBookspots && (
+                        <Text style={styles.locationSuggestionFeedbackText}>
+                          No se encontraron BookSpots con ese texto.
+                        </Text>
+                      )}
+
+                    {selectedBookspot && (
+                      <Text style={styles.bookspotSelectedSummary}>
+                        Seleccionado: {selectedBookspot.nombre}
+                      </Text>
+                    )}
+
+                    {bookspotSuggestionFeedback && (
+                      <Text style={styles.locationSuggestionFeedbackText}>
+                        {bookspotSuggestionFeedback}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {meetingType === "BOOKDROP" && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.meetingSectionLabel}>BookDrops recomendados</Text>
+                    <Text style={styles.meetingInfoText}>
+                      Se muestran los 5 que minimizan la distancia para ambos y, despues, priorizan equilibrio.
+                    </Text>
+
+                    {isLoadingBookdrops && (
+                      <View style={styles.bookspotLoadingRow}>
+                        <ActivityIndicator size="small" color="#e4715f" />
+                        <Text style={styles.bookspotLoadingText}>Buscando BookDrops cercanos...</Text>
+                      </View>
+                    )}
+
+                    {!isLoadingBookdrops && recommendedBookdrops.length > 0 && (
+                      <View style={styles.bookspotRecommendedList}>
+                        {recommendedBookdrops.map((bookdrop) => {
+                          const distanceInfo = currentDistanceInfoForBookspot(bookdrop);
+                          const isSelected = selectedBookdrop?.id === bookdrop.id;
+
+                          return (
+                            <Pressable
+                              key={`recommended-bookdrop-${bookdrop.id}`}
+                              style={[
+                                styles.bookspotItem,
+                                isSelected && styles.bookspotItemSelected,
+                              ]}
+                              onPress={() => handleSelectBookdrop(bookdrop)}
+                            >
+                              <Text
+                                style={[
+                                  styles.bookspotItemTitle,
+                                  isSelected && styles.bookspotItemTitleSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {bookdrop.nombre}
+                              </Text>
+                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                                {bookdrop.addressText}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Diferencia: {formatDistanceKm(bookdrop.fairnessGapKm)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    <Text style={[styles.meetingSectionLabel, { marginTop: 10 }]}>Buscar otro BookDrop</Text>
+                    <TextInput
+                      style={styles.locationInput}
+                      value={bookdropSearchQuery}
+                      onChangeText={setBookdropSearchQuery}
+                      placeholder="Buscar por nombre o direccion"
+                      placeholderTextColor="#9CA3AF"
+                    />
+
+                    {bookdropSearchQuery.trim().length > 0 && bookdropSearchQuery.trim().length < 2 && (
+                      <Text style={styles.meetingInfoText}>Escribe al menos 2 caracteres para buscar.</Text>
+                    )}
+
+                    {filteredBookdropSearchResults.length > 0 && (
+                      <View style={styles.bookspotSearchResultsList}>
+                        {filteredBookdropSearchResults.map((bookdrop) => {
+                          const distanceInfo = currentDistanceInfoForBookspot(bookdrop);
+                          const isSelected = selectedBookdrop?.id === bookdrop.id;
+
+                          return (
+                            <Pressable
+                              key={`search-bookdrop-${bookdrop.id}`}
+                              style={[
+                                styles.bookspotSearchResultItem,
+                                isSelected && styles.bookspotSearchResultItemSelected,
+                              ]}
+                              onPress={() => handleSelectBookdrop(bookdrop)}
+                            >
+                              <Text
+                                style={[
+                                  styles.bookspotSearchResultTitle,
+                                  isSelected && styles.bookspotSearchResultTitleSelected,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {bookdrop.nombre}
+                              </Text>
+                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                                {bookdrop.addressText}
+                              </Text>
+                              <Text style={styles.bookspotItemMeta}>
+                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {bookdropSearchQuery.trim().length >= 2 &&
+                      filteredBookdropSearchResults.length === 0 &&
+                      !isLoadingBookdrops && (
+                        <Text style={styles.locationSuggestionFeedbackText}>
+                          No se encontraron BookDrops con ese texto.
+                        </Text>
+                      )}
+
+                    {selectedBookdrop && (
+                      <Text style={styles.bookspotSelectedSummary}>
+                        Seleccionado: {selectedBookdrop.nombre}
+                      </Text>
+                    )}
+
+                    {bookdropSuggestionFeedback && (
+                      <Text style={styles.locationSuggestionFeedbackText}>
+                        {bookdropSuggestionFeedback}
+                      </Text>
+                    )}
+
+                    {!isLoadingBookdrops && rankedBookdrops.length > 0 && (
+                      <Text style={styles.meetingInfoText}>
+                        Si no quieres un punto de entrega, cambia el tipo de encuentro a Ubicacion arbitraria o BookSpot.
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 {/* Botón Enviar propuesta */}
                 <Pressable
                   style={({ pressed }) => [
@@ -1743,7 +2371,30 @@ export default function ChatDetailScreen() {
           display={Platform.OS === "ios" ? "spinner" : "default"}
           locale="es-ES"
           is24Hour
-          onConfirm={handleTimeConfirm}
+          onConfirm={(value) => {
+            const selected = parseMeetingDate(meetingDate);
+            const now = new Date();
+
+            if (selected && isSameCalendarDay(selected, now)) {
+              const candidate = new Date(
+                selected.getFullYear(),
+                selected.getMonth(),
+                selected.getDate(),
+                value.getHours(),
+                value.getMinutes(),
+                0,
+                0,
+              );
+
+              if (candidate < getTodayMinAllowedDateTime()) {
+                setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
+                setTimePickerVisible(false);
+                return;
+              }
+            }
+
+            handleTimeConfirm(value);
+          }}
           onCancel={() => setTimePickerVisible(false)}
         />
 
@@ -2379,6 +3030,85 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     color: "#9CA3AF",
+  },
+  bookspotLoadingRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    gap: 8,
+  },
+  bookspotLoadingText: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  bookspotRecommendedList: {
+    marginTop: 8,
+    backgroundColor: "transparent",
+    gap: 8,
+  },
+  bookspotItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  bookspotItemSelected: {
+    borderColor: "#e4715f",
+    backgroundColor: "#FFF7F4",
+  },
+  bookspotItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  bookspotItemTitleSelected: {
+    color: "#e4715f",
+  },
+  bookspotItemAddress: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#4B5563",
+    lineHeight: 18,
+  },
+  bookspotItemMeta: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  bookspotSearchResultsList: {
+    marginTop: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  bookspotSearchResultItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    backgroundColor: "#FFFFFF",
+  },
+  bookspotSearchResultItemSelected: {
+    backgroundColor: "#FFF7F4",
+  },
+  bookspotSearchResultTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  bookspotSearchResultTitleSelected: {
+    color: "#e4715f",
+  },
+  bookspotSelectedSummary: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#e4715f",
+    fontWeight: "600",
   },
   webPanelCard: {
     marginTop: 4,
