@@ -230,7 +230,7 @@ export default function MatcherScreen() {
         onChat={() => {
           setMatchInfo(null);
           if (matchResult?.chatId) {
-            router.push(`/chat/${matchResult.chatId}` as any);
+            router.push(`/chat/${matchResult.chatId}?draft=${encodeURIComponent('Hola, me ha interesado tu libro')}` as any);
           }
           setMatchResult(null);
         }}
