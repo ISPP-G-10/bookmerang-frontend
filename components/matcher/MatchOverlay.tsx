@@ -239,7 +239,7 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
         <Text style={styles.subtitleText}>
           Tú y{' '}
           <Text style={styles.usernameText}>{data.otherUsername}</Text>
-          {'\n'}queréis intercambiar libros 📚
+          {'\n'}quereis intercambiar libros 📚 
         </Text>
       </Animated.View>
 

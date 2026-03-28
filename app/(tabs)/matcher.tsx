@@ -230,7 +230,7 @@ export default function MatcherScreen() {
         onChat={() => {
           setMatchInfo(null);
           if (matchResult?.chatId) {
-            router.push(`/chat/${matchResult.chatId}` as any);
+            router.push(`/chat/${matchResult.chatId}?draft=${encodeURIComponent('Hola, me ha interesado tu libro')}` as any);
           }
           setMatchResult(null);
         }}
@@ -299,6 +299,26 @@ export default function MatcherScreen() {
             }}
           >
             <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>Refrescar</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleUndo}
+            disabled={!canUndo}
+            style={[
+              styles.actionButton,
+              {
+                marginTop: 24,
+                width: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                height: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                backgroundColor: canUndo ? '#f2cc8f' : '#e8e8e8',
+                opacity: canUndo ? 1 : 0.4,
+              },
+            ]}
+          >
+            <Ionicons
+              name="arrow-undo"
+              size={SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
+              color={canUndo ? '#3e2723' : '#bbb'}
+            />
           </Pressable>
         </View>
       </View>

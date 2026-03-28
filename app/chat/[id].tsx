@@ -1,4 +1,5 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
+import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
@@ -20,6 +21,7 @@ import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchMyBackendUser } from "@/lib/api";
 import { BookDetail, getBookDetail } from "@/lib/books";
 import {
   sendMessage as apiSendMessage,
@@ -108,7 +110,7 @@ type LocationSuggestion = {
 };
 
 export default function ChatDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
   const chatId = parseInt(id ?? "0", 10);
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
@@ -134,7 +136,7 @@ export default function ChatDetailScreen() {
 
   const [chat, setChat] = useState<ChatDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
-  const [inputText, setInputText] = useState("");
+  const [inputText, setInputText] = useState(draft ?? "");
   const [typingUsers, setTypingUsers] = useState<TypingUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -549,6 +551,19 @@ export default function ChatDetailScreen() {
       ]);
 
       setChat(chatData);
+
+      // Resolver backendUserId si aún no se ha resuelto para que la
+      // comparación senderId === currentUserId funcione correctamente.
+      if (!backendUserId) {
+        try {
+          const me = await fetchMyBackendUser();
+          if (me?.id) {
+            setBackendUserId(me.id);
+          }
+        } catch {
+          // Si falla, seguimos con el flujo normal
+        }
+      }
 
       const exchangeData = await getExchangeByChatIdWithMatch(chatId);
       if (!exchangeData && chatData.type !== "COMMUNITY") {
@@ -1745,21 +1760,21 @@ export default function ChatDetailScreen() {
               maxLength={1000}
               onSubmitEditing={handleSend}
             />
-            <Pressable
-              style={({ pressed }) => [
+            <GHTouchableOpacity
+              style={[
                 styles.sendButton,
                 !inputText.trim() && styles.sendButtonDisabled,
-                pressed && styles.sendButtonPressed,
               ]}
               onPress={handleSend}
               disabled={!inputText.trim() || sending}
+              activeOpacity={0.7}
             >
               <FontAwesome
                 name="send"
                 size={18}
                 color={inputText.trim() ? "#fff" : "#ccc"}
               />
-            </Pressable>
+            </GHTouchableOpacity>
           </View>
         )}
       </KeyboardAvoidingView>
