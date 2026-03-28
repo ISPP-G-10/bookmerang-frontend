@@ -1,6 +1,7 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   ActivityIndicator,
   Alert,
@@ -82,6 +83,30 @@ function formatDateHeader(dateStr: string): string {
   });
 }
 
+const MONTHS_ES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+const WEEKDAYS_SHORT_ES = ["L", "M", "X", "J", "V", "S", "D"];
+
+type LocationSuggestion = {
+  id: string;
+  label: string;
+  lat: number;
+  lon: number;
+};
+
 export default function ChatDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const chatId = parseInt(id ?? "0", 10);
@@ -134,8 +159,383 @@ export default function ChatDetailScreen() {
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
   const [meetingLocation, setMeetingLocation] = useState("");
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
+  const [locationSuggestionFeedback, setLocationSuggestionFeedback] = useState<string | null>(null);
+  const [selectedLocationSuggestion, setSelectedLocationSuggestion] = useState<LocationSuggestion | null>(null);
+  const locationRequestSeqRef = useRef(0);
+  const locationCacheRef = useRef<Record<string, LocationSuggestion[]>>({});
+  const [isDatePickerVisible, setDatePickerVisible] = useState(false);
+  const [isTimePickerVisible, setTimePickerVisible] = useState(false);
+  const [webDatePanelVisible, setWebDatePanelVisible] = useState(false);
+  const [webTimePanelVisible, setWebTimePanelVisible] = useState(false);
+  const [webDateCursor, setWebDateCursor] = useState(new Date());
+  const [webHourDraft, setWebHourDraft] = useState(new Date().getHours());
+  const [webMinuteDraft, setWebMinuteDraft] = useState(
+    Math.ceil(new Date().getMinutes() / 5) * 5 % 60,
+  );
 
   type MeetingType = "ARBITRARY" | "BOOKSPOT" | "BOOKDROP";
+
+  const formatMeetingDate = (value: Date) =>
+    value.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+  const formatMeetingTime = (value: Date) =>
+    value.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+
+  const handleDateConfirm = (value: Date) => {
+    setMeetingDate(formatMeetingDate(value));
+    setDatePickerVisible(false);
+  };
+
+  const handleTimeConfirm = (value: Date) => {
+    setMeetingTime(formatMeetingTime(value));
+    setTimePickerVisible(false);
+  };
+
+  const parseMeetingDate = (value: string): Date | null => {
+    const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return null;
+    const [, dd, mm, yyyy] = match;
+    const parsed = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  const parseMeetingTime = (value: string): { hour: number; minute: number } | null => {
+    const match = value.match(/^(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return { hour, minute };
+  };
+
+  const isSameCalendarDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  const pad2 = (value: number) => value.toString().padStart(2, "0");
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const selectedDate = parseMeetingDate(meetingDate);
+
+  const buildCalendarCells = () => {
+    const year = webDateCursor.getFullYear();
+    const month = webDateCursor.getMonth();
+
+    // Convert JS week start (Sunday=0) to Monday-based index.
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const cells: Array<{
+      date: Date;
+      inCurrentMonth: boolean;
+      isToday: boolean;
+      isSelected: boolean;
+      disabled: boolean;
+    }> = [];
+
+    for (let i = firstWeekday - 1; i >= 0; i--) {
+      const d = new Date(year, month - 1, daysInPrevMonth - i);
+      cells.push({
+        date: d,
+        inCurrentMonth: false,
+        isToday: d.getTime() === todayStart.getTime(),
+        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        disabled: d < todayStart,
+      });
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const d = new Date(year, month, day);
+      cells.push({
+        date: d,
+        inCurrentMonth: true,
+        isToday: d.getTime() === todayStart.getTime(),
+        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        disabled: d < todayStart,
+      });
+    }
+
+    while (cells.length < 42) {
+      const nextDay = cells.length - (firstWeekday + daysInMonth) + 1;
+      const d = new Date(year, month + 1, nextDay);
+      cells.push({
+        date: d,
+        inCurrentMonth: false,
+        isToday: d.getTime() === todayStart.getTime(),
+        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        disabled: d < todayStart,
+      });
+    }
+
+    return cells;
+  };
+
+  const calendarCells = buildCalendarCells();
+
+  const buildMeetingDateTime = (): Date | null => {
+    const parsedDate = parseMeetingDate(meetingDate);
+    const parsedTime = parseMeetingTime(meetingTime);
+    if (!parsedDate || !parsedTime) return null;
+
+    return new Date(
+      parsedDate.getFullYear(),
+      parsedDate.getMonth(),
+      parsedDate.getDate(),
+      parsedTime.hour,
+      parsedTime.minute,
+      0,
+      0,
+    );
+  };
+
+  const getTodayMinAllowedDateTime = () => {
+    const min = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    min.setSeconds(0, 0);
+    return min;
+  };
+
+  const isWebTimeOptionDisabled = (hour: number, minute: number) => {
+    const selected = parseMeetingDate(meetingDate);
+    if (!selected) return false;
+
+    const now = new Date();
+    if (!isSameCalendarDay(selected, now)) return false;
+
+    const min = getTodayMinAllowedDateTime();
+    if (hour < min.getHours()) return true;
+    if (hour === min.getHours() && minute < min.getMinutes()) return true;
+    return false;
+  };
+
+  const getSameDayMinTimeLabel = () => {
+    const selected = parseMeetingDate(meetingDate);
+    const now = new Date();
+    if (!selected || !isSameCalendarDay(selected, now)) return null;
+
+    const min = getTodayMinAllowedDateTime();
+    return `${pad2(min.getHours())}:${pad2(min.getMinutes())}`;
+  };
+
+  const validateMeetingDateTime = () => {
+    const scheduledAt = buildMeetingDateTime();
+    if (!scheduledAt) {
+      setError("Debes indicar fecha y hora válidas para el encuentro.");
+      return false;
+    }
+
+    const now = new Date();
+    const minToday = getTodayMinAllowedDateTime();
+
+    if (isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
+      setError("Si propones para hoy, la hora debe ser al menos 2 horas posterior a la actual.");
+      return false;
+    }
+
+    if (scheduledAt <= now) {
+      setError("La fecha y hora del encuentro debe ser posterior a la actual.");
+      return false;
+    }
+
+    return true;
+  };
+
+  const openDateSelector = () => {
+    if (Platform.OS === "web") {
+      const current = parseMeetingDate(meetingDate);
+      setWebDateCursor(current ?? new Date());
+      setWebDatePanelVisible((prev) => !prev);
+      setWebTimePanelVisible(false);
+      return;
+    }
+
+    setDatePickerVisible(true);
+  };
+
+  const openTimeSelector = () => {
+    if (Platform.OS === "web") {
+      const parsed = parseMeetingTime(meetingTime);
+      const now = new Date();
+      const selectedDate = parseMeetingDate(meetingDate);
+      const minToday = getTodayMinAllowedDateTime();
+
+      let initialHour = parsed?.hour ?? now.getHours();
+      let initialMinute = parsed?.minute ?? now.getMinutes();
+
+      if (selectedDate && isSameCalendarDay(selectedDate, now)) {
+        if (
+          initialHour < minToday.getHours() ||
+          (initialHour === minToday.getHours() && initialMinute < minToday.getMinutes())
+        ) {
+          initialHour = minToday.getHours();
+          initialMinute = minToday.getMinutes();
+        }
+      }
+
+      setWebHourDraft(initialHour);
+      setWebMinuteDraft(initialMinute);
+      setWebTimePanelVisible((prev) => !prev);
+      setWebDatePanelVisible(false);
+      return;
+    }
+
+    setTimePickerVisible(true);
+  };
+
+  const submitMeetingProposal = () => {
+    if (!validateMeetingDateTime()) return;
+
+    if (meetingType === "ARBITRARY" && !meetingLocation.trim()) {
+      setError("Debes indicar una ubicación para el encuentro.");
+      return;
+    }
+
+    if (meetingType === "ARBITRARY" && !selectedLocationSuggestion) {
+      setError("Selecciona una ubicación válida desde las sugerencias.");
+      return;
+    }
+
+    setError(null);
+    Alert.alert("Propuesta lista", "Fecha y hora válidas. Ya puedes conectar el endpoint de creación de encuentro.");
+  };
+
+  const searchLocationSuggestions = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+
+    if (trimmed.length < 3) {
+      setLocationSuggestions([]);
+      setLocationSuggestionFeedback(null);
+      setLoadingLocationSuggestions(false);
+      return;
+    }
+
+    const normalizedQuery = trimmed.toLowerCase();
+
+    if (locationCacheRef.current[normalizedQuery]) {
+      const cached = locationCacheRef.current[normalizedQuery];
+      setLocationSuggestions(cached);
+      setLocationSuggestionFeedback(cached.length === 0 ? "No se encontraron ubicaciones para ese texto." : null);
+      setLoadingLocationSuggestions(false);
+      return;
+    }
+
+    const requestSeq = ++locationRequestSeqRef.current;
+
+    try {
+      setLoadingLocationSuggestions(true);
+      setLocationSuggestionFeedback(null);
+
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&accept-language=es&countrycodes=es&q=${encodeURIComponent(trimmed)}`;
+      const response = await fetch(url, {
+        headers: {
+          "Accept-Language": "es",
+        },
+      });
+
+      if (requestSeq !== locationRequestSeqRef.current) return;
+
+      if (!response.ok) {
+        setLocationSuggestionFeedback("No se pudieron cargar sugerencias. Sigue escribiendo e inténtalo de nuevo.");
+        return;
+      }
+
+      const data = (await response.json()) as Array<{
+        place_id: number;
+        display_name: string;
+        lat: string;
+        lon: string;
+      }>;
+
+      const mapped: LocationSuggestion[] = data
+        .map((item) => ({
+          id: String(item.place_id),
+          label: item.display_name,
+          lat: Number(item.lat),
+          lon: Number(item.lon),
+        }))
+        .filter((item) => !Number.isNaN(item.lat) && !Number.isNaN(item.lon));
+
+      locationCacheRef.current[normalizedQuery] = mapped;
+
+      setLocationSuggestions(mapped);
+      setLocationSuggestionFeedback(mapped.length === 0 ? "No se encontraron ubicaciones para ese texto." : null);
+    } catch {
+      if (requestSeq !== locationRequestSeqRef.current) return;
+      setLocationSuggestionFeedback("No se pudieron cargar sugerencias. Revisa conexión e inténtalo de nuevo.");
+    } finally {
+      if (requestSeq === locationRequestSeqRef.current) {
+        setLoadingLocationSuggestions(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (meetingType !== "ARBITRARY") {
+      setLocationSuggestions([]);
+      setLoadingLocationSuggestions(false);
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      searchLocationSuggestions(meetingLocation);
+    }, 350);
+
+    return () => clearTimeout(handler);
+  }, [meetingLocation, meetingType, searchLocationSuggestions]);
+
+  const handleLocationInputChange = (value: string) => {
+    setMeetingLocation(value);
+    setSelectedLocationSuggestion(null);
+    if (value.trim().length === 0) {
+      setLocationSuggestions([]);
+      setLocationSuggestionFeedback(null);
+    }
+    if (error) setError(null);
+  };
+
+  const handleSelectLocationSuggestion = (suggestion: LocationSuggestion) => {
+    setMeetingLocation(suggestion.label);
+    setSelectedLocationSuggestion(suggestion);
+    setLocationSuggestions([]);
+    setLocationSuggestionFeedback(null);
+    setError(null);
+  };
+
+  const moveCalendarMonth = (delta: number) => {
+    setWebDateCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  };
+
+  const pickCalendarDate = (date: Date, disabled: boolean) => {
+    if (disabled) return;
+    setMeetingDate(formatMeetingDate(date));
+    setWebDateCursor(new Date(date.getFullYear(), date.getMonth(), 1));
+    setWebDatePanelVisible(false);
+    setError(null);
+  };
+
+  const applyWebTimeSelection = () => {
+    if (isWebTimeOptionDisabled(webHourDraft, webMinuteDraft)) {
+      setError("Para hoy, elige una hora al menos 2 horas posterior a la actual.");
+      return;
+    }
+
+    setMeetingTime(`${pad2(webHourDraft)}:${pad2(webMinuteDraft)}`);
+    setWebTimePanelVisible(false);
+    setError(null);
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -1029,47 +1429,272 @@ export default function ChatDetailScreen() {
                 {/* Fecha */}
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.meetingSectionLabel}>Fecha</Text>
-                  <Pressable
-                    style={styles.meetingInput}
-                    onPress={() => {
-                      // aquí más adelante abrirás un date picker
-                    }}
-                  >
-                    <Text style={styles.meetingInputPlaceholder}>
-                      {meetingDate || "dd/mm/aaaa"}
-                    </Text>
-                  </Pressable>
+                  {Platform.OS === "web" ? (
+                    <>
+                      <Pressable
+                        style={[
+                          styles.meetingInput,
+                          styles.meetingInputTrigger,
+                          webDatePanelVisible && styles.meetingInputTriggerActive,
+                        ]}
+                        onPress={openDateSelector}
+                      >
+                        <View style={styles.meetingTriggerLeft}>
+                          <FontAwesome name="calendar" size={14} color="#e4715f" />
+                          <Text
+                            style={
+                              meetingDate
+                                ? styles.meetingInputValue
+                                : styles.meetingInputPlaceholderNoMargin
+                            }
+                          >
+                            {meetingDate || "dd/mm/aaaa"}
+                          </Text>
+                        </View>
+                        <FontAwesome
+                          name={webDatePanelVisible ? "chevron-up" : "chevron-down"}
+                          size={12}
+                          color="#6B7280"
+                        />
+                      </Pressable>
+
+                      {webDatePanelVisible && (
+                        <View style={styles.webPanelCard}>
+                          <View style={styles.webPanelHeader}>
+                            <Pressable
+                              style={styles.webPanelArrowBtn}
+                              onPress={() => moveCalendarMonth(-1)}
+                            >
+                              <FontAwesome name="chevron-left" size={12} color="#4B5563" />
+                            </Pressable>
+                            <Text style={styles.webPanelTitle}>
+                              {MONTHS_ES[webDateCursor.getMonth()]} {webDateCursor.getFullYear()}
+                            </Text>
+                            <Pressable
+                              style={styles.webPanelArrowBtn}
+                              onPress={() => moveCalendarMonth(1)}
+                            >
+                              <FontAwesome name="chevron-right" size={12} color="#4B5563" />
+                            </Pressable>
+                          </View>
+
+                          <View style={styles.webWeekHeaderRow}>
+                            {WEEKDAYS_SHORT_ES.map((d) => (
+                              <Text key={d} style={styles.webWeekHeaderText}>
+                                {d}
+                              </Text>
+                            ))}
+                          </View>
+
+                          <View style={styles.webCalendarGrid}>
+                            {calendarCells.map((cell, index) => (
+                              <Pressable
+                                key={`${cell.date.toISOString()}-${index}`}
+                                disabled={cell.disabled}
+                                style={[
+                                  styles.webCalendarDay,
+                                  cell.isSelected && styles.webCalendarDaySelected,
+                                ]}
+                                onPress={() => pickCalendarDate(cell.date, cell.disabled)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.webCalendarDayText,
+                                    !cell.inCurrentMonth && styles.webCalendarDayTextMuted,
+                                    cell.disabled && styles.webCalendarDayTextDisabled,
+                                    cell.isSelected && styles.webCalendarDayTextSelected,
+                                  ]}
+                                >
+                                  {cell.date.getDate()}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <Pressable style={styles.meetingInput} onPress={openDateSelector}>
+                      <Text style={styles.meetingInputPlaceholder}>
+                        {meetingDate || "dd/mm/aaaa"}
+                      </Text>
+                    </Pressable>
+                  )}
                 </View>
 
                 {/* Hora */}
                 <View style={{ marginTop: 12 }}>
                   <Text style={styles.meetingSectionLabel}>Hora</Text>
-                  <Pressable
-                    style={styles.meetingInput}
-                    onPress={() => {
-                      // aquí más adelante abrirás un time picker
-                    }}
-                  >
-                    <Text style={styles.meetingInputPlaceholder}>
-                      {meetingTime || "--:--"}
+                  {Platform.OS === "web" ? (
+                    <>
+                      <Pressable
+                        style={[
+                          styles.meetingInput,
+                          styles.meetingInputTrigger,
+                          webTimePanelVisible && styles.meetingInputTriggerActive,
+                        ]}
+                        onPress={openTimeSelector}
+                      >
+                        <View style={styles.meetingTriggerLeft}>
+                          <FontAwesome name="clock-o" size={14} color="#e4715f" />
+                          <Text
+                            style={
+                              meetingTime
+                                ? styles.meetingInputValue
+                                : styles.meetingInputPlaceholderNoMargin
+                            }
+                          >
+                            {meetingTime || "--:--"}
+                          </Text>
+                        </View>
+                        <FontAwesome
+                          name={webTimePanelVisible ? "chevron-up" : "chevron-down"}
+                          size={12}
+                          color="#6B7280"
+                        />
+                      </Pressable>
+
+                      {webTimePanelVisible && (
+                        <View style={styles.webPanelCard}>
+                          <Text style={styles.webPanelTitle}>Selecciona la hora</Text>
+                          <View style={styles.webTimeColumns}>
+                            <View style={styles.webTimeColumn}>
+                              <Text style={styles.webTimeColumnLabel}>Hora</Text>
+                              <ScrollView style={styles.webTimeScroll} showsVerticalScrollIndicator={false}>
+                                {Array.from({ length: 24 }, (_, hour) => (
+                                  <Pressable
+                                    key={`hour-${hour}`}
+                                    disabled={isWebTimeOptionDisabled(hour, 59)}
+                                    style={[
+                                      styles.webTimeOption,
+                                      webHourDraft === hour && styles.webTimeOptionSelected,
+                                      isWebTimeOptionDisabled(hour, 59) && styles.webTimeOptionDisabled,
+                                    ]}
+                                    onPress={() => {
+                                      if (isWebTimeOptionDisabled(hour, 59)) return;
+                                      setWebHourDraft(hour);
+                                      if (isWebTimeOptionDisabled(hour, webMinuteDraft)) {
+                                        const firstValidMinute = Array.from({ length: 60 }, (_, m) => m).find(
+                                          (m) => !isWebTimeOptionDisabled(hour, m),
+                                        );
+                                        setWebMinuteDraft(firstValidMinute ?? webMinuteDraft);
+                                      }
+                                    }}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.webTimeOptionText,
+                                        webHourDraft === hour && styles.webTimeOptionTextSelected,
+                                        isWebTimeOptionDisabled(hour, 59) && styles.webTimeOptionTextDisabled,
+                                      ]}
+                                    >
+                                      {pad2(hour)}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </ScrollView>
+                            </View>
+                            <View style={styles.webTimeColumn}>
+                              <Text style={styles.webTimeColumnLabel}>Minuto</Text>
+                              <ScrollView style={styles.webTimeScroll} showsVerticalScrollIndicator={false}>
+                                {Array.from({ length: 60 }, (_, minute) => minute).map((minute) => (
+                                  <Pressable
+                                    key={`minute-${minute}`}
+                                    disabled={isWebTimeOptionDisabled(webHourDraft, minute)}
+                                    style={[
+                                      styles.webTimeOption,
+                                      webMinuteDraft === minute && styles.webTimeOptionSelected,
+                                      isWebTimeOptionDisabled(webHourDraft, minute) && styles.webTimeOptionDisabled,
+                                    ]}
+                                    onPress={() => setWebMinuteDraft(minute)}
+                                  >
+                                    <Text
+                                      style={[
+                                        styles.webTimeOptionText,
+                                        webMinuteDraft === minute && styles.webTimeOptionTextSelected,
+                                        isWebTimeOptionDisabled(webHourDraft, minute) && styles.webTimeOptionTextDisabled,
+                                      ]}
+                                    >
+                                      {pad2(minute)}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          </View>
+
+                          <View style={styles.webPanelActions}>
+                            <Pressable onPress={() => setWebTimePanelVisible(false)}>
+                              <Text style={styles.webPanelCancelText}>Cancelar</Text>
+                            </Pressable>
+                            <Pressable style={styles.webPanelApplyBtn} onPress={applyWebTimeSelection}>
+                              <Text style={styles.webPanelApplyText}>Aplicar</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <Pressable style={styles.meetingInput} onPress={openTimeSelector}>
+                      <Text style={styles.meetingInputPlaceholder}>
+                        {meetingTime || "--:--"}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {getSameDayMinTimeLabel() && (
+                    <Text style={styles.meetingInfoText}>
+                      Para hoy, la hora minima disponible es {getSameDayMinTimeLabel()} (2h desde ahora).
                     </Text>
-                  </Pressable>
+                  )}
                 </View>
 
                 {/* Ubicación: solo si ARBITRARY */}
                 {meetingType === "ARBITRARY" && (
                   <View style={{ marginTop: 12 }}>
                     <Text style={styles.meetingSectionLabel}>Ubicación</Text>
-                    <Pressable
-                      style={styles.meetingInput}
-                      onPress={() => {
-                        // aquí más adelante puedes abrir un input aparte o un selector
-                      }}
-                    >
-                      <Text style={styles.meetingInputPlaceholder}>
-                        {meetingLocation || "Ej: Café Central, Calle Mayor 10"}
+                    <View style={styles.locationInputWrap}>
+                      <TextInput
+                        style={styles.locationInput}
+                        value={meetingLocation}
+                        onChangeText={handleLocationInputChange}
+                        placeholder="Ej: Café Central, Calle Mayor 10"
+                        placeholderTextColor="#9CA3AF"
+                      />
+                      {isLoadingLocationSuggestions && (
+                        <View style={styles.locationSuggestionsLoading}>
+                          <ActivityIndicator size="small" color="#e4715f" />
+                        </View>
+                      )}
+                      {locationSuggestions.length > 0 && (
+                        <View style={styles.locationSuggestionsList}>
+                          {locationSuggestions.map((suggestion) => (
+                            <Pressable
+                              key={suggestion.id}
+                              style={styles.locationSuggestionItem}
+                              onPress={() => handleSelectLocationSuggestion(suggestion)}
+                            >
+                              <FontAwesome
+                                name="map-marker"
+                                size={14}
+                                color="#e4715f"
+                                style={styles.locationSuggestionIcon}
+                              />
+                              <Text style={styles.locationSuggestionText} numberOfLines={2}>
+                                {suggestion.label}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                    {locationSuggestionFeedback && (
+                      <Text style={styles.locationSuggestionFeedbackText}>
+                        {locationSuggestionFeedback}
                       </Text>
-                    </Pressable>
+                    )}
+                    <Text style={styles.meetingInfoText}>
+                      Escribe al menos 3 caracteres y selecciona una sugerencia válida.
+                    </Text>
                   </View>
                 )}
 
@@ -1079,9 +1704,7 @@ export default function ChatDetailScreen() {
                     styles.meetingSubmitButton,
                     pressed && styles.meetingSubmitPressed,
                   ]}
-                  onPress={() => {
-                    // aquí luego haremos la llamada a la API exchangeMeeting
-                  }}
+                  onPress={submitMeetingProposal}
                 >
                   <Text style={styles.meetingSubmitText}>Enviar propuesta</Text>
                 </Pressable>
@@ -1089,6 +1712,25 @@ export default function ChatDetailScreen() {
             </View>
           </View>
         )}
+
+        <DateTimePickerModal
+          isVisible={meetingFormVisible && isDatePickerVisible}
+          mode="date"
+          locale="es-ES"
+          minimumDate={new Date()}
+          onConfirm={handleDateConfirm}
+          onCancel={() => setDatePickerVisible(false)}
+        />
+
+        <DateTimePickerModal
+          isVisible={meetingFormVisible && isTimePickerVisible}
+          mode="time"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          locale="es-ES"
+          is24Hour
+          onConfirm={handleTimeConfirm}
+          onCancel={() => setTimePickerVisible(false)}
+        />
 
         {/* Input de texto */}
         {!meetingFormVisible && (
@@ -1624,6 +2266,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginBottom: 4,
   },
+  meetingInfoText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#9CA3AF",
+    backgroundColor: "transparent",
+  },
   meetingPlaceholder: {
     fontSize: 13,
     color: "#9CA3AF",
@@ -1635,6 +2283,237 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     backgroundColor: "#F9FAFB",
     justifyContent: "center",
+  },
+  meetingInputTrigger: {
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexDirection: "row",
+    paddingHorizontal: 10,
+  },
+  meetingInputTriggerActive: {
+    borderColor: "#e4715f",
+    backgroundColor: "#FFF7F4",
+  },
+  meetingTriggerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    gap: 8,
+  },
+  meetingInputValue: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  meetingInputPlaceholderNoMargin: {
+    color: "#9CA3AF",
+    fontSize: 14,
+  },
+  locationInputWrap: {
+    position: "relative",
+    backgroundColor: "transparent",
+  },
+  locationInput: {
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: "#111827",
+  },
+  locationSuggestionsLoading: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    backgroundColor: "transparent",
+  },
+  locationSuggestionsList: {
+    marginTop: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  locationSuggestionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    backgroundColor: "#FFFFFF",
+  },
+  locationSuggestionIcon: {
+    marginRight: 8,
+  },
+  locationSuggestionText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#374151",
+    lineHeight: 18,
+  },
+  locationSuggestionFeedbackText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#9CA3AF",
+  },
+  webPanelCard: {
+    marginTop: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F3F4F8",
+    backgroundColor: "#fff",
+    padding: 10,
+    width: "100%",
+    maxWidth: 420,
+    alignSelf: "flex-start",
+  },
+  webPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "transparent",
+    marginBottom: 8,
+  },
+  webPanelArrowBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F3F4F8",
+  },
+  webPanelTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    textTransform: "capitalize",
+  },
+  webWeekHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 6,
+    backgroundColor: "transparent",
+  },
+  webWeekHeaderText: {
+    width: "14.2%",
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  webCalendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    backgroundColor: "transparent",
+    alignSelf: "center",
+    width: "100%",
+  },
+  webCalendarDay: {
+    width: "14.2%",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 34,
+    borderRadius: 8,
+    marginBottom: 4,
+    backgroundColor: "transparent",
+  },
+  webCalendarDaySelected: {
+    backgroundColor: "#e4715f",
+  },
+  webCalendarDayText: {
+    fontSize: 13,
+    color: "#111827",
+    fontWeight: "500",
+  },
+  webCalendarDayTextMuted: {
+    color: "#9CA3AF",
+  },
+  webCalendarDayTextDisabled: {
+    color: "#D1D5DB",
+  },
+  webCalendarDayTextSelected: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  webTimeColumns: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "transparent",
+    marginTop: 8,
+    width: "100%",
+  },
+  webTimeColumn: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  webTimeColumnLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    marginBottom: 6,
+  },
+  webTimeScroll: {
+    maxHeight: 140,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    backgroundColor: "#F9FAFB",
+    paddingVertical: 4,
+  },
+  webTimeOption: {
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 8,
+    marginHorizontal: 4,
+    marginVertical: 2,
+  },
+  webTimeOptionSelected: {
+    backgroundColor: "#e4715f",
+  },
+  webTimeOptionDisabled: {
+    opacity: 0.35,
+  },
+  webTimeOptionText: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  webTimeOptionTextSelected: {
+    color: "#fff",
+  },
+  webTimeOptionTextDisabled: {
+    color: "#9CA3AF",
+  },
+  webPanelActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "transparent",
+  },
+  webPanelCancelText: {
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+  webPanelApplyBtn: {
+    borderRadius: 14,
+    backgroundColor: "#e4715f",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  webPanelApplyText: {
+    color: "#fff",
+    fontWeight: "700",
   },
   meetingSubmitButton: {
     marginTop: 20,
@@ -1704,6 +2583,76 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     fontSize: 14,
     marginLeft: 10,
+  },
+  inlinePickerCard: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F3F4F8",
+    backgroundColor: "#FBF7F4",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  inlinePickerGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    backgroundColor: "transparent",
+  },
+  inlinePickerCol: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  inlinePickerLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4B5563",
+    marginBottom: 6,
+  },
+  inlinePickerButton: {
+    width: 34,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inlinePickerButtonText: {
+    color: "#374151",
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  inlinePickerValue: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111827",
+    marginVertical: 8,
+  },
+  inlinePickerActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    gap: 12,
+  },
+  inlinePickerCancel: {
+    color: "#6B7280",
+    fontWeight: "600",
+  },
+  inlinePickerApplyButton: {
+    borderRadius: 14,
+    backgroundColor: "#e4715f",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  inlinePickerApplyText: {
+    color: "#fff",
+    fontWeight: "700",
   },
   meetingFormCard: {
     maxHeight: "80%", // para que no tape toda la pantalla
