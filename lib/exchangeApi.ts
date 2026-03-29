@@ -222,3 +222,37 @@ export async function rejectExchangeMeeting(meetingId: number): Promise<void> {
     throw new Error(text || `Error al rechazar la propuesta de quedada: ${res.status}`);
   }
 }
+
+export async function completeExchangeMeeting(meetingId: number): Promise<ExchangeMeetingDto> {
+  const headers = await getAuthHeaders();
+
+  const res = await fetch(`${API_URL}/ExchangeMeeting/${meetingId}/complete`, {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify({}),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Error al confirmar el intercambio del meeting ${meetingId}: ${res.status}`);
+  }
+
+  return (await res.json()) as ExchangeMeetingDto;
+}
+
+export async function reportExchange(exchangeId: number): Promise<ExchangeWithMatchDto> {
+  const headers = await getAuthHeaders();
+
+  const res = await fetch(`${API_URL}/Exchange/${exchangeId}/report`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({}),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Error al reportar el intercambio ${exchangeId}: ${res.status}`);
+  }
+
+  return (await res.json()) as ExchangeWithMatchDto;
+}

@@ -36,11 +36,13 @@ import {
 import {
   acceptExchange,
   acceptExchangeMeeting,
+  completeExchangeMeeting,
   createExchangeMeeting,
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
   rejectExchange,
   rejectExchangeMeeting,
+  reportExchange,
 } from "@/lib/exchangeApi";
 import {
   ChatDto,
@@ -267,6 +269,7 @@ export default function ChatDetailScreen() {
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
+  const [meetingCompletionSubmitting, setMeetingCompletionSubmitting] = useState(false);
   const [isCounterProposalMode, setIsCounterProposalMode] = useState(false);
   const [meetingType, setMeetingType] = useState<MeetingType>("ARBITRARY");
   const [meetingDate, setMeetingDate] = useState("");
@@ -1178,7 +1181,7 @@ export default function ChatDetailScreen() {
     );
   }
 
-  if (error || !chat) {
+  if (!chat) {
     return (
       <View style={styles.centered}>
         <Text
@@ -1516,6 +1519,22 @@ export default function ChatDetailScreen() {
     hasMeetingProposal &&
     !!backendUserId &&
     exchangeMeeting.proposerId === backendUserId;
+  const canShowMeetingCompletionBanner =
+    !!exchangeMeeting &&
+    hasMeetingAccepted &&
+    exchange?.status === "ACCEPTED";
+  const isCurrentUserMeetingProposer =
+    !!exchangeMeeting && !!backendUserId && exchangeMeeting.proposerId === backendUserId;
+  const hasCurrentUserMarkedExchangeCompleted =
+    !!exchangeMeeting &&
+    (isCurrentUserMeetingProposer
+      ? exchangeMeeting.markAsCompletedByUser1
+      : exchangeMeeting.markAsCompletedByUser2);
+  const hasOtherUserMarkedExchangeCompleted =
+    !!exchangeMeeting &&
+    (isCurrentUserMeetingProposer
+      ? exchangeMeeting.markAsCompletedByUser2
+      : exchangeMeeting.markAsCompletedByUser1);
 
   const resolveMeetingLocation = (meeting: ExchangeMeetingDto) => {
     const selectedBookspot =
@@ -1606,6 +1625,106 @@ export default function ChatDetailScreen() {
 
     setIsCounterProposalMode(true);
     setMeetingFormVisible(true);
+  };
+
+  const handleCompleteExchangeAfterMeeting = async () => {
+    if (!exchangeMeeting || meetingCompletionSubmitting) return;
+
+    try {
+      setMeetingCompletionSubmitting(true);
+      setError(null);
+
+      const updatedMeeting = await completeExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      setExchangeMeeting(updatedMeeting);
+
+      if (updatedMeeting.markAsCompletedByUser1 && updatedMeeting.markAsCompletedByUser2) {
+        setExchange((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "COMPLETED",
+                updatedAt: new Date().toISOString(),
+              }
+            : prev,
+        );
+      }
+
+      // Sync after completion to avoid stale UI when backend flags are updated.
+      try {
+        const refreshedMeeting = await getMeetingByExchangeId(updatedMeeting.exchangeId);
+        if (refreshedMeeting) {
+          setExchangeMeeting(refreshedMeeting);
+        }
+      } catch {
+        // Keep optimistic state if refresh fails.
+      }
+
+      if (exchange?.exchangeId) {
+        try {
+          const updatedExchange = await getExchangeByChatIdWithMatch(chatId);
+          if (updatedExchange) {
+            setExchange(updatedExchange);
+          }
+        } catch {
+          // Keep local optimistic exchange state when refresh fails.
+        }
+      }
+    } catch (err) {
+      // Some backend flows may persist completion but fail while building response.
+      // Try to recover from source of truth before surfacing an error banner.
+      let recovered = false;
+      try {
+        const recoveredMeeting = await getMeetingByExchangeId(exchangeMeeting.exchangeId);
+        if (recoveredMeeting) {
+          setExchangeMeeting(recoveredMeeting);
+          recovered = true;
+
+          if (
+            recoveredMeeting.markAsCompletedByUser1 &&
+            recoveredMeeting.markAsCompletedByUser2
+          ) {
+            setExchange((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: "COMPLETED",
+                    updatedAt: new Date().toISOString(),
+                  }
+                : prev,
+            );
+          }
+        }
+      } catch {
+        recovered = false;
+      }
+
+      if (!recovered) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "No se pudo confirmar la finalización del intercambio.";
+        setError(message);
+      }
+    } finally {
+      setMeetingCompletionSubmitting(false);
+    }
+  };
+
+  const handleReportCompletedExchange = async () => {
+    if (!exchange?.exchangeId || meetingCompletionSubmitting) return;
+
+    try {
+      setMeetingCompletionSubmitting(true);
+      setError(null);
+
+      const updatedExchange = await reportExchange(exchange.exchangeId);
+      setExchange(updatedExchange);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo reportar el intercambio.";
+      setError(message);
+    } finally {
+      setMeetingCompletionSubmitting(false);
+    }
   };
 
   const openConfirm = (
@@ -1890,112 +2009,162 @@ export default function ChatDetailScreen() {
           renderItem={renderMessage}
           ListFooterComponent={
             exchangeMeeting && (hasMeetingProposal || hasMeetingAccepted) ? (
-              <View style={styles.meetingProposalWrapper}>
-                <View
-                  style={[
-                    styles.meetingProposalCard,
-                    isMeetingProposalReceived
-                      ? styles.meetingProposalCardReceived
-                      : styles.meetingProposalCardSent,
-                  ]}
-                >
-                  <View style={styles.meetingProposalHeader}>
-                    <View
-                      style={[
-                        styles.meetingProposalDot,
-                        isMeetingProposalReceived
-                          ? styles.meetingProposalDotReceived
-                          : styles.meetingProposalDotSent,
-                      ]}
-                    />
-                    <Text style={styles.meetingProposalTitle}>
-                      {hasMeetingAccepted
-                        ? "Quedada aceptada"
-                        : isMeetingProposalReceived
-                          ? "Propuesta recibida"
-                          : "Tu propuesta"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.meetingProposalRow}>
-                    <FontAwesome
-                      name="calendar-o"
-                      size={18}
-                      color="#e4715f"
-                      style={styles.meetingProposalRowIcon}
-                    />
-                    <Text style={styles.meetingProposalMainText}>
-                      {formatMeetingDateLabel(exchangeMeeting.scheduledAt)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.meetingProposalRow}>
-                    <FontAwesome
-                      name="clock-o"
-                      size={18}
-                      color="#e4715f"
-                      style={styles.meetingProposalRowIcon}
-                    />
-                    <Text style={styles.meetingProposalMainText}>
-                      {formatMeetingTimeLabel(exchangeMeeting.scheduledAt)}
-                    </Text>
-                  </View>
-
-                  <View style={styles.meetingProposalRow}>
-                    <FontAwesome
-                      name="map-marker"
-                      size={18}
-                      color="#e4715f"
-                      style={styles.meetingProposalRowIcon}
-                    />
-                    <View style={styles.meetingProposalLocationTextWrap}>
-                      <Text style={styles.meetingProposalLocationTitle}>
-                        {resolveMeetingLocation(exchangeMeeting).title}
-                      </Text>
-                      <Text style={styles.meetingProposalLocationSubtitle}>
-                        {resolveMeetingLocation(exchangeMeeting).subtitle}
+              <View style={styles.meetingFooterGroup}>
+                <View style={styles.meetingProposalWrapper}>
+                  <View
+                    style={[
+                      styles.meetingProposalCard,
+                      isMeetingProposalReceived
+                        ? styles.meetingProposalCardReceived
+                        : styles.meetingProposalCardSent,
+                    ]}
+                  >
+                    <View style={styles.meetingProposalHeader}>
+                      <View
+                        style={[
+                          styles.meetingProposalDot,
+                          isMeetingProposalReceived
+                            ? styles.meetingProposalDotReceived
+                            : styles.meetingProposalDotSent,
+                        ]}
+                      />
+                      <Text style={styles.meetingProposalTitle}>
+                        {hasMeetingAccepted
+                          ? "Quedada aceptada"
+                          : isMeetingProposalReceived
+                            ? "Propuesta recibida"
+                            : "Tu propuesta"}
                       </Text>
                     </View>
-                  </View>
 
-                  {isMeetingProposalReceived && (
-                    <View style={styles.meetingProposalActionsRow}>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.meetingProposalAcceptButton,
-                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
-                        ]}
-                        onPress={openAcceptMeetingConfirm}
-                        disabled={meetingSubmitting}
-                      >
-                        <FontAwesome name="check" size={16} color="#fff" />
-                        <Text style={styles.meetingProposalAcceptText}>Aceptar</Text>
-                      </Pressable>
-
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.meetingProposalCounterButton,
-                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
-                        ]}
-                        onPress={handleCounterProposeMeeting}
-                        disabled={meetingSubmitting}
-                      >
-                        <Text style={styles.meetingProposalCounterText}>Contraproponer</Text>
-                      </Pressable>
-
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.meetingProposalRejectButton,
-                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
-                        ]}
-                        onPress={openRejectMeetingConfirm}
-                        disabled={meetingSubmitting}
-                      >
-                        <FontAwesome name="times" size={16} color="#fff" />
-                      </Pressable>
+                    <View style={styles.meetingProposalRow}>
+                      <FontAwesome
+                        name="calendar-o"
+                        size={18}
+                        color="#e4715f"
+                        style={styles.meetingProposalRowIcon}
+                      />
+                      <Text style={styles.meetingProposalMainText}>
+                        {formatMeetingDateLabel(exchangeMeeting.scheduledAt)}
+                      </Text>
                     </View>
-                  )}
+
+                    <View style={styles.meetingProposalRow}>
+                      <FontAwesome
+                        name="clock-o"
+                        size={18}
+                        color="#e4715f"
+                        style={styles.meetingProposalRowIcon}
+                      />
+                      <Text style={styles.meetingProposalMainText}>
+                        {formatMeetingTimeLabel(exchangeMeeting.scheduledAt)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.meetingProposalRow}>
+                      <FontAwesome
+                        name="map-marker"
+                        size={18}
+                        color="#e4715f"
+                        style={styles.meetingProposalRowIcon}
+                      />
+                      <View style={styles.meetingProposalLocationTextWrap}>
+                        <Text style={styles.meetingProposalLocationTitle}>
+                          {resolveMeetingLocation(exchangeMeeting).title}
+                        </Text>
+                        <Text style={styles.meetingProposalLocationSubtitle}>
+                          {resolveMeetingLocation(exchangeMeeting).subtitle}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {isMeetingProposalReceived && (
+                      <View style={styles.meetingProposalActionsRow}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.meetingProposalAcceptButton,
+                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                          ]}
+                          onPress={openAcceptMeetingConfirm}
+                          disabled={meetingSubmitting}
+                        >
+                          <FontAwesome name="check" size={16} color="#fff" />
+                          <Text style={styles.meetingProposalAcceptText}>Aceptar</Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.meetingProposalCounterButton,
+                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                          ]}
+                          onPress={handleCounterProposeMeeting}
+                          disabled={meetingSubmitting}
+                        >
+                          <Text style={styles.meetingProposalCounterText}>Contraproponer</Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.meetingProposalRejectButton,
+                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                          ]}
+                          onPress={openRejectMeetingConfirm}
+                          disabled={meetingSubmitting}
+                        >
+                          <FontAwesome name="times" size={16} color="#fff" />
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
                 </View>
+
+                {canShowMeetingCompletionBanner && (
+                  <View style={styles.meetingCompletionWrapper}>
+                    <View style={styles.meetingCompletionCard}>
+                      <View style={styles.meetingCompletionHeader}>
+                        <FontAwesome name="check-circle-o" size={20} color="#16A34A" />
+                        <Text style={styles.meetingCompletionTitle}>Encuentro programado</Text>
+                      </View>
+
+                      <Text style={styles.meetingCompletionDescription}>
+                        {hasCurrentUserMarkedExchangeCompleted
+                          ? hasOtherUserMarkedExchangeCompleted
+                            ? "Ambas partes han confirmado la realización del intercambio."
+                            : "Has confirmado tu parte. Falta la confirmación de la otra persona."
+                          : "Cuando realices el intercambio, confirma aquí para completarlo o reporta una incidencia."}
+                      </Text>
+
+                      <View style={styles.meetingCompletionActionsRow}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.meetingCompletionAcceptButton,
+                            (pressed || meetingCompletionSubmitting || hasCurrentUserMarkedExchangeCompleted) &&
+                              styles.meetingProposalActionPressed,
+                          ]}
+                          onPress={handleCompleteExchangeAfterMeeting}
+                          disabled={meetingCompletionSubmitting || hasCurrentUserMarkedExchangeCompleted}
+                        >
+                          <FontAwesome name="check-circle" size={16} color="#fff" />
+                          <Text style={styles.meetingCompletionAcceptText}>
+                            {hasCurrentUserMarkedExchangeCompleted ? "Confirmado" : "Completar"}
+                          </Text>
+                        </Pressable>
+
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.meetingCompletionReportButton,
+                            (pressed || meetingCompletionSubmitting) && styles.meetingProposalActionPressed,
+                          ]}
+                          onPress={handleReportCompletedExchange}
+                          disabled={meetingCompletionSubmitting}
+                        >
+                          <FontAwesome name="warning" size={16} color="#fff" />
+                          <Text style={styles.meetingCompletionReportText}>Reportar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
             ) : null
           }
@@ -3258,6 +3427,9 @@ const styles = StyleSheet.create({
     marginTop: 10,
     backgroundColor: "transparent",
   },
+  meetingFooterGroup: {
+    backgroundColor: "transparent",
+  },
   meetingProposalCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -3372,6 +3544,73 @@ const styles = StyleSheet.create({
   },
   meetingProposalActionPressed: {
     opacity: 0.8,
+  },
+  meetingCompletionWrapper: {
+    marginHorizontal: 14,
+    marginTop: 10,
+    backgroundColor: "transparent",
+  },
+  meetingCompletionCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#A7E7C2",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#F5FCF8",
+  },
+  meetingCompletionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    gap: 10,
+  },
+  meetingCompletionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#3F2C1F",
+  },
+  meetingCompletionDescription: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 22,
+    color: "#6B4A2F",
+    backgroundColor: "transparent",
+  },
+  meetingCompletionActionsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "transparent",
+  },
+  meetingCompletionAcceptButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: "#09C14B",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  meetingCompletionAcceptText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  meetingCompletionReportButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 16,
+    backgroundColor: "#FC2634",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  meetingCompletionReportText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
   },
   meetingAcceptedBadgeWrap: {
     marginHorizontal: 14,
