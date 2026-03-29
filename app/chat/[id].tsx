@@ -35,8 +35,12 @@ import {
 } from "@/lib/chatApi";
 import {
   acceptExchange,
+  acceptExchangeMeeting,
+  createExchangeMeeting,
   getExchangeByChatIdWithMatch,
-  rejectExchange
+  getMeetingByExchangeId,
+  rejectExchange,
+  rejectExchangeMeeting,
 } from "@/lib/exchangeApi";
 import {
   ChatDto,
@@ -44,7 +48,7 @@ import {
   MessageDto,
   TypingUserDto,
 } from "@/types/chat";
-import { ExchangeWithMatchDto } from "@/types/exchange";
+import { ExchangeMeetingDto, ExchangeMode, ExchangeWithMatchDto } from "@/types/exchange";
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -84,6 +88,22 @@ function formatDateHeader(dateStr: string): string {
     day: "numeric",
     month: "long",
     year: "numeric",
+  });
+}
+
+function formatMeetingDateLabel(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
+function formatMeetingTimeLabel(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -234,7 +254,7 @@ export default function ChatDetailScreen() {
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [exchange, setExchange] = useState<ExchangeWithMatchDto | null>(null);
-  // const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
+  const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
   const [myBook, setMyBook] = useState<BookDetail | null>(null);
   const [otherBook, setOtherBook] = useState<BookDetail | null>(null);
   const [otherUsername, setOtherUsername] = useState<string>("");
@@ -242,10 +262,12 @@ export default function ChatDetailScreen() {
   const [pendingAction, setPendingAction] = useState<
     (() => Promise<void>) | null
   >(null);
-  const [confirmMode, setConfirmMode] = useState<"accept" | "reject" | null>(
-    null,
-  );
+  const [confirmMode, setConfirmMode] = useState<
+    "accept" | "reject" | "meeting-accept" | "meeting-reject" | null
+  >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
+  const [meetingSubmitting, setMeetingSubmitting] = useState(false);
+  const [isCounterProposalMode, setIsCounterProposalMode] = useState(false);
   const [meetingType, setMeetingType] = useState<MeetingType>("ARBITRARY");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
@@ -266,6 +288,7 @@ export default function ChatDetailScreen() {
   const [bookdropSearchQuery, setBookdropSearchQuery] = useState("");
   const [isLoadingBookdrops, setIsLoadingBookdrops] = useState(false);
   const [bookdropSuggestionFeedback, setBookdropSuggestionFeedback] = useState<string | null>(null);
+  const [bookspotsById, setBookspotsById] = useState<Record<number, BookspotDTO>>({});
   const locationRequestSeqRef = useRef(0);
   const locationCacheRef = useRef<Record<string, LocationSuggestion[]>>({});
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
@@ -540,8 +563,18 @@ export default function ChatDetailScreen() {
     setTimePickerVisible(true);
   };
 
-  const submitMeetingProposal = () => {
+  const closeMeetingForm = () => {
+    setMeetingFormVisible(false);
+    setIsCounterProposalMode(false);
+  };
+
+  const submitMeetingProposal = async () => {
     if (!validateMeetingDateTime()) return;
+    if (!exchange) {
+      setError("No se pudo identificar el intercambio para crear la propuesta.");
+      return;
+    }
+    if (meetingSubmitting) return;
 
     if (meetingType === "ARBITRARY" && !meetingLocation.trim()) {
       setError("Debes indicar una ubicación para el encuentro.");
@@ -563,17 +596,53 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    setError(null);
-    const locationSummary =
-      meetingType === "BOOKSPOT"
-        ? `BookSpot elegido: ${selectedBookspot?.nombre ?? "(sin seleccionar)"}`
-        : meetingType === "BOOKDROP"
-          ? `BookDrop elegido: ${selectedBookdrop?.nombre ?? "(sin seleccionar)"}`
-        : `Ubicación: ${meetingLocation}`;
-    Alert.alert(
-      "Propuesta lista",
-      `Fecha y hora válidas. ${locationSummary}. Ya puedes conectar el endpoint de creación de encuentro.`,
-    );
+    const scheduledAt = buildMeetingDateTime();
+    if (!scheduledAt) {
+      setError("Debes indicar fecha y hora válidas para el encuentro.");
+      return;
+    }
+
+    const payload = {
+      exchangeId: exchange.exchangeId,
+      exchangeMode:
+        (meetingType === "ARBITRARY"
+          ? "CUSTOM"
+          : meetingType) as ExchangeMode,
+      bookspotId:
+        meetingType === "BOOKSPOT"
+          ? (selectedBookspot?.id ?? null)
+          : meetingType === "BOOKDROP"
+            ? (selectedBookdrop?.id ?? null)
+            : null,
+      customLocation:
+        meetingType === "ARBITRARY" && selectedLocationSuggestion
+          ? [selectedLocationSuggestion.lon, selectedLocationSuggestion.lat]
+          : null,
+      scheduledAt: scheduledAt.toISOString(),
+    };
+
+    try {
+      setMeetingSubmitting(true);
+      setError(null);
+
+      if (isCounterProposalMode && exchangeMeeting) {
+        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      }
+
+      const createdMeeting = await createExchangeMeeting(payload);
+      setExchangeMeeting(createdMeeting);
+
+      closeMeetingForm();
+      Alert.alert("Propuesta enviada", "Tu propuesta de quedada se ha enviado correctamente.");
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la propuesta de quedada.";
+      setError(message);
+    } finally {
+      setMeetingSubmitting(false);
+    }
   };
 
   const currentDistanceInfoForBookspot = useCallback(
@@ -940,6 +1009,13 @@ export default function ChatDetailScreen() {
       }
       setExchange(exchangeData);
 
+      if (exchangeData) {
+        const meetingData = await getMeetingByExchangeId(exchangeData.exchangeId);
+        setExchangeMeeting(meetingData);
+      } else {
+        setExchangeMeeting(null);
+      }
+
       // Ordenar mensajes cronológicamente (más antiguos primero)
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
@@ -1061,6 +1137,38 @@ export default function ChatDetailScreen() {
     };
     loadExchangeBooks();
   }, [exchange, backendUserId, chat]);
+
+  useEffect(() => {
+    const bookspotId = exchangeMeeting?.bookspotId;
+    if (!bookspotId) return;
+
+    let cancelled = false;
+
+    const loadBookspotsById = async () => {
+      try {
+        const activeBookspots = await getActiveBookspots();
+        if (cancelled) return;
+
+        setBookspotsById((prev) => {
+          if (prev[bookspotId]) return prev;
+
+          const next = { ...prev };
+          activeBookspots.forEach((spot) => {
+            next[spot.id] = spot;
+          });
+          return next;
+        });
+      } catch {
+        // Si falla, mantenemos fallback con el identificador.
+      }
+    };
+
+    loadBookspotsById();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exchangeMeeting?.bookspotId]);
 
   if (loading) {
     return (
@@ -1393,11 +1501,116 @@ export default function ChatDetailScreen() {
     exchange.status !== "REJECTED" &&
     exchange.status !== "INCIDENT" &&
     exchange.status !== "COMPLETED";
-  const canProposeMeeting = exchange?.status === "ACCEPTED";
+  const canProposeMeeting =
+    exchange?.status === "ACCEPTED" &&
+    (!exchangeMeeting || exchangeMeeting.meetingStatus === "REFUSED");
+  const hasMeetingProposal = exchangeMeeting?.meetingStatus === "PROPOSAL";
+  const hasMeetingAccepted = exchangeMeeting?.meetingStatus === "ACCEPTED";
+  const isMeetingProposalReceived =
+    !!exchangeMeeting &&
+    hasMeetingProposal &&
+    !!backendUserId &&
+    exchangeMeeting.proposerId !== backendUserId;
+  const isMeetingProposalSent =
+    !!exchangeMeeting &&
+    hasMeetingProposal &&
+    !!backendUserId &&
+    exchangeMeeting.proposerId === backendUserId;
+
+  const resolveMeetingLocation = (meeting: ExchangeMeetingDto) => {
+    const selectedBookspot =
+      meeting.bookspotId != null ? bookspotsById[meeting.bookspotId] : null;
+
+    if (meeting.exchangeMode === "BOOKSPOT") {
+      const spotName =
+        selectedBookspot?.nombre ??
+        (meeting.bookspotId ? `#${meeting.bookspotId}` : "sin identificar");
+      return {
+        title: `BookSpot · ${spotName}`,
+        subtitle: selectedBookspot?.addressText ?? "Punto de encuentro en BookSpot",
+      };
+    }
+
+    if (meeting.exchangeMode === "BOOKDROP") {
+      const dropName =
+        selectedBookspot?.nombre ??
+        (meeting.bookspotId ? `#${meeting.bookspotId}` : "sin identificar");
+      return {
+        title: `BookDrop · ${dropName}`,
+        subtitle: selectedBookspot?.addressText ?? "Punto de entrega en BookDrop",
+      };
+    }
+
+    if (meeting.customLocation && meeting.customLocation.length >= 2) {
+      const [lon, lat] = meeting.customLocation;
+      return {
+        title: "Ubicación personalizada",
+        subtitle: `Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`,
+      };
+    }
+
+    return {
+      title: "Ubicación personalizada",
+      subtitle: "Dirección definida por la otra persona",
+    };
+  };
+
+  const handleAcceptMeetingProposal = async () => {
+    if (!exchangeMeeting || meetingSubmitting) return;
+
+    try {
+      setMeetingSubmitting(true);
+      setError(null);
+      const accepted = await acceptExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      setExchangeMeeting(accepted);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo aceptar la propuesta.";
+      setError(message);
+    } finally {
+      setMeetingSubmitting(false);
+    }
+  };
+
+  const handleRejectMeetingProposal = async () => {
+    if (!exchangeMeeting || meetingSubmitting) return;
+
+    try {
+      setMeetingSubmitting(true);
+      setError(null);
+      await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      setExchangeMeeting(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo rechazar la propuesta.";
+      setError(message);
+    } finally {
+      setMeetingSubmitting(false);
+    }
+  };
+
+  const handleCounterProposeMeeting = () => {
+    if (!exchangeMeeting || !exchangeMeeting.scheduledAt) return;
+
+    const scheduled = new Date(exchangeMeeting.scheduledAt);
+    setMeetingDate(formatMeetingDate(scheduled));
+    setMeetingTime(formatMeetingTime(scheduled));
+
+    if (exchangeMeeting.exchangeMode === "BOOKSPOT") {
+      setMeetingType("BOOKSPOT");
+    } else if (exchangeMeeting.exchangeMode === "BOOKDROP") {
+      setMeetingType("BOOKDROP");
+    } else {
+      setMeetingType("ARBITRARY");
+      setMeetingLocation("Ubicación personalizada");
+      setSelectedLocationSuggestion(null);
+    }
+
+    setIsCounterProposalMode(true);
+    setMeetingFormVisible(true);
+  };
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject",
+    mode: "accept" | "reject" | "meeting-accept" | "meeting-reject",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -1411,6 +1624,58 @@ export default function ChatDetailScreen() {
   const openRejectConfirm = () => {
     openConfirm(handleRejectExchange, "reject");
   };
+
+  const openAcceptMeetingConfirm = () => {
+    openConfirm(handleAcceptMeetingProposal, "meeting-accept");
+  };
+
+  const openRejectMeetingConfirm = () => {
+    openConfirm(handleRejectMeetingProposal, "meeting-reject");
+  };
+
+  const getConfirmModalContent = () => {
+    switch (confirmMode) {
+      case "accept":
+        return {
+          title: "Confirmar intercambio",
+          message: "¿Seguro que quieres aceptar este intercambio?",
+          confirmLabel: "Aceptar",
+          confirmColor: "primary" as const,
+        };
+      case "reject":
+        return {
+          title: "Desestimar intercambio",
+          message:
+            "¿Seguro que quieres desestimar este intercambio? Esta acción terminará las negocioaciones y es irreversible.",
+          confirmLabel: "Desestimar",
+          confirmColor: "danger" as const,
+        };
+      case "meeting-accept":
+        return {
+          title: "Confirmar quedada",
+          message: "¿Quieres aceptar esta propuesta de quedada?",
+          confirmLabel: "Aceptar quedada",
+          confirmColor: "primary" as const,
+        };
+      case "meeting-reject":
+        return {
+          title: "Desestimar quedada",
+          message:
+            "¿Seguro que quieres desestimar esta propuesta de quedada? Podrás enviar una nueva propuesta después.",
+          confirmLabel: "Desestimar",
+          confirmColor: "danger" as const,
+        };
+      default:
+        return {
+          title: "Confirmar acción",
+          message: "¿Seguro que quieres continuar?",
+          confirmLabel: "Confirmar",
+          confirmColor: "primary" as const,
+        };
+    }
+  };
+
+  const confirmModalContent = getConfirmModalContent();
 
   const handleConfirm = async () => {
     if (pendingAction) {
@@ -1440,18 +1705,10 @@ export default function ChatDetailScreen() {
       >
         <ConfirmModal
           visible={confirmVisible}
-          title={
-            confirmMode === "accept"
-              ? "Confirmar intercambio"
-              : "Desestimar intercambio"
-          }
-          message={
-            confirmMode === "accept"
-              ? "¿Seguro que quieres aceptar este intercambio?"
-              : "¿Seguro que quieres desestimar este intercambio? Esta acción terminará las negocioaciones y es irreversible."
-          }
-          confirmLabel={confirmMode === "accept" ? "Aceptar" : "Desestimar"}
-          confirmColor={confirmMode === "accept" ? "primary" : "danger"}
+          title={confirmModalContent.title}
+          message={confirmModalContent.message}
+          confirmLabel={confirmModalContent.confirmLabel}
+          confirmColor={confirmModalContent.confirmColor}
           onConfirm={handleConfirm}
           onCancel={handleCancelConfirm}
         />
@@ -1614,6 +1871,7 @@ export default function ChatDetailScreen() {
                 pressed && styles.meetingButtonPressed,
               ]}
               onPress={() => {
+                setIsCounterProposalMode(false);
                 setMeetingType("ARBITRARY");
                 setMeetingFormVisible(true);
               }}
@@ -1630,6 +1888,117 @@ export default function ChatDetailScreen() {
           data={messages}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderMessage}
+          ListFooterComponent={
+            exchangeMeeting && (hasMeetingProposal || hasMeetingAccepted) ? (
+              <View style={styles.meetingProposalWrapper}>
+                <View
+                  style={[
+                    styles.meetingProposalCard,
+                    isMeetingProposalReceived
+                      ? styles.meetingProposalCardReceived
+                      : styles.meetingProposalCardSent,
+                  ]}
+                >
+                  <View style={styles.meetingProposalHeader}>
+                    <View
+                      style={[
+                        styles.meetingProposalDot,
+                        isMeetingProposalReceived
+                          ? styles.meetingProposalDotReceived
+                          : styles.meetingProposalDotSent,
+                      ]}
+                    />
+                    <Text style={styles.meetingProposalTitle}>
+                      {hasMeetingAccepted
+                        ? "Quedada aceptada"
+                        : isMeetingProposalReceived
+                          ? "Propuesta recibida"
+                          : "Tu propuesta"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.meetingProposalRow}>
+                    <FontAwesome
+                      name="calendar-o"
+                      size={18}
+                      color="#e4715f"
+                      style={styles.meetingProposalRowIcon}
+                    />
+                    <Text style={styles.meetingProposalMainText}>
+                      {formatMeetingDateLabel(exchangeMeeting.scheduledAt)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.meetingProposalRow}>
+                    <FontAwesome
+                      name="clock-o"
+                      size={18}
+                      color="#e4715f"
+                      style={styles.meetingProposalRowIcon}
+                    />
+                    <Text style={styles.meetingProposalMainText}>
+                      {formatMeetingTimeLabel(exchangeMeeting.scheduledAt)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.meetingProposalRow}>
+                    <FontAwesome
+                      name="map-marker"
+                      size={18}
+                      color="#e4715f"
+                      style={styles.meetingProposalRowIcon}
+                    />
+                    <View style={styles.meetingProposalLocationTextWrap}>
+                      <Text style={styles.meetingProposalLocationTitle}>
+                        {resolveMeetingLocation(exchangeMeeting).title}
+                      </Text>
+                      <Text style={styles.meetingProposalLocationSubtitle}>
+                        {resolveMeetingLocation(exchangeMeeting).subtitle}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {isMeetingProposalReceived && (
+                    <View style={styles.meetingProposalActionsRow}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.meetingProposalAcceptButton,
+                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                        ]}
+                        onPress={openAcceptMeetingConfirm}
+                        disabled={meetingSubmitting}
+                      >
+                        <FontAwesome name="check" size={16} color="#fff" />
+                        <Text style={styles.meetingProposalAcceptText}>Aceptar</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.meetingProposalCounterButton,
+                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                        ]}
+                        onPress={handleCounterProposeMeeting}
+                        disabled={meetingSubmitting}
+                      >
+                        <Text style={styles.meetingProposalCounterText}>Contraproponer</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.meetingProposalRejectButton,
+                          (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                        ]}
+                        onPress={openRejectMeetingConfirm}
+                        disabled={meetingSubmitting}
+                      >
+                        <FontAwesome name="times" size={16} color="#fff" />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              </View>
+            ) : null
+          }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.messagesList}
           onContentSizeChange={() =>
@@ -1724,7 +2093,7 @@ export default function ChatDetailScreen() {
                     Proponer encuentro
                   </Text>
                   <Pressable
-                    onPress={() => setMeetingFormVisible(false)}
+                    onPress={closeMeetingForm}
                     style={styles.formCloseButton}
                   >
                     <FontAwesome name="times" size={20} color="#6B7280" />
@@ -2345,11 +2714,19 @@ export default function ChatDetailScreen() {
                 <Pressable
                   style={({ pressed }) => [
                     styles.meetingSubmitButton,
+                    meetingSubmitting && styles.meetingSubmitDisabled,
                     pressed && styles.meetingSubmitPressed,
                   ]}
                   onPress={submitMeetingProposal}
+                  disabled={meetingSubmitting}
                 >
-                  <Text style={styles.meetingSubmitText}>Enviar propuesta</Text>
+                  <Text style={styles.meetingSubmitText}>
+                    {meetingSubmitting
+                      ? "Guardando..."
+                      : isCounterProposalMode
+                        ? "Enviar contrapropuesta"
+                        : "Enviar propuesta"}
+                  </Text>
                 </Pressable>
               </ScrollView>
             </View>
@@ -2876,6 +3253,143 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  meetingProposalWrapper: {
+    marginHorizontal: 14,
+    marginTop: 10,
+    backgroundColor: "transparent",
+  },
+  meetingProposalCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  meetingProposalCardReceived: {
+    borderColor: "#F3C6BC",
+  },
+  meetingProposalCardSent: {
+    borderColor: "#D4DEFF",
+  },
+  meetingProposalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    marginBottom: 10,
+  },
+  meetingProposalDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginRight: 10,
+  },
+  meetingProposalDotReceived: {
+    backgroundColor: "#E4715F",
+  },
+  meetingProposalDotSent: {
+    backgroundColor: "#2FA66A",
+  },
+  meetingProposalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#9A683A",
+  },
+  meetingProposalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    marginBottom: 10,
+    gap: 12,
+  },
+  meetingProposalRowIcon: {
+    width: 20,
+    textAlign: "center",
+  },
+  meetingProposalMainText: {
+    fontSize: 15,
+    color: "#1F2937",
+    fontWeight: "500",
+    flex: 1,
+  },
+  meetingProposalLocationTextWrap: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  meetingProposalLocationTitle: {
+    fontSize: 15,
+    color: "#1F2937",
+    fontWeight: "700",
+  },
+  meetingProposalLocationSubtitle: {
+    marginTop: 3,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  meetingProposalActionsRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "transparent",
+    gap: 10,
+  },
+  meetingProposalAcceptButton: {
+    flex: 1,
+    minHeight: 35,
+    borderRadius: 16,
+    backgroundColor: "#2FA66A",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  meetingProposalAcceptText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  meetingProposalCounterButton: {
+    flex: 1,
+    minHeight: 35,
+    borderRadius: 16,
+    backgroundColor: "#E37F67",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  meetingProposalCounterText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  meetingProposalRejectButton: {
+    width: 50,
+    minHeight: 35,
+    borderRadius: 16,
+    backgroundColor: "#FC2634",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  meetingProposalActionPressed: {
+    opacity: 0.8,
+  },
+  meetingAcceptedBadgeWrap: {
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#B6E5CB",
+    backgroundColor: "#DFF3E8",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+  },
+  meetingAcceptedBadgeText: {
+    color: "#0A8A52",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   meetingButtonContainer: {
     marginTop: 10,
     marginHorizontal: 28, // alineado con el banner
@@ -3270,6 +3784,9 @@ const styles = StyleSheet.create({
   },
   meetingSubmitPressed: {
     opacity: 0.85,
+  },
+  meetingSubmitDisabled: {
+    opacity: 0.6,
   },
   meetingSubmitText: {
     color: "#FFFFFF",
