@@ -1841,6 +1841,26 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
+        {/* Banner de finalización exitosa */}
+        {exchange?.status === "COMPLETED" && (
+          <View style={styles.finalizationBannerSuccess}>
+            <FontAwesome name="check-circle" size={18} color="#fff" />
+            <Text style={styles.finalizationBannerTextSuccess}>
+              Finalizado exitosamente
+            </Text>
+          </View>
+        )}
+
+        {/* Banner de incidente */}
+        {exchange?.status === "INCIDENT" && (
+          <View style={styles.finalizationBannerIncident}>
+            <FontAwesome name="exclamation-circle" size={18} color="#fff" />
+            <Text style={styles.finalizationBannerTextIncident}>
+              Incidente reportado
+            </Text>
+          </View>
+        )}
+
         {/* Banner de intercambio */}
         {exchange && myBook && otherBook && (
           <View style={styles.exchangeBanner}>
@@ -3274,6 +3294,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
     marginRight: 8,
+  },
+
+  // ── Banner de finalización (COMPLETED/INCIDENT) ─────────────────
+  finalizationBannerSuccess: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#34D399",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#059669",
+    borderBottomWidth: 3,
+    borderBottomColor: "#059669",
+  },
+  finalizationBannerTextSuccess: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerIncident: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#F87171",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#991B1B",
+    borderBottomWidth: 3,
+    borderBottomColor: "#991B1B",
+  },
+  finalizationBannerTextIncident: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
   },
 
   // ── Banner de intercambio ─────────────────────────────
