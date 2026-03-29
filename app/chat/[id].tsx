@@ -93,8 +93,13 @@ function formatDateHeader(dateStr: string): string {
   });
 }
 
+function parseApiMeetingDate(dateStr: string): Date {
+  const hasTimeZoneInfo = /(?:Z|[+-]\d{2}:\d{2})$/i.test(dateStr);
+  return new Date(hasTimeZoneInfo ? dateStr : `${dateStr}Z`);
+}
+
 function formatMeetingDateLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("es-ES", {
+  return parseApiMeetingDate(dateStr).toLocaleDateString("es-ES", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -102,7 +107,7 @@ function formatMeetingDateLabel(dateStr: string): string {
 }
 
 function formatMeetingTimeLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("es-ES", {
+  return parseApiMeetingDate(dateStr).toLocaleTimeString("es-ES", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -292,6 +297,7 @@ export default function ChatDetailScreen() {
   const [isLoadingBookdrops, setIsLoadingBookdrops] = useState(false);
   const [bookdropSuggestionFeedback, setBookdropSuggestionFeedback] = useState<string | null>(null);
   const [bookspotsById, setBookspotsById] = useState<Record<number, BookspotDTO>>({});
+  const [customLocationAddressByKey, setCustomLocationAddressByKey] = useState<Record<string, string>>({});
   const locationRequestSeqRef = useRef(0);
   const locationCacheRef = useRef<Record<string, LocationSuggestion[]>>({});
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
@@ -354,6 +360,13 @@ export default function ChatDetailScreen() {
 
   const pad2 = (value: number) => value.toString().padStart(2, "0");
   const MIN_MEETING_LEAD_MINUTES = 5;
+
+  const getCustomLocationKey = (coords: number[]) => {
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    const [lon, lat] = coords;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+    return `${lon.toFixed(6)},${lat.toFixed(6)}`;
+  };
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -1173,6 +1186,49 @@ export default function ChatDetailScreen() {
     };
   }, [exchangeMeeting?.bookspotId]);
 
+  useEffect(() => {
+    if (!exchangeMeeting || exchangeMeeting.exchangeMode !== "CUSTOM") return;
+    if (!exchangeMeeting.customLocation || exchangeMeeting.customLocation.length < 2) return;
+
+    const [lon, lat] = exchangeMeeting.customLocation;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+    const locationKey = getCustomLocationKey(exchangeMeeting.customLocation);
+    if (!locationKey || customLocationAddressByKey[locationKey]) return;
+
+    let cancelled = false;
+
+    const reverseGeocodeCustomLocation = async () => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=es&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
+        const response = await fetch(url, {
+          headers: {
+            "Accept-Language": "es",
+          },
+        });
+
+        if (!response.ok || cancelled) return;
+
+        const data = (await response.json()) as { display_name?: string };
+        const displayName = typeof data.display_name === "string" ? data.display_name.trim() : "";
+        if (!displayName || cancelled) return;
+
+        setCustomLocationAddressByKey((prev) => ({
+          ...prev,
+          [locationKey]: displayName,
+        }));
+      } catch {
+        // Si falla el reverse geocoding, mantenemos fallback con coordenadas.
+      }
+    };
+
+    reverseGeocodeCustomLocation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exchangeMeeting, customLocationAddressByKey]);
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -1562,9 +1618,19 @@ export default function ChatDetailScreen() {
 
     if (meeting.customLocation && meeting.customLocation.length >= 2) {
       const [lon, lat] = meeting.customLocation;
+      const locationKey = getCustomLocationKey(meeting.customLocation);
+      const resolvedAddress = locationKey ? customLocationAddressByKey[locationKey] : null;
+
+      if (resolvedAddress) {
+        return {
+          title: "Ubicación personalizada",
+          subtitle: resolvedAddress,
+        };
+      }
+
       return {
         title: "Ubicación personalizada",
-        subtitle: `Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`,
+        subtitle: `Dirección no disponible · Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`,
       };
     }
 
@@ -1609,7 +1675,7 @@ export default function ChatDetailScreen() {
   const handleCounterProposeMeeting = () => {
     if (!exchangeMeeting || !exchangeMeeting.scheduledAt) return;
 
-    const scheduled = new Date(exchangeMeeting.scheduledAt);
+    const scheduled = parseApiMeetingDate(exchangeMeeting.scheduledAt);
     setMeetingDate(formatMeetingDate(scheduled));
     setMeetingTime(formatMeetingTime(scheduled));
 
@@ -3221,6 +3287,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fbf7f4",
     marginTop: 6,
     marginHorizontal: 14,
+    marginBottom: 5,
   },
   Exchangebutton: {
     flex: 1,
@@ -3571,7 +3638,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "transparent",
-    gap: 10,
+    gap: 8,
   },
   meetingProposalAcceptButton: {
     flex: 1,
@@ -3585,7 +3652,7 @@ const styles = StyleSheet.create({
   },
   meetingProposalAcceptText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
   meetingProposalCounterButton: {
@@ -3599,7 +3666,7 @@ const styles = StyleSheet.create({
   },
   meetingProposalCounterText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
   meetingProposalRejectButton: {
@@ -3701,6 +3768,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginHorizontal: 28, // alineado con el banner
     backgroundColor: "#ffffff",
+    marginBottom: 5,
   },
   meetingButton: {
     flexDirection: "row",
