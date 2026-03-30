@@ -1,4 +1,5 @@
 export type CommunityStatus = 'CREATED' | 'ACTIVE' | 'ARCHIVED';
+export type CommunityRole = 'MEMBER' | 'MODERATOR';
 
 export interface CommunityDto {
   id: number;
@@ -7,6 +8,7 @@ export interface CommunityDto {
   status: CommunityStatus;
   creatorId: string;
   createdAt: string;
+  currentUserRole?: CommunityRole | null;
   chatId?: number;
   memberCount: number;
   avatarUrl?: string | null;
@@ -30,4 +32,50 @@ export interface CommunityLibraryBookDto {
   genres: string[];
   likesCount: number;
   likedByMe: boolean;
+}
+
+export type MeetupStatus = 'SCHEDULED' | 'DONE' | 'CANCELLED';
+
+export interface CommunityMeetupAttendeeDto {
+  userId: string;
+  username: string;
+  selectedBookId: number;
+  selectedBookTitle: string;
+}
+
+export interface CommunityMeetupDto {
+  id: number;
+  communityId: number;
+  title: string;
+  description?: string | null;
+  otherBookSpotId?: number | null;
+  otherLocation?: number[] | null;
+  scheduledAt: string;
+  status: MeetupStatus;
+  creatorId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attendees: CommunityMeetupAttendeeDto[];
+}
+
+export interface CreateCommunityMeetupRequest {
+  title: string;
+  description?: string;
+  otherBookSpotId?: number;
+  otherLocation?: number[];
+  scheduledAt: string;
+}
+
+export interface AttendCommunityMeetupRequest {
+  selectedBookId: number;
+}
+
+export interface MeetupAttendanceDto {
+  meetupId: number;
+  userId: string;
+  username: string;
+  profilePhoto: string;
+  selectedBookId: number;
+  selectedBookTitle: string;
+  status: 'REGISTERED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED';
 }

@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
 import { ChatParticipantDto } from '@/types/chat';
 import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
+import CommunityMeetupTab from '@/components/communities/CommunityMeetupTab';
 
 const MAX_MEMBERS = 10;
 
@@ -145,6 +146,7 @@ export default function CommunityDetailScreen() {
   };
 
   const isCreator = community?.creatorId === currentUserId;
+  const canCreateMeetups = !!community && (isCreator || community.currentUserRole === 'MODERATOR');
 
   if (loading || !community) {
     return (
@@ -214,7 +216,7 @@ export default function CommunityDetailScreen() {
           <View style={styles.tabBar}>
             {SECTIONS.map(section => {
               const isActive = activeSection === section.key;
-              const isDisabled = section.key !== 'biblioteca';
+              const isDisabled = section.key === 'ranking';
               return (
                 <Pressable
                   key={section.key}
@@ -240,6 +242,16 @@ export default function CommunityDetailScreen() {
           </View>
 
           {/* Contenido de la sección activa */}
+          {activeSection === 'quedadas' && (
+            <CommunityMeetupTab
+              communityId={communityId}
+              meetingPointId={community?.referenceBookspotId}
+              meetingPointName={bookspot?.nombre}
+              meetingPointAddress={bookspot?.addressText}
+              canCreateMeetups={canCreateMeetups}
+            />
+          )}
+
           {activeSection === 'biblioteca' && (
             <CommunityLibraryTab communityId={communityId} />
           )}
@@ -275,9 +287,11 @@ export default function CommunityDetailScreen() {
                         </View>
                       )}
                       <Text style={styles.memberName}>{m.username}</Text>
-                      {m.userId === community.creatorId && (
+                      {m.userId === community.creatorId ? (
+                        <Text style={styles.creatorBadge}>(Creador)</Text>
+                      ) : m.role === 'MODERATOR' ? (
                         <Text style={styles.creatorBadge}>(Moderador)</Text>
-                      )}
+                      ) : null}
                     </View>
                   </View>
                 ))}
@@ -351,7 +365,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 12,
     backgroundColor: '#fdfbf7',
   },

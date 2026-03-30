@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, Alert, Pressable, Platform, Modal, ScrollView, Image } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import Header from '@/components/Header';
 import { exploreCommunities, getMyCommunities, joinCommunity, leaveCommunity, deleteCommunity } from '@/lib/communityApi';
-import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
+import { getBookspotById, BookspotDTO } from '@/lib/bookspotApi';
 import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
@@ -27,7 +27,7 @@ export default function ComunidadesScreen() {
   const [location, setLocation] = useState(DEFAULT_LOCATION);
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
-  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
+  const [bookspots, setBookspots] = useState<BookspotDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Admin Modal state
@@ -42,20 +42,41 @@ export default function ComunidadesScreen() {
     title: '',
     message: '',
     isDestructive: false,
-    onConfirm: async () => {},
+    onConfirm: async () => { },
   });
 
   const fetchCommunities = useCallback(async (lat: number, lon: number) => {
     try {
       setLoading(true);
-      const [allComms, myComms, allBookspots] = await Promise.all([
+      const [allComms, myComms] = await Promise.all([
         exploreCommunities(lat, lon, 50),
         getMyCommunities(),
-        getUserActiveBookspots()
       ]);
+
+      // Para el mapa necesitamos los bookspots de las comunidades, no solo los del usuario.
+      const combinedCommunities = Array.from(
+        new Map<number, CommunityDto>([
+          ...allComms.map((c): [number, CommunityDto] => [c.id, c]),
+          ...myComms.map((c): [number, CommunityDto] => [c.id, c]),
+        ]).values()
+      );
+
+      const referenceBookspotIds = Array.from(
+        new Set(combinedCommunities.map(c => c.referenceBookspotId).filter(Boolean))
+      ) as number[];
+
+      const spotResults = await Promise.allSettled(referenceBookspotIds.map(id => getBookspotById(id)));
+      const resolvedBookspots = spotResults
+        .filter((result): result is PromiseFulfilledResult<BookspotDTO> => result.status === 'fulfilled')
+        .map(result => result.value);
+
       setCommunities(allComms);
       setMyCommunities(myComms);
-      setBookspots(allBookspots);
+      setBookspots(resolvedBookspots);
+
+      if (spotResults.some(result => result.status === 'rejected')) {
+        console.warn('Algunos bookspots de comunidades no se pudieron cargar');
+      }
     } catch (error: any) {
       console.error(error);
       Alert.alert('Error', error.message || 'No se pudieron cargar las comunidades');
@@ -86,7 +107,7 @@ export default function ComunidadesScreen() {
         }
       }
     }
-    
+
     await fetchCommunities(lat, lon);
   }, [fetchCommunities]);
 
@@ -95,26 +116,33 @@ export default function ComunidadesScreen() {
       loadLocationAndData();
     }, [loadLocationAndData])
   );
-const handleJoin = async (communityId: number) => {
-  try {
-    setLoading(true);
-    await joinCommunity(communityId);
 
-    await loadLocationAndData(); 
-  } catch (error: any) {
-    console.error('Error joining community:', error);
-    const errorMessage = error.message || 'No se pudo unir a la comunidad';
-    
-    if (Platform.OS === 'web') {
-      // Forzamos el alert nativo del navegador para depuración inmediata
-      window.alert(`No se pudo unir: ${errorMessage}`);
-    } else {
-      Alert.alert('No se pudo unir', errorMessage);
+  useEffect(() => {
+    console.log('mis comunidades:', myCommunities);
+    if (myCommunities.length > 0) {
+      console.log('primera comunidad -> id:', myCommunities[0].id, 'name:', myCommunities[0].name);
     }
-  } finally {
-    setLoading(false);
-  }
-};
+  }, [myCommunities]);
+  const handleJoin = async (communityId: number) => {
+    try {
+      setLoading(true);
+      await joinCommunity(communityId);
+
+      await loadLocationAndData();
+    } catch (error: any) {
+      console.error('Error joining community:', error);
+      const errorMessage = error.message || 'No se pudo unir a la comunidad';
+
+      if (Platform.OS === 'web') {
+        // Forzamos el alert nativo del navegador para depuración inmediata
+        window.alert(`No se pudo unir: ${errorMessage}`);
+      } else {
+        Alert.alert('No se pudo unir', errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   const handleAdmin = async (comm: CommunityDto) => {
@@ -174,21 +202,27 @@ const handleJoin = async (communityId: number) => {
       setAdminLoading(false);
     }
   };
-
-
+  
+  // Combinar comunidades exploradas (la variable que está justo abajo) + propias del usuario (sin duplicados)
+  const uniqueCommunities = (() => {
+    const map = new Map<number, CommunityDto>();
+    communities.forEach(c => map.set(c.id, c));
+    myCommunities.forEach(c => map.set(c.id, c));
+    return Array.from(map.values());
+  })();
 
   // Agrupar comunidades por bookspot para renderizar en el mapa
-  const communitiesWithLocation = communities.map(c => {
+  const communitiesWithLocation = uniqueCommunities.map(c => {
     const spot = bookspots.find(b => b.id === c.referenceBookspotId);
     return { ...c, spot };
-  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: BookspotPendingDTO })[];
+  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: BookspotDTO })[];
 
   const isCreator = selectedAdminComm?.creatorId === currentUserId;
 
   return (
     <View style={styles.container}>
       <Header />
-      
+
       {loading && communities.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#e4715f" />
@@ -203,9 +237,9 @@ const handleJoin = async (communityId: number) => {
             onAdmin={handleAdmin}
             onLibrary={(communityId: number) => router.push(`/communities/${communityId}` as any)}
           />
-          
-          <Pressable 
-            style={styles.fab} 
+
+          <Pressable
+            style={styles.fab}
             onPress={() => router.push('/communities/create' as any)}
           >
             <Ionicons name="add" size={24} color="#fff" />
@@ -242,9 +276,12 @@ const handleJoin = async (communityId: number) => {
                         </View>
                       )}
                       <Text style={styles.memberName}>{m.username}</Text>
-                      {m.userId === selectedAdminComm?.creatorId && (
+                      {m.userId === selectedAdminComm?.creatorId ? (
+                        <Text style={styles.creatorBadge}>(Creador)</Text>
+                      ) : m.role === 'MODERATOR' ? (
                         <Text style={styles.creatorBadge}>(Moderador)</Text>
-                      )}
+                      ) : null}
+
                     </View>
                   </View>
                 ))}
@@ -264,7 +301,7 @@ const handleJoin = async (communityId: number) => {
                   style={styles.deleteBtn}
                   onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
                 >
-                  <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
+                  <Text style={styles.deleteBtnText}>Eliminar Comunida</Text>
                 </Pressable>
               )}
             </View>
@@ -272,35 +309,35 @@ const handleJoin = async (communityId: number) => {
           </View>
         </View>
 
-          {/* Confirm overlay at modalOverlay level to cover full screen on iOS */}
-          {confirmModalVisible && (
-            <View style={styles.confirmOverlay}>
-              <View style={styles.confirmCard}>
-                <Text style={styles.confirmTitle}>{confirmConfig.title}</Text>
-                <Text style={styles.confirmMessage}>{confirmConfig.message}</Text>
-                <View style={styles.confirmButtons}>
-                  <Pressable
-                    style={styles.confirmSecondaryBtn}
-                    onPress={() => setConfirmModalVisible(false)}
-                  >
-                    <Text style={styles.confirmSecondaryText}>Cancelar</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.confirmPrimaryBtn,
-                      confirmConfig.isDestructive ? styles.confirmDangerBtn : null,
-                    ]}
-                    onPress={async () => {
-                      setConfirmModalVisible(false);
-                      await confirmConfig.onConfirm();
-                    }}
-                  >
-                    <Text style={styles.confirmPrimaryText}>Confirmar</Text>
-                  </Pressable>
-                </View>
+        {/* Confirm overlay at modalOverlay level to cover full screen on iOS */}
+        {confirmModalVisible && (
+          <View style={styles.confirmOverlay}>
+            <View style={styles.confirmCard}>
+              <Text style={styles.confirmTitle}>{confirmConfig.title}</Text>
+              <Text style={styles.confirmMessage}>{confirmConfig.message}</Text>
+              <View style={styles.confirmButtons}>
+                <Pressable
+                  style={styles.confirmSecondaryBtn}
+                  onPress={() => setConfirmModalVisible(false)}
+                >
+                  <Text style={styles.confirmSecondaryText}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.confirmPrimaryBtn,
+                    confirmConfig.isDestructive ? styles.confirmDangerBtn : null,
+                  ]}
+                  onPress={async () => {
+                    setConfirmModalVisible(false);
+                    await confirmConfig.onConfirm();
+                  }}
+                >
+                  <Text style={styles.confirmPrimaryText}>Confirmar</Text>
+                </Pressable>
               </View>
             </View>
-          )}
+          </View>
+        )}
       </Modal>
     </View>
   );
