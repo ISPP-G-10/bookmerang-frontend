@@ -21,12 +21,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto } from '@/types/community';
 import { ChatParticipantDto } from '@/types/chat';
 import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
+import CommunityChatTab from '@/components/communities/CommunityChatTab';
 
 const MAX_MEMBERS = 10;
 
-type SectionKey = 'quedadas' | 'biblioteca' | 'ranking';
+type SectionKey = 'chat' | 'quedadas' | 'biblioteca' | 'ranking';
 
 const SECTIONS: { key: SectionKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'chat', label: 'Chat', icon: 'chatbubbles-outline' },
   { key: 'quedadas', label: 'Quedadas', icon: 'calendar-outline' },
   { key: 'biblioteca', label: 'Biblioteca', icon: 'book' },
   { key: 'ranking', label: 'Ranking', icon: 'trophy-outline' },
@@ -42,7 +44,7 @@ export default function CommunityDetailScreen() {
   const [bookspot, setBookspot] = useState<BookspotDTO | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<SectionKey>('biblioteca');
+  const [activeSection, setActiveSection] = useState<SectionKey>('chat');
   const [adminModalVisible, setAdminModalVisible] = useState(false);
   const [adminMembers, setAdminMembers] = useState<ChatParticipantDto[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -144,8 +146,6 @@ export default function CommunityDetailScreen() {
     }
   };
 
-  const isCreator = community?.creatorId === currentUserId;
-
   if (loading || !community) {
     return (
       <View style={styles.container}>
@@ -214,7 +214,8 @@ export default function CommunityDetailScreen() {
           <View style={styles.tabBar}>
             {SECTIONS.map(section => {
               const isActive = activeSection === section.key;
-              const isDisabled = section.key !== 'biblioteca';
+              // Chat and Biblioteca are enabled, others are disabled
+              const isDisabled = section.key !== 'biblioteca' && section.key !== 'chat';
               return (
                 <Pressable
                   key={section.key}
@@ -240,6 +241,9 @@ export default function CommunityDetailScreen() {
           </View>
 
           {/* Contenido de la sección activa */}
+          {activeSection === 'chat' && community.chatId && (
+            <CommunityChatTab communityId={communityId} chatId={community.chatId} />
+          )}
           {activeSection === 'biblioteca' && (
             <CommunityLibraryTab communityId={communityId} />
           )}
@@ -262,45 +266,47 @@ export default function CommunityDetailScreen() {
                 <ActivityIndicator size="large" color="#e4715f" />
               </View>
             ) : (
-              <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
-                <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
-                {adminMembers.map(m => (
-                  <View key={m.userId} style={styles.memberRow}>
-                    <View style={styles.memberInfo}>
-                      {m.profilePhoto ? (
-                        <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
-                      ) : (
-                        <View style={styles.memberAvatarPlaceholder}>
-                          <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.memberName}>{m.username}</Text>
-                      {m.userId === community.creatorId && (
-                        <Text style={styles.creatorBadge}>(Moderador)</Text>
-                      )}
+              <>
+                <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
+                  <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
+                  {adminMembers.map(m => (
+                    <View key={m.userId} style={styles.memberRow}>
+                      <View style={styles.memberInfo}>
+                        {m.profilePhoto ? (
+                          <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
+                        ) : (
+                          <View style={styles.memberAvatarPlaceholder}>
+                            <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
+                          </View>
+                        )}
+                        <Text style={styles.memberName}>{m.username}</Text>
+                        {m.userId === community.creatorId && (
+                          <Text style={styles.creatorBadge}>(Moderador)</Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </ScrollView>
+                  ))}
+                </ScrollView>
+
+                <View style={styles.modalActions}>
+                  <Pressable
+                    style={styles.leaveBtn}
+                    onPress={() => confirmAction('Abandonar', '¿Seguro que quieres abandonar esta comunidad?', handleLeave, true)}
+                  >
+                    <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
+                  </Pressable>
+
+                  {community.creatorId === currentUserId && (
+                    <Pressable
+                      style={styles.deleteBtn}
+                      onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
+                    >
+                      <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
             )}
-
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.leaveBtn}
-                onPress={() => confirmAction('Abandonar', '¿Seguro que quieres abandonar esta comunidad?', handleLeave, true)}
-              >
-                <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
-              </Pressable>
-
-              {isCreator && (
-                <Pressable
-                  style={styles.deleteBtn}
-                  onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
-                >
-                  <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
-                </Pressable>
-              )}
-            </View>
           </View>
         </View>
 
