@@ -1,4 +1,4 @@
-import { CommunityDto, CreateCommunityRequest, CommunityLibraryBookDto } from '@/types/community';
+import { CommunityDto, CreateCommunityRequest, CommunityLibraryBookDto, CommunityMemberDto } from '@/types/community';
 import { apiRequest } from './api';
 
 export async function exploreCommunities(latitude: number, longitude: number, radiusKm: number = 50): Promise<CommunityDto[]> {
@@ -23,6 +23,17 @@ export async function getMyCommunities(): Promise<CommunityDto[]> {
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Error al obtener mis comunidades: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function getCommunityMembers(communityId: number): Promise<CommunityMemberDto[]> {
+  const res = await apiRequest(`/communities/${communityId}/members`);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al obtener miembros: ${res.status} ${errorText}`);
   }
 
   return res.json();
