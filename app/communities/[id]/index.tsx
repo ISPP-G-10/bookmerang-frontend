@@ -101,25 +101,26 @@ export default function CommunityDetailScreen() {
     }
   };
 
-  const handleKickMember = async (member: CommunityMemberDto) => {
+  const handleKickMember = (member: CommunityMemberDto) => {
     if (!community) return;
     
-    // Use window.confirm for web compatibility
-    const confirmed = window.confirm(`¿Seguro que quieres expulsar a ${member.username} de la comunidad?`);
-    
-    if (confirmed) {
-      try {
-        setKickingMemberId(member.userId);
-        await kickMember(community.id, member.userId);
-        setAdminMembers(prev => prev.filter(m => m.userId !== member.userId));
-        setCommunity(prev => prev ? { ...prev, memberCount: prev.memberCount - 1 } : prev);
-        alert(`${member.username} ha sido expulsado de la comunidad`);
-      } catch (e: any) {
-        alert(e.message || 'No se pudo expulsar al miembro');
-      } finally {
-        setKickingMemberId(null);
-      }
-    }
+    confirmAction(
+      'Expulsar miembro',
+      `¿Seguro que quieres expulsar a ${member.username} de la comunidad?`,
+      async () => {
+        try {
+          setKickingMemberId(member.userId);
+          await kickMember(community.id, member.userId);
+          setAdminMembers(prev => prev.filter(m => m.userId !== member.userId));
+          setCommunity(prev => prev ? { ...prev, memberCount: prev.memberCount - 1 } : prev);
+        } catch (e: any) {
+          alert(e.message || 'No se pudo expulsar al miembro');
+        } finally {
+          setKickingMemberId(null);
+        }
+      },
+      true // isDestructive
+    );
   };
 
   const confirmAction = (title: string, msg: string, onConfirm: () => void, isDestructive = false) => {
