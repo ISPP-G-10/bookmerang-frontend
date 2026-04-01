@@ -23,7 +23,7 @@ export default function LoginScreen() {
     setError("");
     try {
       await authService.signIn(email, password);
-      router.replace("/(tabs)/matcher" as any);
+      router.replace("/" as any);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión");
     } finally {

@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import PreferencesModal from "@/components/PreferencesModal";
+import { useAuth } from "@/contexts/AuthContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -51,6 +52,7 @@ const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { isBookdropUser, loading: authLoading } = useAuth();
   const { width } = useWindowDimensions();
   const { message } = useLocalSearchParams<{ message?: string }>();
   const [libraryBooks, setLibraryBooks] = useState<BookListItem[]>([]);
@@ -80,6 +82,12 @@ export default function ProfileScreen() {
     longitude: number;
   } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && isBookdropUser) {
+      router.replace("/bookDropControlPanel" as any);
+    }
+  }, [authLoading, isBookdropUser, router]);
 
   const handleUpdateLocation = async () => {
     setLocationUpdating(true);
@@ -402,7 +410,7 @@ export default function ProfileScreen() {
     }
   };
 
-  if (loading) {
+  if (authLoading || isBookdropUser || loading) {
     return (
       <View
         style={{

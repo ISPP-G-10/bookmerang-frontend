@@ -9,6 +9,7 @@ export type StoredAuthUser = {
   username?: string;
   name?: string;
   profilePhoto?: string;
+  userType?: string;
 };
 
 export type StoredAuthSession = {
