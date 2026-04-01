@@ -114,6 +114,17 @@ export async function leaveCommunity(communityId: number): Promise<void> {
   }
 }
 
+export async function kickMember(communityId: number, memberId: string): Promise<void> {
+  const res = await apiRequest(`/communities/${communityId}/kick/${memberId}`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Error al expulsar miembro: ${res.status}`);
+  }
+}
+
 // --- BIBLIOTECA ---
 
 export async function getCommunityLibrary(
