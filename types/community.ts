@@ -1,4 +1,4 @@
-export type CommunityStatus = 'CREATED' | 'ACTIVE' | 'ARCHIVED';
+export type CommunityStatus = "CREATED" | "ACTIVE" | "ARCHIVED";
 
 export interface CommunityDto {
   id: number;
@@ -30,4 +30,19 @@ export interface CommunityLibraryBookDto {
   genres: string[];
   likesCount: number;
   likedByMe: boolean;
+}
+
+export interface CommunityRankingEntryDto {
+  userId: string;
+  username: string;
+  name?: string;
+  inkdropsThisMonth: number;
+  exchangesCount?: number;
+  streakDays?: number;
+}
+
+export interface CommunityRankingDto {
+  communityId: number;
+  month: string;
+  ranking: CommunityRankingEntryDto[];
 }
