@@ -14,12 +14,10 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities } from '@/lib/communityApi';
+import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities, getCommunityMembers, kickMember } from '@/lib/communityApi';
 import { getBookspotById, BookspotDTO } from '@/lib/bookspotApi';
-import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
-import { CommunityDto } from '@/types/community';
-import { ChatParticipantDto } from '@/types/chat';
+import { CommunityDto, CommunityMemberDto } from '@/types/community';
 import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
 import CommunityChatTab from '@/components/communities/CommunityChatTab';
 
@@ -37,7 +35,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: keyof typeof Ionicons.gl
 export default function CommunityDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { currentUserId } = useAuth();
+  const { currentUserId, backendUserId } = useAuth();
   const communityId = Number(id);
 
   const [community, setCommunity] = useState<CommunityDto | null>(null);
@@ -46,8 +44,9 @@ export default function CommunityDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<SectionKey>('chat');
   const [adminModalVisible, setAdminModalVisible] = useState(false);
-  const [adminMembers, setAdminMembers] = useState<ChatParticipantDto[]>([]);
+  const [adminMembers, setAdminMembers] = useState<CommunityMemberDto[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
     title: '',
@@ -93,14 +92,33 @@ export default function CommunityDetailScreen() {
     setAdminModalVisible(true);
     setAdminLoading(true);
     try {
-      if (community.chatId) {
-        const chat = await getChat(community.chatId);
-        setAdminMembers(chat.participants || []);
-      }
+      const members = await getCommunityMembers(community.id);
+      setAdminMembers(members);
     } catch (e) {
-      console.warn("Could not load chat participants", e);
+      console.warn("Could not load community members", e);
     } finally {
       setAdminLoading(false);
+    }
+  };
+
+  const handleKickMember = async (member: CommunityMemberDto) => {
+    if (!community) return;
+    
+    // Use window.confirm for web compatibility
+    const confirmed = window.confirm(`¿Seguro que quieres expulsar a ${member.username} de la comunidad?`);
+    
+    if (confirmed) {
+      try {
+        setKickingMemberId(member.userId);
+        await kickMember(community.id, member.userId);
+        setAdminMembers(prev => prev.filter(m => m.userId !== member.userId));
+        setCommunity(prev => prev ? { ...prev, memberCount: prev.memberCount - 1 } : prev);
+        alert(`${member.username} ha sido expulsado de la comunidad`);
+      } catch (e: any) {
+        alert(e.message || 'No se pudo expulsar al miembro');
+      } finally {
+        setKickingMemberId(null);
+      }
     }
   };
 
@@ -269,23 +287,45 @@ export default function CommunityDetailScreen() {
               <>
                 <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
                   <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
-                  {adminMembers.map(m => (
-                    <View key={m.userId} style={styles.memberRow}>
-                      <View style={styles.memberInfo}>
-                        {m.profilePhoto ? (
-                          <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
-                        ) : (
-                          <View style={styles.memberAvatarPlaceholder}>
-                            <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
-                          </View>
-                        )}
-                        <Text style={styles.memberName}>{m.username}</Text>
-                        {m.userId === community.creatorId && (
-                          <Text style={styles.creatorBadge}>(Moderador)</Text>
+                  {adminMembers.map(m => {
+                    const isCurrentUser = backendUserId && m.userId.toLowerCase() === backendUserId.toLowerCase();
+                    const isModerator = backendUserId && adminMembers.some(
+                      mem => mem.userId.toLowerCase() === backendUserId.toLowerCase() && mem.role === 'MODERATOR'
+                    );
+                    const canKick = isModerator && !isCurrentUser && m.role !== 'MODERATOR';
+                    const isKicking = kickingMemberId === m.userId;
+
+                    return (
+                      <View key={m.userId} style={styles.memberRow}>
+                        <View style={styles.memberInfo}>
+                          {m.profilePhoto ? (
+                            <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
+                          ) : (
+                            <View style={styles.memberAvatarPlaceholder}>
+                              <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
+                            </View>
+                          )}
+                          <Text style={styles.memberName}>{m.username}</Text>
+                          {m.role === 'MODERATOR' && (
+                            <Text style={styles.creatorBadge}>(Moderador)</Text>
+                          )}
+                        </View>
+                        {canKick && (
+                          <Pressable
+                            style={styles.kickBtn}
+                            onPress={() => handleKickMember(m)}
+                            disabled={isKicking}
+                          >
+                            {isKicking ? (
+                              <ActivityIndicator size="small" color="#ef4444" />
+                            ) : (
+                              <Ionicons name="person-remove-outline" size={18} color="#ef4444" />
+                            )}
+                          </Pressable>
                         )}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </ScrollView>
 
                 <View style={styles.modalActions}>
@@ -296,7 +336,7 @@ export default function CommunityDetailScreen() {
                     <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
                   </Pressable>
 
-                  {community.creatorId === currentUserId && (
+                  {backendUserId && adminMembers.some(m => m.userId.toLowerCase() === backendUserId.toLowerCase() && m.role === 'MODERATOR') && (
                     <Pressable
                       style={styles.deleteBtn}
                       onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
@@ -530,6 +570,11 @@ const styles = StyleSheet.create({
     color: '#e4715f',
     marginLeft: 8,
     fontWeight: '600',
+  },
+  kickBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
   },
   modalActions: {
     gap: 12,
