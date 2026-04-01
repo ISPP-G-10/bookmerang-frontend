@@ -301,7 +301,7 @@ export default function ComunidadesScreen() {
                   style={styles.deleteBtn}
                   onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
                 >
-                  <Text style={styles.deleteBtnText}>Eliminar Comunida</Text>
+                  <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
                 </Pressable>
               )}
             </View>
