@@ -25,6 +25,7 @@ import { fetchMyBackendUser } from "@/lib/api";
 import { authService } from "@/lib/authService";
 import { BookDetail, getBookDetail } from "@/lib/books";
 import { BookspotDTO, getActiveBookspots } from "@/lib/bookspotApi";
+import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
 import {
   sendMessage as apiSendMessage,
   getChat as fetchChat,
@@ -712,35 +713,7 @@ export default function ChatDetailScreen() {
       setLoadingLocationSuggestions(true);
       setLocationSuggestionFeedback(null);
 
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&accept-language=es&countrycodes=es&q=${encodeURIComponent(trimmed)}`;
-      const response = await fetch(url, {
-        headers: {
-          "Accept-Language": "es",
-        },
-      });
-
-      if (requestSeq !== locationRequestSeqRef.current) return;
-
-      if (!response.ok) {
-        setLocationSuggestionFeedback("No se pudieron cargar sugerencias. Sigue escribiendo e inténtalo de nuevo.");
-        return;
-      }
-
-      const data = (await response.json()) as Array<{
-        place_id: number;
-        display_name: string;
-        lat: string;
-        lon: string;
-      }>;
-
-      const mapped: LocationSuggestion[] = data
-        .map((item) => ({
-          id: String(item.place_id),
-          label: item.display_name,
-          lat: Number(item.lat),
-          lon: Number(item.lon),
-        }))
-        .filter((item) => !Number.isNaN(item.lat) && !Number.isNaN(item.lon));
+      const mapped = await searchGeocodingSuggestions(trimmed, 5);
 
       locationCacheRef.current[normalizedQuery] = mapped;
 
@@ -1200,17 +1173,7 @@ export default function ChatDetailScreen() {
 
     const reverseGeocodeCustomLocation = async () => {
       try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=es&lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`;
-        const response = await fetch(url, {
-          headers: {
-            "Accept-Language": "es",
-          },
-        });
-
-        if (!response.ok || cancelled) return;
-
-        const data = (await response.json()) as { display_name?: string };
-        const displayName = typeof data.display_name === "string" ? data.display_name.trim() : "";
+        const displayName = await reverseGeocode(lat, lon);
         if (!displayName || cancelled) return;
 
         setCustomLocationAddressByKey((prev) => ({
