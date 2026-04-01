@@ -714,6 +714,7 @@ export default function ChatDetailScreen() {
       setLocationSuggestionFeedback(null);
 
       const mapped = await searchGeocodingSuggestions(trimmed, 5);
+      if (requestSeq !== locationRequestSeqRef.current) return;
 
       locationCacheRef.current[normalizedQuery] = mapped;
 
@@ -732,6 +733,19 @@ export default function ChatDetailScreen() {
   useEffect(() => {
     if (meetingType !== "ARBITRARY") {
       setLocationSuggestions([]);
+      setLocationSuggestionFeedback(null);
+      setLoadingLocationSuggestions(false);
+      return;
+    }
+
+    const trimmedLocation = meetingLocation.trim();
+    const selectedLabel = selectedLocationSuggestion?.label.trim();
+    if (
+      selectedLabel &&
+      selectedLabel.toLowerCase() === trimmedLocation.toLowerCase()
+    ) {
+      setLocationSuggestions([]);
+      setLocationSuggestionFeedback(null);
       setLoadingLocationSuggestions(false);
       return;
     }
@@ -741,7 +755,12 @@ export default function ChatDetailScreen() {
     }, 350);
 
     return () => clearTimeout(handler);
-  }, [meetingLocation, meetingType, searchLocationSuggestions]);
+  }, [
+    meetingLocation,
+    meetingType,
+    searchLocationSuggestions,
+    selectedLocationSuggestion,
+  ]);
 
   useEffect(() => {
     if (meetingType !== "BOOKSPOT") {
@@ -1635,21 +1654,108 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const toRankedBookspot = (bookspot: BookspotDTO): RankedBookspot => ({
+    id: bookspot.id,
+    nombre: bookspot.nombre,
+    addressText: bookspot.addressText,
+    latitude: bookspot.latitude,
+    longitude: bookspot.longitude,
+    distanceUser1Km: 0,
+    distanceUser2Km: 0,
+    furthestDistanceKm: 0,
+    fairnessGapKm: 0,
+    averageDistanceKm: 0,
+  });
+
+  const getSelectedCustomLocationSuggestion = (
+    meeting: ExchangeMeetingDto,
+  ): LocationSuggestion | null => {
+    if (!meeting.customLocation || meeting.customLocation.length < 2) return null;
+
+    const [lon, lat] = meeting.customLocation;
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+
+    const locationKey = getCustomLocationKey(meeting.customLocation);
+    const resolvedAddress = locationKey ? customLocationAddressByKey[locationKey] : null;
+    const label = resolvedAddress ?? `Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`;
+
+    return {
+      id: locationKey ?? `${lon.toFixed(6)},${lat.toFixed(6)}`,
+      label,
+      lat,
+      lon,
+    };
+  };
+
   const handleCounterProposeMeeting = () => {
     if (!exchangeMeeting || !exchangeMeeting.scheduledAt) return;
 
     const scheduled = parseApiMeetingDate(exchangeMeeting.scheduledAt);
     setMeetingDate(formatMeetingDate(scheduled));
     setMeetingTime(formatMeetingTime(scheduled));
+    setError(null);
+    setLocationSuggestions([]);
+    setLocationSuggestionFeedback(null);
 
     if (exchangeMeeting.exchangeMode === "BOOKSPOT") {
       setMeetingType("BOOKSPOT");
+      setSelectedBookdrop(null);
+      setSelectedLocationSuggestion(null);
+
+      const selectedFromRanked = rankedBookspots.find(
+        (spot) => spot.id === exchangeMeeting.bookspotId,
+      );
+
+      if (selectedFromRanked) {
+        setSelectedBookspot(selectedFromRanked);
+        setMeetingLocation(selectedFromRanked.addressText);
+      } else if (exchangeMeeting.bookspotId != null) {
+        const fromCache = bookspotsById[exchangeMeeting.bookspotId];
+        if (fromCache) {
+          const fallbackSpot = toRankedBookspot(fromCache);
+          setSelectedBookspot(fallbackSpot);
+          setMeetingLocation(fallbackSpot.addressText);
+        } else {
+          setSelectedBookspot(null);
+          setMeetingLocation("");
+        }
+      }
     } else if (exchangeMeeting.exchangeMode === "BOOKDROP") {
       setMeetingType("BOOKDROP");
+      setSelectedBookspot(null);
+      setSelectedLocationSuggestion(null);
+
+      const selectedFromRanked = rankedBookdrops.find(
+        (drop) => drop.id === exchangeMeeting.bookspotId,
+      );
+
+      if (selectedFromRanked) {
+        setSelectedBookdrop(selectedFromRanked);
+        setMeetingLocation(selectedFromRanked.addressText);
+      } else if (exchangeMeeting.bookspotId != null) {
+        const fromCache = bookspotsById[exchangeMeeting.bookspotId];
+        if (fromCache) {
+          const fallbackDrop = toRankedBookspot(fromCache);
+          setSelectedBookdrop(fallbackDrop);
+          setMeetingLocation(fallbackDrop.addressText);
+        } else {
+          setSelectedBookdrop(null);
+          setMeetingLocation("");
+        }
+      }
     } else {
       setMeetingType("ARBITRARY");
-      setMeetingLocation("Ubicación personalizada");
-      setSelectedLocationSuggestion(null);
+      setSelectedBookspot(null);
+      setSelectedBookdrop(null);
+
+      const selectedSuggestion = getSelectedCustomLocationSuggestion(exchangeMeeting);
+      if (selectedSuggestion) {
+        setMeetingLocation(selectedSuggestion.label);
+        setSelectedLocationSuggestion(selectedSuggestion);
+      } else {
+        setMeetingLocation("");
+        setSelectedLocationSuggestion(null);
+      }
     }
 
     setIsCounterProposalMode(true);
@@ -2641,7 +2747,7 @@ export default function ChatDetailScreen() {
                           <ActivityIndicator size="small" color="#e4715f" />
                         </View>
                       )}
-                      {locationSuggestions.length > 0 && (
+                      {!selectedLocationSuggestion && locationSuggestions.length > 0 && (
                         <View style={styles.locationSuggestionsList}>
                           {locationSuggestions.map((suggestion) => (
                             <Pressable
