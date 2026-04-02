@@ -1,4 +1,5 @@
 export type CommunityStatus = 'CREATED' | 'ACTIVE' | 'ARCHIVED';
+export type CommunityRole = 'MEMBER' | 'MODERATOR';
 
 export interface CommunityDto {
   id: number;
@@ -13,6 +14,15 @@ export interface CommunityDto {
   profilePhoto?: string | null;
   iconUrl?: string | null;
   imageUrl?: string | null;
+}
+
+export interface CommunityMemberDto {
+  communityId: number;
+  userId: string;
+  username: string;
+  profilePhoto: string;
+  role: CommunityRole;
+  joinedAt: string;
 }
 
 export interface CreateCommunityRequest {
