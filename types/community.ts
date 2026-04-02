@@ -17,6 +17,15 @@ export interface CommunityDto {
   imageUrl?: string | null;
 }
 
+export interface CommunityMemberDto {
+  communityId: number;
+  userId: string;
+  username: string;
+  profilePhoto: string;
+  role: CommunityRole;
+  joinedAt: string;
+}
+
 export interface CreateCommunityRequest {
   name: string;
   referenceBookspotId: number;

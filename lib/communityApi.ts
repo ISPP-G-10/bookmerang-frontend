@@ -6,6 +6,7 @@ import {
   CreateCommunityMeetupRequest,
   AttendCommunityMeetupRequest,
   MeetupAttendanceDto,
+  CommunityMemberDto,
 } from '@/types/community';
 import { apiRequest } from './api';
 
@@ -31,6 +32,17 @@ export async function getMyCommunities(): Promise<CommunityDto[]> {
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Error al obtener mis comunidades: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function getCommunityMembers(communityId: number): Promise<CommunityMemberDto[]> {
+  const res = await apiRequest(`/communities/${communityId}/members`);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al obtener miembros: ${res.status} ${errorText}`);
   }
 
   return res.json();
@@ -108,6 +120,17 @@ export async function leaveCommunity(communityId: number): Promise<void> {
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Error al abandonar comunidad: ${res.status} ${errorText}`);
+  }
+}
+
+export async function kickMember(communityId: number, memberId: string): Promise<void> {
+  const res = await apiRequest(`/communities/${communityId}/kick/${memberId}`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Error al expulsar miembro: ${res.status}`);
   }
 }
 
