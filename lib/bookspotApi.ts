@@ -55,6 +55,20 @@ export async function getBookspotById(id: number): Promise<BookspotDTO> {
   return res.json();
 }
 
+export async function getActiveBookspots(): Promise<BookspotDTO[]> {
+  try {
+    const res = await apiRequest(`/bookspots/active`);
+    if (!res.ok) {
+      console.warn(`[BookSpots] API error ${res.status}:`, await res.text());
+      return [];
+    }
+    return res.json();
+  } catch (e: any) {
+    console.warn("[BookSpots] fetch error:", e?.message ?? e);
+    return [];
+  }
+}
+
 export async function getNearbyBookspots(
   latitude: number,
   longitude: number,

@@ -31,6 +31,18 @@ export interface RegisterProfileData {
   longitud: number;
 }
 
+export interface RegisterBookdropProfileData {
+  Email: string;
+  Password: string;
+  Username: string;
+  Name: string;
+  ProfilePhoto?: string;
+  NombreEstablecimiento: string;
+  AddressText: string;
+  Latitud: number;
+  Longitud: number;
+}
+
 export interface UserPreferencesData {
   latitude: number;
   longitude: number;
@@ -74,6 +86,7 @@ export const authService = {
         username: data.user.username,
         name: data.user.name,
         profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
       },
     });
 
@@ -104,6 +117,37 @@ export const authService = {
         username: data.user.username,
         name: data.user.name,
         profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
+      },
+    });
+
+    return data.user;
+  },
+
+  async registerBookdropBackendProfile(bookdropProfileData: RegisterBookdropProfileData) {
+    const response = await apiRequest("/Auth/register/business", {
+      method: "POST",
+      body: JSON.stringify({
+        ...bookdropProfileData,
+        profilePhoto: bookdropProfileData.ProfilePhoto || "",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al registrar el perfil del bookdrop en el backend"));
+    }
+
+    const data = await response.json();
+    await setStoredAuthSession({
+      accessToken: data.accessToken,
+      user: {
+        id: data.user.id,
+        supabaseId: data.user.supabaseId,
+        email: data.user.email,
+        username: data.user.username,
+        name: data.user.name,
+        profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
       },
     });
 

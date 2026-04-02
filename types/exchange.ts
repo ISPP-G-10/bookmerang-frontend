@@ -19,12 +19,12 @@ export interface ExchangeMeetingDto {
     exchangeMeetingId: number,
     exchangeId: number,
     exchangeMode: ExchangeMode,
-    bookspotId: number,
-    customLocation: number, // coordenadas en forma de lista [x, y]
+    bookspotId: number | null,
+    customLocation: number[] | null, // coordenadas en forma de lista [x, y]
     scheduledAt: string,
     proposerId: string,
-    proposerName: string,
-    meetingStatus: string,
+    proposerName: string | null,
+    meetingStatus: MeetingStatus,
     markAsCompletedByUser1: boolean,
     markAsCompletedByUser2: boolean
 }
