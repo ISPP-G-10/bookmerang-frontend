@@ -13,16 +13,19 @@ import {
   Modal,
   ScrollView,
   Dimensions,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-
 import Header from '@/components/Header';
-import { exploreCommunities, getMyCommunities, joinCommunity, getCommunityLibrary, getCommunityMembers } from '@/lib/communityApi';
-import { getUserActiveBookspots, BookspotPendingDTO, getBookspotById } from '@/lib/bookspotApi';
+import { 
+  exploreCommunities, 
+  getMyCommunities, 
+  joinCommunity, 
+  getCommunityLibrary, 
+  getCommunityMembers } from '@/lib/communityApi';
+import { getBookspotById } from '@/lib/bookspotApi';
 import { CommunityDto, CommunityMemberDto } from '@/types/community';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -68,10 +71,10 @@ export default function ComunidadesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
-  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const [bookspotInfoMap, setBookspotInfoMap] = useState<Record<number, BookspotInfo>>({});
   const [communityGenresMap, setCommunityGenresMap] = useState<Record<number, string[]>>({});
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [joiningId, setJoiningId] = useState<number | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
@@ -79,18 +82,16 @@ export default function ComunidadesScreen() {
   const [selectedCommunityMembers, setSelectedCommunityMembers] = useState<CommunityMemberDto[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [location, setLocation] = useState(DEFAULT_LOCATION);
 
   const fetchCommunities = useCallback(async (lat: number, lon: number) => {
     try {
-      const [allComms, myComms, allBookspots] = await Promise.all([
+      const [allComms, myComms] = await Promise.all([
         exploreCommunities(lat, lon, 50),
         getMyCommunities(),
-        getUserActiveBookspots()
       ]);
+
       setCommunities(allComms);
       setMyCommunities(myComms);
-      setBookspots(allBookspots);
 
       // Fetch bookspot info for all communities
       const allCommunities = [...allComms, ...myComms];
@@ -149,13 +150,12 @@ export default function ComunidadesScreen() {
           const currentLocation = await Location.getCurrentPositionAsync({});
           lat = currentLocation.coords.latitude;
           lon = currentLocation.coords.longitude;
-          setLocation({ latitude: lat, longitude: lon });
         } catch (e) {
           console.warn('Could not get current location, using default', e);
         }
       }
     }
-    
+
     await fetchCommunities(lat, lon);
     setLoading(false);
     setRefreshing(false);
@@ -304,7 +304,7 @@ export default function ComunidadesScreen() {
   };
 
   // Render a community card
-  const renderCommunityCard = ({ item, index }: { item: CommunityDto; index: number }) => {
+  const renderCommunityCard = ({ item }: { item: CommunityDto }) => {
     const availableSpots = MAX_MEMBERS - item.memberCount;
     const bookspotInfo = bookspotInfoMap[item.referenceBookspotId];
     const genres = getGenres(item.id);
@@ -515,7 +515,6 @@ export default function ComunidadesScreen() {
                     <Ionicons name="close" size={24} color={COLORS.grayText} />
                   </Pressable>
                 </View>
-
                 {/* Location */}
                 <View style={styles.modalLocationRow}>
                   <Ionicons name="location" size={16} color={COLORS.coral} />

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,12 +14,15 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities, getCommunityMembers, kickMember } from '@/lib/communityApi';
+import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities, kickMember } from '@/lib/communityApi';
 import { getBookspotById, BookspotDTO } from '@/lib/bookspotApi';
+import { getChat } from '@/lib/chatApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityDto, CommunityMemberDto } from '@/types/community';
 import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
+import CommunityMeetupTab from '@/components/communities/CommunityMeetupTab';
 import CommunityChatTab from '@/components/communities/CommunityChatTab';
+
 
 const MAX_MEMBERS = 10;
 
@@ -35,7 +38,7 @@ const SECTIONS: { key: SectionKey; label: string; icon: keyof typeof Ionicons.gl
 export default function CommunityDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { currentUserId, backendUserId } = useAuth();
+  const { backendUserId } = useAuth();
   const communityId = Number(id);
 
   const [community, setCommunity] = useState<CommunityDto | null>(null);
@@ -92,10 +95,25 @@ export default function CommunityDetailScreen() {
     setAdminModalVisible(true);
     setAdminLoading(true);
     try {
-      const members = await getCommunityMembers(community.id);
+      if (!community.chatId) {
+        setAdminMembers([]);
+        return;
+      }
+
+      const chat = await getChat(community.chatId);
+      const members: CommunityMemberDto[] = (chat.participants || []).map(p => ({
+        communityId: community.id,
+        userId: p.userId,
+        username: p.username,
+        profilePhoto: p.profilePhoto,
+        role: p.role ?? 'MEMBER',
+        joinedAt: p.joinedAt,
+      }));
+
       setAdminMembers(members);
     } catch (e) {
       console.warn("Could not load community members", e);
+      setAdminMembers([]);
     } finally {
       setAdminLoading(false);
     }
@@ -165,6 +183,13 @@ export default function CommunityDetailScreen() {
     }
   };
 
+  const isCreator =
+    !!community &&
+    !!backendUserId &&
+    community.creatorId.toLowerCase() === backendUserId.toLowerCase();
+  const canModerateCommunity = !!community && (isCreator || community.currentUserRole === 'MODERATOR');
+  const canCreateMeetups = canModerateCommunity;
+
   if (loading || !community) {
     return (
       <View style={styles.container}>
@@ -233,8 +258,8 @@ export default function CommunityDetailScreen() {
           <View style={styles.tabBar}>
             {SECTIONS.map(section => {
               const isActive = activeSection === section.key;
-              // Chat and Biblioteca are enabled, others are disabled
-              const isDisabled = section.key !== 'biblioteca' && section.key !== 'chat';
+              const isDisabled = section.key === 'ranking';
+
               return (
                 <Pressable
                   key={section.key}
@@ -260,9 +285,20 @@ export default function CommunityDetailScreen() {
           </View>
 
           {/* Contenido de la sección activa */}
+          {activeSection === 'quedadas' && (
+            <CommunityMeetupTab
+              communityId={communityId}
+              meetingPointId={community?.referenceBookspotId}
+              meetingPointName={bookspot?.nombre}
+              meetingPointAddress={bookspot?.addressText}
+              canCreateMeetups={canCreateMeetups}
+            />
+          )}
+
           {activeSection === 'chat' && community.chatId && (
             <CommunityChatTab communityId={communityId} chatId={community.chatId} />
           )}
+
           {activeSection === 'biblioteca' && (
             <CommunityLibraryTab communityId={communityId} />
           )}
@@ -289,11 +325,15 @@ export default function CommunityDetailScreen() {
                 <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
                   <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
                   {adminMembers.map(m => {
-                    const isCurrentUser = backendUserId && m.userId.toLowerCase() === backendUserId.toLowerCase();
-                    const isModerator = backendUserId && adminMembers.some(
-                      mem => mem.userId.toLowerCase() === backendUserId.toLowerCase() && mem.role === 'MODERATOR'
-                    );
-                    const canKick = isModerator && !isCurrentUser && m.role !== 'MODERATOR';
+                    const isCurrentUser =
+                      !!backendUserId && m.userId.toLowerCase() === backendUserId.toLowerCase();
+                    const targetIsCreator = m.userId.toLowerCase() === community.creatorId.toLowerCase();
+                    const targetIsModerator = m.role === 'MODERATOR';
+                    const canKick =
+                      canModerateCommunity &&
+                      !isCurrentUser &&
+                      !targetIsCreator &&
+                      (isCreator || !targetIsModerator);
                     const isKicking = kickingMemberId === m.userId;
 
                     return (
@@ -307,9 +347,11 @@ export default function CommunityDetailScreen() {
                             </View>
                           )}
                           <Text style={styles.memberName}>{m.username}</Text>
-                          {m.role === 'MODERATOR' && (
+                          {m.userId === community.creatorId ? (
+                            <Text style={styles.creatorBadge}>(Creador)</Text>
+                          ) : m.role === 'MODERATOR' ? (
                             <Text style={styles.creatorBadge}>(Moderador)</Text>
-                          )}
+                          ) : null}
                         </View>
                         {canKick && (
                           <Pressable
@@ -337,7 +379,7 @@ export default function CommunityDetailScreen() {
                     <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
                   </Pressable>
 
-                  {backendUserId && adminMembers.some(m => m.userId.toLowerCase() === backendUserId.toLowerCase() && m.role === 'MODERATOR') && (
+                  {canModerateCommunity && (
                     <Pressable
                       style={styles.deleteBtn}
                       onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
@@ -398,7 +440,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 12,
     backgroundColor: '#fdfbf7',
   },

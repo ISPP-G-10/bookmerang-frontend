@@ -1,4 +1,13 @@
-import { CommunityDto, CreateCommunityRequest, CommunityLibraryBookDto, CommunityMemberDto } from '@/types/community';
+import {
+  CommunityDto,
+  CreateCommunityRequest,
+  CommunityLibraryBookDto,
+  CommunityMeetupDto,
+  CreateCommunityMeetupRequest,
+  AttendCommunityMeetupRequest,
+  MeetupAttendanceDto,
+  CommunityMemberDto,
+} from '@/types/community';
 import { apiRequest } from './api';
 
 export async function exploreCommunities(latitude: number, longitude: number, radiusKm: number = 50): Promise<CommunityDto[]> {
@@ -154,6 +163,97 @@ export async function toggleBookLike(communityId: number, bookId: number): Promi
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Error al dar like: ${res.status} ${errorText}`);
+  }
+}
+
+// --- QUEDADAS ---
+
+export async function getCommunityMeetups(communityId: number): Promise<CommunityMeetupDto[]> {
+  const res = await apiRequest(`/communities/${communityId}/meetups`);
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al cargar las quedadas: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function createCommunityMeetup(
+  communityId: number,
+  request: CreateCommunityMeetupRequest
+): Promise<CommunityMeetupDto> {
+  const res = await apiRequest(`/communities/${communityId}/meetups`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al crear la quedada: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function updateCommunityMeetup(
+  communityId: number,
+  meetupId: number,
+  request: CreateCommunityMeetupRequest
+): Promise<CommunityMeetupDto> {
+  const res = await apiRequest(`/communities/${communityId}/meetups/${meetupId}`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al actualizar la quedada: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function deleteCommunityMeetup(communityId: number, meetupId: number): Promise<void> {
+  const res = await apiRequest(`/communities/${communityId}/meetups/${meetupId}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al eliminar la quedada: ${res.status} ${errorText}`);
+  }
+}
+
+export async function attendCommunityMeetup(
+  communityId: number,
+  meetupId: number,
+  request: AttendCommunityMeetupRequest
+): Promise<MeetupAttendanceDto> {
+  const res = await apiRequest(`/communities/${communityId}/meetups/${meetupId}/attend`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al apuntarte a la quedada: ${res.status} ${errorText}`);
+  }
+
+  return res.json();
+}
+
+export async function cancelCommunityMeetupAttendance(
+  communityId: number,
+  meetupId: number
+): Promise<void> {
+  const res = await apiRequest(`/communities/${communityId}/meetups/${meetupId}/attend`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al cancelar asistencia: ${res.status} ${errorText}`);
   }
 }
 
