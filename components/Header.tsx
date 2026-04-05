@@ -13,7 +13,8 @@ interface HeaderProps {
 
 export default function Header({ showBack = false }: HeaderProps) {
   const insets = useSafeAreaInsets();
-  const { currentUserId } = useAuth();
+  const { isBookdropUser, currentUserId } = useAuth();
+  const shouldShowLeftButton = showBack || !isBookdropUser;
   const [inkdrops, setInkdrops] = useState<number | null>(null);
 
   useEffect(() => {
@@ -33,15 +34,19 @@ export default function Header({ showBack = false }: HeaderProps) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
-      <TouchableOpacity onPress={handleLeftPress}>
-        <View style={styles.profileButton}>
-          <FontAwesome
-            name={showBack ? "arrow-left" : "user"}
-            size={18}
-            color="#fdfbf7"
-          />
-        </View>
-      </TouchableOpacity>
+      {shouldShowLeftButton ? (
+        <TouchableOpacity onPress={handleLeftPress}>
+          <View style={styles.profileButton}>
+            <FontAwesome
+              name={showBack ? "arrow-left" : "user"}
+              size={18}
+              color="#fdfbf7"
+            />
+          </View>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.spacer} />
+      )}
 
       <View style={styles.logoContainer}>
         <View style={styles.logoIcon}>

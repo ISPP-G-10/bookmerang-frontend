@@ -5,6 +5,7 @@ export interface ChatParticipantDto {
   username: string;
   profilePhoto: string;
   joinedAt: string;
+  role?: 'MEMBER' | 'MODERATOR' | null;
 }
 
 export interface MessageDto {

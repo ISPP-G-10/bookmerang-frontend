@@ -1,13 +1,11 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Link, Tabs } from 'expo-router';
-import React from 'react';
-import { Pressable } from 'react-native';
+import { Tabs, usePathname, useRouter } from 'expo-router';
+import React, { useEffect } from 'react';
 
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useAuth } from '@/contexts/AuthContext';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
@@ -17,6 +15,26 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { isBookdropUser, loading } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (isBookdropUser) {
+      router.replace('/bookDropControlPanel');
+    }
+  }, [isBookdropUser, loading, pathname, router]);
+
+  if (loading) {
+    return null;
+  }
+
+  if (isBookdropUser) {
+    // Los usuarios BookDrop no deben montar el layout de tabs.
+    return null;
+  }
 
   return (
     <Tabs

@@ -33,7 +33,10 @@ export default function CommunityLibraryTab({ communityId }: Props) {
   const isFreeUser = userPlan === 'FREE';
 
   const fetchLibrary = useCallback(async () => {
-    if (isFreeUser) return;
+    if (isFreeUser) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await getCommunityLibrary(communityId, 1, 100);
@@ -218,6 +221,7 @@ export default function CommunityLibraryTab({ communityId }: Props) {
         data={filteredBooks}
         keyExtractor={(item) => item.bookId.toString()}
         renderItem={renderBookCard}
+        style={styles.booksList}
         contentContainerStyle={filteredBooks.length === 0 ? styles.listEmpty : styles.listContent}
         ListEmptyComponent={
           <View style={styles.centered}>
@@ -258,10 +262,13 @@ const styles = StyleSheet.create({
   },
   filtersScroll: {
     flexGrow: 0,
+    flexShrink: 0,
+    maxHeight: 50,
   },
   filtersContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
+    alignItems: 'center',
   },
   filterChip: {
     paddingHorizontal: 14,
@@ -292,6 +299,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  booksList: {
+    flex: 1,
   },
   card: {
     flexDirection: 'row',

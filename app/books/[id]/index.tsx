@@ -45,9 +45,7 @@ export default function BookDetailScreen() {
         setBook(await getBookDetail(Number(id)));
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Error desconocido";
-        if (errorMessage.startsWith("403")) {
-          setError("No tienes permiso para ver este libro.");
-        } else if (errorMessage.startsWith("404")) {
+        if (errorMessage.startsWith("404")) {
           setError("Este libro no existe.")
         } else {
           setError("No se pudo cargar el detalle del libro.");

@@ -11,28 +11,31 @@ import React, {
   useState,
 } from 'react';
 
-// ── Tipos ──────────────────────────────────────────────
+type AuthUserType = string | undefined | null;
+
+type AuthSessionUser = {
+  id: string;
+  email: string;
+  username?: string;
+  name?: string;
+  profilePhoto?: string;
+  userType?: AuthUserType;
+};
+
+type AuthSession = {
+  accessToken: string;
+  user: AuthSessionUser;
+};
+
 interface AuthContextType {
-  /** Sesión local (contiene access token y datos básicos del usuario) */
-  session: any | null;
-
-  /** ID interno del usuario en el backend (≠ Supabase UUID).
-   *  Puede ser null si aún no se ha resuelto. */
+  session: AuthSession | null;
   backendUserId: string | null;
-
-  /** ID utilizable para identificar al usuario actual. */
   currentUserId: string | null;
-
-  /** Plan de pricing del usuario ('FREE' | 'PREMIUM') */
   userPlan: string;
-
-  /** true mientras se está comprobando la sesión inicial */
   loading: boolean;
-
-  /** Fija el ID interno del backend (resolverlo desde datos de chat, registro, etc.) */
+  userType: AuthUserType;
+  isBookdropUser: boolean;
   setBackendUserId: (id: string) => void;
-
-  /** Cierra sesión local y limpia el estado */
   signOut: () => Promise<void>;
 }
 
@@ -42,16 +45,25 @@ const AuthContext = createContext<AuthContextType>({
   currentUserId: null,
   userPlan: 'FREE',
   loading: true,
+  userType: null,
+  isBookdropUser: false,
   setBackendUserId: () => {},
   signOut: async () => {},
 });
 
-// ── Helper ─────────────────────────────────────────────
 const storageKey = (userId: string) => `backendUserId_${userId}`;
 
-// ── Provider ───────────────────────────────────────────
+function normalizeUserType(userType: AuthUserType): string {
+  return String(userType ?? '').trim().toUpperCase();
+}
+
+function isBookdropUserType(userType: AuthUserType): boolean {
+  const normalized = normalizeUserType(userType);
+  return normalized === 'BOOKDROP_USER' || normalized === 'BOOKDROP' || normalized === 'BUSINESS';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<any | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [backendUserId, setBackendUserIdState] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<string>('FREE');
   const [loading, setLoading] = useState(true);
@@ -100,14 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace('/login' as any);
   }, [safeRemoveStorageItem, session]);
 
-  // Intenta resolver el backendUserId y plan desde el backend o desde AsyncStorage
   const resolveBackendUserId = useCallback(async (userId: string) => {
-    // Primero intentar desde AsyncStorage
     const stored = await safeGetStorageItem(storageKey(userId));
     if (stored) {
       setBackendUserIdState(stored);
     }
-    // Siempre llamar al backend para obtener el plan actualizado
+
     try {
       const backendUser = await fetchMyBackendUser();
       if (backendUser) {
@@ -122,44 +132,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     getStoredAuthSession().then((storedSession) => {
-      const restoredSession = storedSession
-        ? {
-            access_token: storedSession.accessToken,
-            user: {
-              id: storedSession.user.id,
-              email: storedSession.user.email,
-            },
-          }
-        : null;
-
-      // 1. Obtener sesión inicial y restaurar backendUserId persistido
-      setSession(restoredSession);
+      setSession(storedSession);
       setLoading(false);
 
-      if (!restoredSession) {
-        router.replace('/login' as any);
-      } else {
-        const userId = restoredSession.user?.id;
-        if (userId) {
-          void resolveBackendUserId(userId);
-        }
+      const userId = storedSession?.user?.id;
+      if (userId) {
+        void resolveBackendUserId(userId);
       }
     });
   }, [resolveBackendUserId]);
 
-  // ID utilizable: backendUserId si existe, si no el id de sesión local
   const currentUserId = backendUserId ?? session?.user?.id ?? null;
+  const userType = session?.user?.userType;
+  const isBookdropUser = isBookdropUserType(userType);
 
   return (
     <AuthContext.Provider
-      value={{ session, backendUserId, currentUserId, userPlan, loading, setBackendUserId, signOut }}
+      value={{
+        session,
+        backendUserId,
+        currentUserId,
+        userPlan,
+        loading,
+        userType,
+        isBookdropUser,
+        setBackendUserId,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
 
-// ── Hook ───────────────────────────────────────────────
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
   if (!ctx) {
