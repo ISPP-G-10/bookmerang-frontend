@@ -6,10 +6,11 @@ import {
   updateBookdropProfile,
   type BookdropProfile,
 } from "@/lib/bookdropApi";
+import { searchGeocodingSuggestions, GeocodingSuggestion } from "@/lib/geocodingApi";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -19,6 +20,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -26,8 +28,6 @@ type EditableFields = {
   nombreEstablecimiento: string;
   addressText: string;
   profilePhoto: string;
-  latitud: string;
-  longitud: string;
 };
 
 function getStatusMeta(rawStatus: string | number) {
@@ -84,8 +84,6 @@ function toEditableFields(profile: BookdropProfile): EditableFields {
     nombreEstablecimiento: profile.nombreEstablecimiento ?? "",
     addressText: profile.addressText ?? "",
     profilePhoto: profile.profilePhoto ?? "",
-    latitud: String(profile.latitud ?? ""),
-    longitud: String(profile.longitud ?? ""),
   };
 }
 
@@ -105,9 +103,11 @@ export default function BookDropControlPanelScreen() {
     nombreEstablecimiento: "",
     addressText: "",
     profilePhoto: "",
-    latitud: "",
-    longitud: "",
   });
+  const [addressLocation, setAddressLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<GeocodingSuggestion[]>([]);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const addressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const statusMeta = useMemo(
     () => getStatusMeta(profile?.bookspotStatus ?? ""),
@@ -156,12 +156,39 @@ export default function BookDropControlPanelScreen() {
     }));
   }, []);
 
+  const handleAddressSearch = useCallback((query: string) => {
+    handleChange("addressText", query);
+    setAddressLocation(null);
+
+    if (addressTimeoutRef.current) clearTimeout(addressTimeoutRef.current);
+
+    addressTimeoutRef.current = setTimeout(async () => {
+      if (query.trim().length < 3) {
+        setAddressSuggestions([]);
+        return;
+      }
+      try {
+        setSearchingAddress(true);
+        const results = await searchGeocodingSuggestions(query.trim());
+        setAddressSuggestions(results);
+      } catch {
+        setAddressSuggestions([]);
+      } finally {
+        setSearchingAddress(false);
+      }
+    }, 500);
+  }, [handleChange]);
+
+  const handleSelectAddress = useCallback((suggestion: GeocodingSuggestion) => {
+    handleChange("addressText", suggestion.label);
+    setAddressLocation({ lat: suggestion.lat, lon: suggestion.lon });
+    setAddressSuggestions([]);
+  }, [handleChange]);
+
   const handleSave = useCallback(async () => {
     const trimmedNombre = form.nombreEstablecimiento.trim();
     const trimmedAddress = form.addressText.trim();
     const trimmedPhoto = form.profilePhoto.trim();
-    const parsedLat = Number(form.latitud);
-    const parsedLng = Number(form.longitud);
 
     if (trimmedNombre.length < 3) {
       setError("El nombre del establecimiento debe tener al menos 3 caracteres");
@@ -173,8 +200,12 @@ export default function BookDropControlPanelScreen() {
       return;
     }
 
-    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      setError("La latitud y la longitud deben ser válidas");
+    // Usar coordenadas del geocoding si se seleccionó nueva dirección, si no las del perfil actual
+    const lat = addressLocation?.lat ?? profile?.latitud;
+    const lon = addressLocation?.lon ?? profile?.longitud;
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setError("Selecciona una dirección válida de la lista de sugerencias");
       return;
     }
 
@@ -187,19 +218,20 @@ export default function BookDropControlPanelScreen() {
         nombreEstablecimiento: trimmedNombre,
         addressText: trimmedAddress,
         profilePhoto: trimmedPhoto,
-        latitud: parsedLat,
-        longitud: parsedLng,
+        latitud: lat!,
+        longitud: lon!,
       });
 
       setProfile(updatedProfile);
       setForm(toEditableFields(updatedProfile));
+      setAddressLocation(null);
       setSuccessMessage("Perfil actualizado correctamente");
     } catch (e: any) {
       setError(e?.message ?? "No se pudo guardar el perfil");
     } finally {
       setSaving(false);
     }
-  }, [form]);
+  }, [form, addressLocation, profile]);
 
   const handleDelete = useCallback(async () => {
     if (deleting) return;
@@ -312,14 +344,42 @@ export default function BookDropControlPanelScreen() {
           />
 
           <FieldLabel label="Dirección" />
-          <TextInput
-            value={form.addressText}
-            onChangeText={(value) => handleChange("addressText", value)}
-            placeholder="Dirección del establecimiento"
-            placeholderTextColor="#a7a1b3"
-            style={[styles.input, styles.multilineInput]}
-            multiline
-          />
+          <View style={{ flexDirection: "row", alignItems: "center", borderRadius: 12, borderWidth: 1, borderColor: "#e8dfd7", backgroundColor: "#fffdfa", paddingHorizontal: 14, marginBottom: 4, minHeight: 46 }}>
+            <TextInput
+              value={form.addressText}
+              onChangeText={handleAddressSearch}
+              placeholder="Busca la dirección del establecimiento..."
+              placeholderTextColor="#a7a1b3"
+              style={{ flex: 1, color: "#2f2d3a", paddingVertical: 12 }}
+              autoCapitalize="none"
+            />
+            {searchingAddress && <ActivityIndicator size="small" color="#e07a5f" />}
+            {addressLocation && <Ionicons name="checkmark-circle" size={20} color="#4caf50" />}
+          </View>
+
+          {addressSuggestions.length > 0 && (
+            <View style={{ borderWidth: 1, borderColor: "#e8dfd7", borderRadius: 12, overflow: "hidden", marginBottom: 8, maxHeight: 160 }}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                {addressSuggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => handleSelectAddress(item)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderBottomWidth: index < addressSuggestions.length - 1 ? 1 : 0,
+                      borderBottomColor: "#e8dfd7",
+                      backgroundColor: index % 2 === 0 ? "#ffffff" : "#fdfbf7",
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, color: "#2f2d3a", lineHeight: 18 }} numberOfLines={2}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           <FieldLabel label="Foto de perfil" />
           <TextInput
@@ -330,32 +390,6 @@ export default function BookDropControlPanelScreen() {
             style={styles.input}
             autoCapitalize="none"
           />
-
-          <View style={styles.coordinatesRow}>
-            <View style={styles.coordinateColumn}>
-              <FieldLabel label="Latitud" />
-              <TextInput
-                value={form.latitud}
-                onChangeText={(value) => handleChange("latitud", value)}
-                placeholder="37.3886"
-                placeholderTextColor="#a7a1b3"
-                style={styles.input}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.coordinateColumn}>
-              <FieldLabel label="Longitud" />
-              <TextInput
-                value={form.longitud}
-                onChangeText={(value) => handleChange("longitud", value)}
-                placeholder="-5.9823"
-                placeholderTextColor="#a7a1b3"
-                style={styles.input}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
 
           <Pressable
             style={[styles.primaryButton, (saving || deleting) && styles.buttonDisabled]}
@@ -630,13 +664,6 @@ const styles = StyleSheet.create({
   multilineInput: {
     minHeight: 88,
     textAlignVertical: "top",
-  },
-  coordinatesRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  coordinateColumn: {
-    flex: 1,
   },
   actionsCard: {
     gap: 10,

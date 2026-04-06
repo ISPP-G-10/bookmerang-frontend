@@ -5,10 +5,12 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/authService";
+import { searchGeocodingSuggestions, GeocodingSuggestion } from "@/lib/geocodingApi";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 type Genre = { id: number; name: string };
 
@@ -25,7 +27,10 @@ export default function RegisterScreen() {
 
   const [bookdropName, setBookdropName] = useState("");
   const [bookdropAddress, setBookdropAddress] = useState("");
-  const [bookdropPhoto, setBookdropPhoto] = useState("");
+  const [bookdropLocation, setBookdropLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<GeocodingSuggestion[]>([]);
+  const [searchingAddress, setSearchingAddress] = useState(false);
+  const addressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,6 +66,10 @@ export default function RegisterScreen() {
       setError("Todos los campos son obligatorios");
       return false;
     }
+    if (!bookdropLocation) {
+      setError("Selecciona una dirección válida de la lista de sugerencias");
+      return false;
+    }
     if (password.length < 6) {
       setError("La contraseña debe tener al menos 6 caracteres");
       return false;
@@ -71,6 +80,35 @@ export default function RegisterScreen() {
     }
     return true;
   }
+
+  const handleAddressSearch = (query: string) => {
+    setBookdropAddress(query);
+    setBookdropLocation(null);
+
+    if (addressTimeoutRef.current) clearTimeout(addressTimeoutRef.current);
+
+    addressTimeoutRef.current = setTimeout(async () => {
+      if (query.trim().length < 3) {
+        setAddressSuggestions([]);
+        return;
+      }
+      try {
+        setSearchingAddress(true);
+        const results = await searchGeocodingSuggestions(query.trim());
+        setAddressSuggestions(results);
+      } catch {
+        setAddressSuggestions([]);
+      } finally {
+        setSearchingAddress(false);
+      }
+    }, 500);
+  };
+
+  const handleSelectAddress = (suggestion: GeocodingSuggestion) => {
+    setBookdropAddress(suggestion.label);
+    setBookdropLocation({ lat: suggestion.lat, lon: suggestion.lon });
+    setAddressSuggestions([]);
+  };
 
 
   const handleRegister = async () => {
@@ -126,19 +164,7 @@ export default function RegisterScreen() {
     setError("");
 
     try {
-      // 1) Get Location
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      let latitud = FALLBACK_LAT;
-      let longitud = FALLBACK_LNG;
-
-      if (status === "granted") {
-        const location = await Location.getCurrentPositionAsync({});
-        latitud = location.coords.latitude;
-        longitud = location.coords.longitude;
-        setUserLocation({ latitude: latitud, longitude: longitud });
-      }
-
-      // 2) Backend Register
+      // La ubicación viene de la dirección seleccionada por geocoding
       const userData = await authService.registerBookdropBackendProfile({
         Email: email,
         Password: password,
@@ -146,8 +172,8 @@ export default function RegisterScreen() {
         Name: name,
         NombreEstablecimiento: bookdropName,
         AddressText: bookdropAddress,
-        Latitud: latitud,
-        Longitud: longitud,
+        Latitud: bookdropLocation!.lat,
+        Longitud: bookdropLocation!.lon,
       });
 
       if (userData?.id) {
@@ -257,6 +283,12 @@ export default function RegisterScreen() {
         </Pressable>
       </View>
 
+      {isBookdrop && (
+        <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, marginTop: 4 }}>
+          Datos del Responsable
+        </Text>
+      )}
+
       <AuthInput
         icon="person-outline"
         placeholder="Nombre completo"
@@ -289,8 +321,12 @@ export default function RegisterScreen() {
         isPassword
       />
 
-      {isBookdrop ? (
+      {isBookdrop && (
         <>
+          <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, marginTop: 8 }}>
+            Datos del Establecimiento
+          </Text>
+
           <AuthInput
             icon="home-outline"
             placeholder="Nombre del establecimiento"
@@ -298,15 +334,44 @@ export default function RegisterScreen() {
             onChangeText={setBookdropName}
           />
 
-          <AuthInput
-            icon="map-outline"
-            placeholder="Dirección del establecimiento"
-            value={bookdropAddress}
-            onChangeText={setBookdropAddress}
-          />
+          <View className="flex-row items-center bg-white border border-[#e8e4dc] rounded-xl px-4 mb-1 h-14">
+            <Ionicons name="map-outline" size={18} color="#b0adb8" style={{ marginRight: 10 }} />
+            <TextInput
+              className="flex-1 text-[15px] text-[#3d405b]"
+              placeholderTextColor="#b0adb8"
+              placeholder="Busca la dirección del establecimiento..."
+              value={bookdropAddress}
+              onChangeText={handleAddressSearch}
+              autoCapitalize="none"
+            />
+            {searchingAddress && <ActivityIndicator size="small" color="#e07a5f" />}
+            {bookdropLocation && <Ionicons name="checkmark-circle" size={20} color="#4caf50" />}
+          </View>
+
+          {addressSuggestions.length > 0 && (
+            <View style={{ borderWidth: 1, borderColor: "#e8e4dc", borderRadius: 12, overflow: "hidden", marginBottom: 8, maxHeight: 160 }}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {addressSuggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => handleSelectAddress(item)}
+                    style={{
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderBottomWidth: index < addressSuggestions.length - 1 ? 1 : 0,
+                      borderBottomColor: "#e8e4dc",
+                      backgroundColor: index % 2 === 0 ? "#ffffff" : "#fdfbf7",
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, color: "#3d405b", lineHeight: 18 }} numberOfLines={2}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </>
-      ) : (
-        null
       )}
 
       <ErrorMessage message={error} />
