@@ -116,7 +116,7 @@ function RankingRow({
         </Text>
       </View>
 
-      <VStack className="flex-1 gap-0.5">
+      <VStack className="flex-1 gap-1">
         <Text
           className="text-sm font-semibold"
           style={{ color: isMe ? "#e4715f" : "#1f2937" }}
@@ -212,60 +212,62 @@ export default function CommunityRankingTab({ communityId }: Props) {
   const rest = ranking.ranking.slice(1);
 
   return (
-    <FlatList
-      data={rest}
-      keyExtractor={(item) => item.userId.toString()}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 24 }}
-      ListHeaderComponent={
-        <VStack className="gap-0">
-          {/* Banner */}
-          <View className="mx-3 mt-3 mb-2 bg-amber-50 rounded-2xl p-3.5 border border-amber-200">
-            <HStack className="items-center gap-1.5 mb-1">
-              <Ionicons name="trophy" size={18} color="#f59e0b" />
-              <Text className="text-base font-bold text-[#1f2937]">
-                Clasificación Mensual
+    <>
+      <FlatList
+        data={rest}
+        keyExtractor={(item) => item.userId.toString()}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        ListHeaderComponent={
+          <VStack className="gap-0">
+            {/* Banner */}
+            <View className="mx-3 mt-3 mb-2 bg-amber-50 rounded-2xl p-3.5 border border-amber-200">
+              <HStack className="items-center gap-1.5 mb-1">
+                <Ionicons name="trophy" size={18} color="#f59e0b" />
+                <Text className="text-base font-bold text-[#1f2937]">
+                  Clasificación Mensual
+                </Text>
+              </HStack>
+              <Text className="text-sm text-[#4b5563] leading-snug">
+                El 1º del ranking al final de mes obtiene{" "}
+                <Text className="text-[#e4715f] font-bold">Premium gratis</Text>{" "}
+                el próximo mes
               </Text>
-            </HStack>
-            <Text className="text-sm text-[#4b5563] leading-snug">
-              El 1º del ranking al final de mes obtiene{" "}
-              <Text className="text-[#e4715f] font-bold">Premium gratis</Text>{" "}
-              el próximo mes
-            </Text>
-          </View>
+            </View>
 
-          {/* How to earn */}
-          <View className="mx-3 mb-3 bg-white rounded-xl p-3 border border-[#f0ece4]">
-            <Text className="text-xs font-semibold text-[#374151] mb-1.5">
-              Cómo ganar InkDrops:
-            </Text>
-            <HStack className="items-center gap-1.5 mb-1">
-              <View className="w-1.5 h-1.5 rounded-full bg-[#e4715f]" />
-              <Text className="text-xs text-[#4b5563]">
-                +100 por cada intercambio completado
+            {/* How to earn */}
+            <View className="mx-3 mb-3 bg-white rounded-xl p-3 border border-[#f0ece4]">
+              <Text className="text-xs font-semibold text-[#374151] mb-1.5">
+                Cómo ganar InkDrops:
               </Text>
-            </HStack>
-            <HStack className="items-center gap-1.5">
-              <View className="w-1.5 h-1.5 rounded-full bg-[#e4715f]" />
-              <Text className="text-xs text-[#4b5563]">
-                +200 por asistir a una quedada
-              </Text>
-            </HStack>
-          </View>
+              <HStack className="items-center gap-1.5 mb-1">
+                <View className="w-1.5 h-1.5 rounded-full bg-[#e4715f]" />
+                <Text className="text-xs text-[#4b5563]">
+                  +100 por cada intercambio completado
+                </Text>
+              </HStack>
+              <HStack className="items-center gap-1.5">
+                <View className="w-1.5 h-1.5 rounded-full bg-[#e4715f]" />
+                <Text className="text-xs text-[#4b5563]">
+                  +200 por asistir a una quedada
+                </Text>
+              </HStack>
+            </View>
 
-          {/* Leader */}
-          <LeaderCard entry={leader} isMe={leader.userId === currentUserId} />
-        </VStack>
-      }
-      renderItem={({ item, index }) => (
-        <View className="px-3">
-          <RankingRow
-            entry={item}
-            position={index + 2}
-            isMe={item.userId === currentUserId}
-          />
-        </View>
-      )}
-    />
+            {/* Leader */}
+            <LeaderCard entry={leader} isMe={leader.userId === currentUserId} />
+          </VStack>
+        }
+        renderItem={({ item, index }) => (
+          <View className="px-3">
+            <RankingRow
+              entry={item}
+              position={index + 2}
+              isMe={item.userId === currentUserId}
+            />
+          </View>
+        )}
+      />
+    </>
   );
 }

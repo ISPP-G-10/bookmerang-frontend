@@ -25,6 +25,7 @@ import {
   deleteCommunity,
   getCommunity,
   getMyCommunities,
+  kickMember,
   leaveCommunity,
 } from "@/lib/communityApi";
 import { CommunityDto, CommunityMemberDto } from "@/types/community";
@@ -66,8 +67,6 @@ export default function CommunityDetailScreen() {
     isDestructive: false,
     onConfirm: async () => {},
   });
-
-  // ... rest of state
 
   const bookspotName = bookspot?.nombre ?? "";
 

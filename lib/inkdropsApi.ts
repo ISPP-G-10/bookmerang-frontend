@@ -1,4 +1,4 @@
-import { CommunityRankingDto } from "@/types/community";
+import { CommunityRankingDto, InkdropsHistoryDto } from "@/types/community";
 import { apiRequest } from "./api";
 
 export const getMyInkdrops = async (): Promise<{
@@ -20,6 +20,15 @@ export const getCommunityRanking = async (
   if (!res.ok) {
     const errorText = await res.text();
     throw new Error(`Error al cargar ranking: ${res.status} ${errorText}`);
+  }
+  return res.json();
+};
+
+export const getInkdropsHistory = async (): Promise<InkdropsHistoryDto[]> => {
+  const res = await apiRequest("/inkdrops/history");
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Error al cargar histórial: ${res.status} ${errorText}`);
   }
   return res.json();
 };

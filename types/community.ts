@@ -103,3 +103,15 @@ export interface CommunityRankingDto {
   month: string;
   ranking: CommunityRankingEntryDto[];
 }
+
+export type InkdropsActionType =
+  | "EXCHANGE_COMPLETED"
+  | "MEETUP_ATTENDED"
+  | "OTHER";
+
+export interface InkdropsHistoryDto {
+  id: number;
+  actionType: InkdropsActionType;
+  pointsGranted: number;
+  createdAt: string;
+}
