@@ -5,12 +5,12 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/authService";
-import { searchGeocodingSuggestions, GeocodingSuggestion } from "@/lib/geocodingApi";
+import { GeocodingSuggestion, searchGeocodingSuggestions } from "@/lib/geocodingApi";
+import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useRef, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 
 type Genre = { id: number; name: string };
 
@@ -284,7 +284,7 @@ export default function RegisterScreen() {
       </View>
 
       {isBookdrop && (
-        <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, marginTop: 4 }}>
+        <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10, marginTop: 4 }}>
           Datos del Responsable
         </Text>
       )}
@@ -323,7 +323,7 @@ export default function RegisterScreen() {
 
       {isBookdrop && (
         <>
-          <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4, marginTop: 8 }}>
+          <Text style={{ color: "#5f5b73", fontWeight: "700", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10, marginTop: 8 }}>
             Datos del Establecimiento
           </Text>
 
@@ -334,7 +334,7 @@ export default function RegisterScreen() {
             onChangeText={setBookdropName}
           />
 
-          <View className="flex-row items-center bg-white border border-[#e8e4dc] rounded-xl px-4 mb-1 h-14">
+          <View className="flex-row items-center bg-white border border-[#e8e4dc] rounded-xl px-4 mb-4 h-14">
             <Ionicons name="map-outline" size={18} color="#b0adb8" style={{ marginRight: 10 }} />
             <TextInput
               className="flex-1 text-[15px] text-[#3d405b]"
