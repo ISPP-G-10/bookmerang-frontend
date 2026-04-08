@@ -71,8 +71,10 @@ export async function getMyChats(): Promise<ChatDto[]> {
 /**
  * Obtiene un chat específico por ID.
  * GET /api/chat/{chatId}
+ * Lanza un error con código 404 si el chat no existe.
+ * Lanza un error con código 403 si el usuario no tiene acceso.
  */
-export async function getChat(chatId: number): Promise<ChatDto> {
+export async function getChat(chatId: string): Promise<ChatDto> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}`, { headers });
 
@@ -92,7 +94,7 @@ export async function getChat(chatId: number): Promise<ChatDto> {
  * GET /api/chat/{chatId}/messages?page=1&pageSize=50
  */
 export async function getMessages(
-  chatId: number,
+  chatId: string,
   page: number = 1,
   pageSize: number = 50
 ): Promise<MessageDto[]> {
@@ -124,7 +126,7 @@ export async function getMessages(
  * esto nos permite resolver el userId de forma definitiva.
  */
 export async function sendMessage(
-  chatId: number,
+  chatId: string,
   body: string
 ): Promise<MessageDto> {
   const headers = await getAuthHeaders();
@@ -174,7 +176,7 @@ export async function createChat(
  * Indica que el usuario está escribiendo en un chat.
  * POST /api/chat/{chatId}/typing
  */
-export async function startTyping(chatId: number): Promise<void> {
+export async function startTyping(chatId: string): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
     method: 'POST',
@@ -190,7 +192,7 @@ export async function startTyping(chatId: number): Promise<void> {
  * Indica que el usuario dejó de escribir en un chat.
  * DELETE /api/chat/{chatId}/typing
  */
-export async function stopTyping(chatId: number): Promise<void> {
+export async function stopTyping(chatId: string): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
     method: 'DELETE',
@@ -206,7 +208,7 @@ export async function stopTyping(chatId: number): Promise<void> {
  * Obtiene los usuarios que están escribiendo en un chat.
  * GET /api/chat/{chatId}/typing
  */
-export async function getTypingUsers(chatId: number): Promise<TypingUserDto[]> {
+export async function getTypingUsers(chatId: string): Promise<TypingUserDto[]> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
     method: 'GET',

@@ -9,7 +9,7 @@ export interface CommunityDto {
   creatorId: string;
   createdAt: string;
   currentUserRole?: CommunityRole | null;
-  chatId?: number;
+  chatId?: string;
   memberCount: number;
   avatarUrl?: string | null;
   profilePhoto?: string | null;
