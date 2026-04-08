@@ -9,7 +9,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 
 type Props = {
@@ -94,7 +94,7 @@ function HistoryItem({ item }: { item: InkdropsHistoryDto }) {
 
       <View style={styles.pointsContainer}>
         <Text style={styles.pointsText}>+{item.pointsGranted}</Text>
-        <Ionicons name="flame" size={12} color="#e07a5f" />
+        <Ionicons name="water" size={14} color="#e4715f" />
       </View>
     </View>
   );
@@ -251,7 +251,7 @@ export default function InkdropsHistoryModal({ visible, onClose }: Props) {
               </View>
             ) : history.length === 0 ? (
               <View style={styles.centerContent}>
-                <Ionicons name="flame-outline" size={48} color="#d1ccc3" />
+                <Ionicons name="water" size={14} color="#e4715f" />
                 <Text style={styles.emptyText}>Sin historial de InkDrops</Text>
               </View>
             ) : (
@@ -307,7 +307,7 @@ export default function InkdropsHistoryModal({ visible, onClose }: Props) {
                 {selectedMonth && (
                   <View style={styles.statsContainer}>
                     <View style={styles.statBox}>
-                      <Ionicons name="flame" size={20} color="#e07a5f" />
+                      <Ionicons name="water" size={22} color="#e4715f" />
                       <View>
                         <Text style={styles.statLabel}>Total este mes</Text>
                         <Text style={styles.statValue}>{totalPoints}</Text>
@@ -357,8 +357,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#fdfbf7",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "90%",
+    height: "80%",
     flexDirection: "column",
+    overflow: "hidden",
   },
   header: {
     flexDirection: "row",
