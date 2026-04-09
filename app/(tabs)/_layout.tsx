@@ -1,5 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Tabs, router, useSegments } from 'expo-router';
+import { Tabs, router, useSegments, usePathname } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 
@@ -11,7 +11,6 @@ import { CopilotStep, useCopilot, walkthroughable } from 'react-native-copilot';
 
 const WalkthroughableView = walkthroughable(View);
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
@@ -21,15 +20,25 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const { session } = useAuth();
+  const { session, isBookdropUser, loading } = useAuth();
   const { tutorialCompleted, tutorialLoading, completeTutorial } = useTutorial();
   const { start, copilotEvents } = useCopilot();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const segments = useSegments();
+  const pathname = usePathname();
   const isTabsActive = segments[0] === '(tabs)';
 
   const displayName = session?.user?.user_metadata?.display_name || 'lector/a';
 
+  // Redirect bookdrop users away from tabs
+  useEffect(() => {
+    if (loading) return;
+    if (isBookdropUser) {
+      router.replace('/bookDropControlPanel' as any);
+    }
+  }, [isBookdropUser, loading, pathname]);
+
+  // Auto-start tutorial for new users
   useEffect(() => {
     if (!tutorialLoading && !tutorialCompleted && session && isTabsActive) {
       const timeout = setTimeout(() => {
@@ -39,6 +48,7 @@ export default function TabLayout() {
     }
   }, [tutorialLoading, tutorialCompleted, session, isTabsActive]);
 
+  // Navigate tabs in sync with tutorial steps
   useEffect(() => {
     const handleStepChange = (step: any) => {
       if (!step) return;
@@ -72,6 +82,14 @@ export default function TabLayout() {
       copilotEvents.off('stop');
     };
   }, [completeTutorial]);
+
+  if (loading) {
+    return null;
+  }
+
+  if (isBookdropUser) {
+    return null;
+  }
 
   return (
     <View style={{ flex: 1 }}>

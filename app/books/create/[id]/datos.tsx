@@ -3,6 +3,7 @@ import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
 import {
+  MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
   deleteBook,
   getBookDetail,
@@ -326,10 +327,10 @@ export default function UploadDataScreen() {
       return;
     }
 
-    if (photoCount !== MAX_BOOK_PHOTOS) {
+    if (photoCount < MIN_BOOK_PHOTOS || photoCount > MAX_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Fotos incompletas",
-        message: `Debes tener exactamente ${MAX_BOOK_PHOTOS} fotos antes de continuar al estado del libro.`,
+        title: "Foto requerida",
+        message: `Debes tener al menos una foto antes de continuar al estado del libro.`,
       });
       return;
     }

@@ -5,11 +5,10 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/authService";
-import supabase from "@/lib/supabase";
 import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 type Genre = { id: number; name: string };
 
@@ -18,10 +17,15 @@ const FALLBACK_LNG = -5.9823;
 
 export default function RegisterScreen() {
   const { setBackendUserId } = useAuth();
+  const [isBookdrop, setIsBookdrop] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
+
+  const [bookdropName, setBookdropName] = useState("");
+  const [bookdropAddress, setBookdropAddress] = useState("");
+  const [bookdropPhoto, setBookdropPhoto] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,6 +38,7 @@ export default function RegisterScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
 
   const validate = () => {
     if (!email || !password || !username || !name) {
@@ -50,6 +55,23 @@ export default function RegisterScreen() {
     }
     return true;
   };
+
+  const validateBookdrop = () => {
+    if (!email || !password || !username || !name || !bookdropName || !bookdropAddress) {
+      setError("Todos los campos son obligatorios");
+      return false;
+    }
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres");
+      return false;
+    }
+    if (!email.includes("@")) {
+      setError("El correo electrónico no es válido");
+      return false;
+    }
+    return true;
+  }
+
 
   const handleRegister = async () => {
     if (!validate()) return;
@@ -70,11 +92,10 @@ export default function RegisterScreen() {
         setUserLocation({ latitude: latitud, longitude: longitud });
       }
 
-      // 2) Supabase SignUp
-      await authService.signUp(email, password, name);
-
-      // 3) Backend Profile
+      // 2) Backend Register
       const userData = await authService.registerBackendProfile({
+        email,
+        password,
         username,
         name,
         latitud,
@@ -83,14 +104,65 @@ export default function RegisterScreen() {
 
       if (userData?.id) {
         setBackendUserId(userData.id);
+        setRegisteredUserId(userData.id);
       }
 
-      // 4) Prepare Preferences Modal
+      // 3) Prepare Preferences Modal
       const genres = await authService.fetchGenres();
       setAvailableGenres(genres);
 
       setLoading(false);
       setShowPreferences(true);
+    } catch (err: any) {
+      setError(err.message || "Error al crear la cuenta");
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterBookdrop = async () => {
+    if (!validateBookdrop()) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      // 1) Get Location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      let latitud = FALLBACK_LAT;
+      let longitud = FALLBACK_LNG;
+
+      if (status === "granted") {
+        const location = await Location.getCurrentPositionAsync({});
+        latitud = location.coords.latitude;
+        longitud = location.coords.longitude;
+        setUserLocation({ latitude: latitud, longitude: longitud });
+      }
+
+      // 2) Backend Register
+      const userData = await authService.registerBookdropBackendProfile({
+        Email: email,
+        Password: password,
+        Username: username,
+        Name: name,
+        NombreEstablecimiento: bookdropName,
+        AddressText: bookdropAddress,
+        Latitud: latitud,
+        Longitud: longitud,
+      });
+
+      if (userData?.id) {
+        setBackendUserId(userData.id);
+        setRegisteredUserId(userData.id);
+      }
+
+      // 3) Prepare Preferences Modal
+      const genres = await authService.fetchGenres();
+      setAvailableGenres(genres);
+
+      
+      setLoading(false);
+      router.replace("/bookDropControlPanel" as any);
+      //setShowPreferences(true);
     } catch (err: any) {
       setError(err.message || "Error al crear la cuenta");
       setLoading(false);
@@ -122,14 +194,12 @@ export default function RegisterScreen() {
         preferences.bookLength.includes("0-200") ? "SHORT" :
         preferences.bookLength.includes("400+") ? "LONG" : "MEDIUM";
 
-      // session should be available now after signup
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.user?.id) throw new Error("Sesión no encontrada");
+      const userId = registeredUserId;
+      if (!userId) throw new Error("Sesión no encontrada");
 
-      await authService.updatePreferences(session.user.id, {
-        latitud: latitude,
-        longitud: longitude,
+      await authService.updatePreferences(userId, {
+        latitude,
+        longitude,
         radioKm: preferences.distanceKm || 10,
         extension,
         genreIds,
@@ -146,6 +216,47 @@ export default function RegisterScreen() {
 
   return (
     <AuthLayout title="Regístrate">
+
+      <View style={{ flexDirection: "row", alignSelf: "center", backgroundColor: "#f1f1f4", borderRadius: 999, padding: 4, marginBottom: 16 }}>
+        <Pressable
+          onPress={() => setIsBookdrop(false)}
+          style={{
+            paddingVertical: 8,
+            paddingHorizontal: 16,
+            borderRadius: 999,
+            backgroundColor: !isBookdrop ? "#e07a5f" : "transparent",
+          }}
+        >
+          <Text
+            style={{
+              color: !isBookdrop ? "#fff" : "#5f5b73",
+              fontWeight: "600",
+            }}
+          >
+            Usuario
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setIsBookdrop(true)}
+          style={{
+            paddingVertical: 8,
+            paddingHorizontal: 16,
+            borderRadius: 999,
+            backgroundColor: isBookdrop ? "#e07a5f" : "transparent",
+          }}
+        >
+          <Text
+            style={{
+              color: isBookdrop ? "#fff" : "#5f5b73",
+              fontWeight: "600",
+            }}
+          >
+            Bookdrop
+          </Text>
+        </Pressable>
+      </View>
+
       <AuthInput
         icon="person-outline"
         placeholder="Nombre completo"
@@ -178,14 +289,34 @@ export default function RegisterScreen() {
         isPassword
       />
 
+      {isBookdrop ? (
+        <>
+          <AuthInput
+            icon="home-outline"
+            placeholder="Nombre del establecimiento"
+            value={bookdropName}
+            onChangeText={setBookdropName}
+          />
+
+          <AuthInput
+            icon="map-outline"
+            placeholder="Dirección del establecimiento"
+            value={bookdropAddress}
+            onChangeText={setBookdropAddress}
+          />
+        </>
+      ) : (
+        null
+      )}
+
       <ErrorMessage message={error} />
 
       <AuthButton
         title="Crear cuenta"
-        onPress={handleRegister}
+        onPress={(!isBookdrop) ? handleRegister : handleRegisterBookdrop}
         loading={loading}
       />
-
+      
       <View className="items-center mt-1">
         <Text className="text-[#9e9aad] text-sm">
           ¿Ya tienes cuenta?{" "}

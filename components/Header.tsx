@@ -1,4 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -10,6 +11,8 @@ interface HeaderProps {
 
 export default function Header({ showBack = false }: HeaderProps) {
   const insets = useSafeAreaInsets();
+  const { isBookdropUser } = useAuth();
+  const shouldShowLeftButton = showBack || !isBookdropUser;
 
   const handleLeftPress = () => {
     if (showBack) {
@@ -21,20 +24,20 @@ export default function Header({ showBack = false }: HeaderProps) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
-      {/* Izquierda: flecha atrás o foto de perfil */}
-      <TouchableOpacity onPress={handleLeftPress}>
-        {!showBack ? (
+      {shouldShowLeftButton ? (
+        <TouchableOpacity onPress={handleLeftPress}>
           <View style={styles.profileButton}>
-            <FontAwesome name="user" size={18} color="#fdfbf7" />
+            <FontAwesome
+              name={showBack ? "arrow-left" : "user"}
+              size={18}
+              color="#fdfbf7"
+            />
           </View>
-        ) : (
-          <View style={styles.profileButton}>
-            <FontAwesome name="arrow-left" size={18} color="#fdfbf7" />
-          </View>
-        )}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.spacer} />
+      )}
 
-      {/* Logo y nombre */}
       <View style={styles.logoContainer}>
         <View style={styles.logoIcon}>
           <FontAwesome name="book" size={16} color="#fdfbf7" />
@@ -44,7 +47,6 @@ export default function Header({ showBack = false }: HeaderProps) {
         </Text>
       </View>
 
-      {/* Espacio para mantener el centrado */}
       <View style={styles.spacer} />
     </View>
   );

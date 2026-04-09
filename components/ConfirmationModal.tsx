@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Text } from '@/components/Themed';
+import { Modal } from 'react-native';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -24,38 +25,43 @@ export function ConfirmModal({
   onCancel,
   confirmColor = 'primary',
 }: ConfirmModalProps) {
-  if (!visible) return null;
-
   return (
-    <View style={styles.overlay}>
-      <View style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.message}>{message}</Text>
-        
-        <View style={styles.buttonsRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={onCancel}
-          >
-            <Text style={styles.secondaryText}>{cancelLabel}</Text>
-          </Pressable>
+    <Modal
+      transparent={true}
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
+          
+          <View style={styles.buttonsRow}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onCancel}
+            >
+              <Text style={styles.secondaryText}>{cancelLabel}</Text>
+            </Pressable>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              confirmColor === 'danger' && styles.primaryDanger,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={onConfirm}
-          >
-            <Text style={styles.primaryText}>{confirmLabel}</Text>
-          </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                confirmColor === 'danger' && styles.primaryDanger,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onConfirm}
+            >
+              <Text style={styles.primaryText}>{confirmLabel}</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 

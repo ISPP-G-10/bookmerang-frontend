@@ -10,7 +10,6 @@ import {
   Image as RNImage,
   ScrollView,
   StyleSheet,
-  useColorScheme,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -29,9 +28,6 @@ interface BookDetailsScreenProps {
   card: MatcherCard | null;
   onClose: () => void;
   onChat?: (card: MatcherCard) => void;
-  onPrimaryAction?: (card: MatcherCard) => void;
-  primaryActionLabel?: string;
-  primaryActionIcon?: React.ComponentProps<typeof Ionicons>["name"];
 }
 
 export function BookDetailsScreen({
@@ -39,13 +35,10 @@ export function BookDetailsScreen({
   card,
   onClose,
   onChat,
-  onPrimaryAction,
-  primaryActionLabel = 'Solicitar intercambio',
-  primaryActionIcon = 'chatbubble-outline',
 }: BookDetailsScreenProps) {
   const [showReportMenu, setShowReportMenu] = useState(false);
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const [showGalleryModal, setShowGalleryModal] = useState(false);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const insets = useSafeAreaInsets();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
 
@@ -54,19 +47,38 @@ export function BookDetailsScreen({
   if (!card) return null;
 
   const { book, owner, distanceKm } = card;
-  const heroPhoto = book.photos[0]?.url;
-  const handlePrimaryAction = onPrimaryAction ?? onChat;
+  const photoUrls = (book.photos ?? [])
+    .map((photo) => (typeof photo?.url === 'string' ? photo.url.trim() : ''))
+    .filter((url) => url.length > 0);
+  const hasMultiplePhotos = photoUrls.length > 1;
+  const activePhotoUrl = photoUrls[currentPhotoIndex] ?? null;
+  const heroPhoto = activePhotoUrl;
 
   const handleReport = (reason: string) => {
     setShowReportMenu(false);
     console.log('Reportado:', reason);
   };
 
-  const bgColor = isDark ? '#1C1C1E' : '#FAF7F4';
-  const cardBgColor = isDark ? '#2C2C2E' : '#FFFFFF';
-  const borderColor = isDark ? '#3A3A3C' : '#F3E9E0';
-  const textPrimary = isDark ? '#fdfbf7' : '#3e2723';
-  const textSecondary = isDark ? '#AEAEB2' : '#8B7355';
+  const handleShowPreviousPhoto = () => {
+    if (photoUrls.length <= 1) return;
+    setCurrentPhotoIndex((previousIndex) =>
+      previousIndex === 0 ? photoUrls.length - 1 : previousIndex - 1,
+    );
+  };
+
+  const handleShowNextPhoto = () => {
+    if (photoUrls.length <= 1) return;
+    console.log("idiomas del libro:" + book.languages)
+    setCurrentPhotoIndex((previousIndex) =>
+      previousIndex === photoUrls.length - 1 ? 0 : previousIndex + 1,
+    );
+  };
+
+  const bgColor = '#fdfbf7';
+  const cardBgColor = '#FFFFFF';
+  const borderColor = '#F3E9E0';
+  const textPrimary = '#3e2723';
+  const textSecondary = '#8B7355';
 
   const specCardWidth = isWeb ? (SCREEN_WIDTH - 48 - 10) / 2 : undefined;
 
@@ -103,6 +115,24 @@ export function BookDetailsScreen({
                 <Ionicons name="book" size={80} color="#fdfbf7" />
               </View>
             )}
+
+            <Pressable
+              onPress={() => {
+                if (!activePhotoUrl) return;
+                setShowGalleryModal(true);
+              }}
+              style={StyleSheet.absoluteFillObject}
+            >
+              {activePhotoUrl ? (
+                <View style={styles.numberImageInfo}>
+                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>
+                    {hasMultiplePhotos
+                      ? `${currentPhotoIndex + 1}/${photoUrls.length} · Pulsa para ampliar`
+                      : 'Pulsa para ampliar'}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
 
             <Pressable
               onPress={onClose}
@@ -274,7 +304,6 @@ export function BookDetailsScreen({
                     </Text>
                   </View>
                 </View>
-
                 <View style={{ flexDirection: 'row', marginBottom: 18 }}>
                   <View
                     style={[
@@ -463,7 +492,17 @@ export function BookDetailsScreen({
             )}
 
             {book.observaciones && (
-              <View>
+              <View
+                style={[
+                  {
+                    backgroundColor: cardBgColor,
+                    borderColor,
+                    padding: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                  },
+                ]}
+              >
                 <View
                   style={{
                     flexDirection: 'row',
@@ -481,7 +520,7 @@ export function BookDetailsScreen({
                     Sobre este libro
                   </Heading>
                 </View>
-                <Text style={{ color: textSecondary, fontSize: 13, lineHeight: 20 }}>
+                <Text style={{ color: textSecondary, fontSize: 13 }}>
                   {book.observaciones}
                 </Text>
               </View>
@@ -496,24 +535,26 @@ export function BookDetailsScreen({
           ]}
         >
           <Pressable
-            onPress={() => handlePrimaryAction?.(card)}
+            onPress={() => onChat?.(card)}
             style={[
               styles.actionButton,
               {
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
+                opacity: onChat ? 1 : 0.5,
               },
             ]}
+            disabled={!onChat}
           >
             <Ionicons
-              name={primaryActionIcon}
+              name="chatbubble-outline"
               size={22}
               color="#fdfbf7"
               style={{ marginRight: 8 }}
             />
             <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>
-              {primaryActionLabel}
+              Solicitar intercambio
             </Text>
           </Pressable>
         </View>
@@ -576,6 +617,65 @@ export function BookDetailsScreen({
             ))}
           </View>
         )}
+
+        <Modal visible={showGalleryModal} transparent animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' }}>
+            <Pressable
+              onPress={() => setShowGalleryModal(false)}
+              style={styles.closeCarouselButton}
+            >
+              <Ionicons name="close" size={22} color="#ffffff" />
+            </Pressable>
+
+            <View
+              style={{
+                flex: 1,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: isWeb ? 24 : 16,
+                paddingVertical: isWeb ? 24 : 28,
+              }}
+            >
+              {activePhotoUrl ? (
+                <RNImage
+                  source={{ uri: activePhotoUrl }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="contain"
+                />
+              ) : null}
+            </View>
+
+            {hasMultiplePhotos ? (
+              <>
+                <Pressable
+                  onPress={handleShowPreviousPhoto}
+                  style={styles.previousImageButton}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#ffffff" />
+                </Pressable>
+
+                <Pressable
+                  onPress={handleShowNextPhoto}
+                  style={styles.nextImageButton}
+                >
+                  <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+                </Pressable>
+              </>
+            ) : null}
+
+            {activePhotoUrl ? (
+              <View
+                style={styles.zoomImageButton}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700' }}>
+                  {hasMultiplePhotos
+                    ? `${currentPhotoIndex + 1}/${photoUrls.length}`
+                    : '1/1'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </Modal>
       </View>
     </Modal>
   );
@@ -699,5 +799,61 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  numberImageInfo: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 35
+  },
+  previousImageButton: {
+    position: 'absolute',
+    left: 16,
+    top: '50%',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+
+  },
+  nextImageButton: {
+    position: 'absolute',
+    right: 16,
+    top: '50%',
+    marginTop: -22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomImageButton: {
+    position: 'absolute',
+    bottom: 28,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  closeCarouselButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 30,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

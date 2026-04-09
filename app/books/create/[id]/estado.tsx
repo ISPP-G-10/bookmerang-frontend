@@ -3,6 +3,7 @@ import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
 import {
+  MIN_BOOK_PHOTOS,
   deleteBook,
   getBookDetail,
   getMyDrafts,
@@ -136,10 +137,10 @@ export default function UploadStatusScreen() {
 
   const handleSave = async () => {
     if (!Number.isFinite(bookId) || bookId <= 0) return;
-    if (photoCount <= 0) {
+    if (photoCount < MIN_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Foto obligatoria",
-        message: "No puedes guardar un borrador sin fotos. Añade al menos 1 foto.",
+        title: "Foto requerida",
+        message: `Necesitas al menos una foto. Actualmente tienes ${photoCount}.`,
       });
       return;
     }
@@ -164,10 +165,10 @@ export default function UploadStatusScreen() {
 
   const openSaveDraftModal = () => {
     if (saving) return;
-    if (photoCount <= 0) {
+    if (photoCount < MIN_BOOK_PHOTOS) {
       setInfoModal({
-        title: "Foto obligatoria",
-        message: "No puedes guardar un borrador sin fotos. Añade al menos 1 foto.",
+        title: "Foto requerida",
+        message: `Necesitas al menos una foto. Actualmente tienes ${photoCount}.`,
       });
       return;
     }

@@ -1,4 +1,4 @@
-import { MAX_BOOK_PHOTOS } from "@/lib/books";
+import { MIN_BOOK_PHOTOS, MAX_BOOK_PHOTOS } from "@/lib/books";
 
 type DataStepValidationInput = {
   title: string;
@@ -11,8 +11,11 @@ type DataStepValidationInput = {
 };
 
 export function getPhotoStepValidationError(photoCount: number): string | null {
-  if (photoCount === MAX_BOOK_PHOTOS) return null;
-  return `Debes subir exactamente ${MAX_BOOK_PHOTOS} fotos para continuar. Actualmente tienes ${photoCount}.`;
+  if (photoCount >= MIN_BOOK_PHOTOS && photoCount <= MAX_BOOK_PHOTOS) return null;
+  if (photoCount < MIN_BOOK_PHOTOS) {
+    return `Debes subir una foto para continuar.`;
+  }
+  return `Máximo ${MAX_BOOK_PHOTOS} fotos permitidas. Actualmente tienes ${photoCount}.`;
 }
 
 export function getDataStepMissingFields(

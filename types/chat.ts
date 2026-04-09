@@ -5,11 +5,12 @@ export interface ChatParticipantDto {
   username: string;
   profilePhoto: string;
   joinedAt: string;
+  role?: 'MEMBER' | 'MODERATOR' | null;
 }
 
 export interface MessageDto {
   id: number;
-  chatId: number;
+  chatId: string;
   senderId: string;
   senderUsername: string;
   body: string;
@@ -17,11 +18,12 @@ export interface MessageDto {
 }
 
 export interface ChatDto {
-  id: number;
+  id: string;
   type: string;
   createdAt: string;
   participants: ChatParticipantDto[];
   lastMessage: MessageDto | null;
+  name?: string;
 }
 
 export interface TypingUserDto {

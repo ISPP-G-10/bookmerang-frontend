@@ -1,5 +1,5 @@
-import { fetchMyBackendUserId } from '@/lib/api';
-import supabase from '@/lib/supabase';
+import { fetchMyBackendUser } from '@/lib/api';
+import { clearStoredAuthSession, getStoredAuthSession } from '@/lib/authSession';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React, {
@@ -11,26 +11,31 @@ import React, {
   useState,
 } from 'react';
 
-// ── Tipos ──────────────────────────────────────────────
+type AuthUserType = string | undefined | null;
+
+type AuthSessionUser = {
+  id: string;
+  email: string;
+  username?: string;
+  name?: string;
+  profilePhoto?: string;
+  userType?: AuthUserType;
+};
+
+type AuthSession = {
+  accessToken: string;
+  user: AuthSessionUser;
+};
+
 interface AuthContextType {
-  /** Sesión de Supabase (contiene JWT, user, etc.) */
-  session: any | null;
-
-  /** ID interno del usuario en el backend (≠ Supabase UUID).
-   *  Puede ser null si aún no se ha resuelto. */
+  session: AuthSession | null;
   backendUserId: string | null;
-
-  /** ID utilizable para identificar al usuario actual.
-   *  Usa backendUserId si existe, si no el UUID de Supabase. */
   currentUserId: string | null;
-
-  /** true mientras se está comprobando la sesión inicial */
+  userPlan: string;
   loading: boolean;
-
-  /** Fija el ID interno del backend (resolverlo desde datos de chat, registro, etc.) */
+  userType: AuthUserType;
+  isBookdropUser: boolean;
   setBackendUserId: (id: string) => void;
-
-  /** Cierra sesión de Supabase y limpia el estado */
   signOut: () => Promise<void>;
 }
 
@@ -38,18 +43,29 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   backendUserId: null,
   currentUserId: null,
+  userPlan: 'FREE',
   loading: true,
+  userType: null,
+  isBookdropUser: false,
   setBackendUserId: () => {},
   signOut: async () => {},
 });
 
-// ── Helper ─────────────────────────────────────────────
-const storageKey = (supabaseId: string) => `backendUserId_${supabaseId}`;
+const storageKey = (userId: string) => `backendUserId_${userId}`;
 
-// ── Provider ───────────────────────────────────────────
+function normalizeUserType(userType: AuthUserType): string {
+  return String(userType ?? '').trim().toUpperCase();
+}
+
+function isBookdropUserType(userType: AuthUserType): boolean {
+  const normalized = normalizeUserType(userType);
+  return normalized === 'BOOKDROP_USER' || normalized === 'BOOKDROP' || normalized === 'BUSINESS';
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<any | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [backendUserId, setBackendUserIdState] = useState<string | null>(null);
+  const [userPlan, setUserPlan] = useState<string>('FREE');
   const [loading, setLoading] = useState(true);
 
   const safeGetStorageItem = useCallback(async (key: string): Promise<string | null> => {
@@ -79,99 +95,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setBackendUserId = useCallback((id: string) => {
     setBackendUserIdState(id);
-    // Persistir para sobrevivir reinicios de app
-    void supabase.auth.getSession().then(({ data }: { data: any }) => {
-      const supabaseId = data?.session?.user?.id;
-      if (supabaseId) {
-        return safeSetStorageItem(storageKey(supabaseId), id);
-      }
-      return Promise.resolve();
-    });
-  }, [safeSetStorageItem]);
+    const userId = session?.user?.id;
+    if (userId) {
+      void safeSetStorageItem(storageKey(userId), id);
+    }
+  }, [safeSetStorageItem, session]);
 
   const signOut = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    const supabaseId = data?.session?.user?.id;
-    if (supabaseId) {
-      await safeRemoveStorageItem(storageKey(supabaseId));
+    const userId = session?.user?.id;
+    if (userId) {
+      await safeRemoveStorageItem(storageKey(userId));
     }
     setBackendUserIdState(null);
-    await supabase.auth.signOut();
-  }, [safeRemoveStorageItem]);
+    setSession(null);
+    await clearStoredAuthSession();
+    router.replace('/login' as any);
+  }, [safeRemoveStorageItem, session]);
 
-  // Intenta resolver el backendUserId desde el backend o desde AsyncStorage
-  const resolveBackendUserId = useCallback(async (supabaseId: string) => {
-    // Primero intentar desde AsyncStorage
-    const stored = await safeGetStorageItem(storageKey(supabaseId));
+  const resolveBackendUserId = useCallback(async (userId: string) => {
+    const stored = await safeGetStorageItem(storageKey(userId));
     if (stored) {
       setBackendUserIdState(stored);
-      return;
-    }
-    // Si no hay almacenado, intentar llamar al backend
-    let resolved: string | null = null;
-    try {
-      resolved = await fetchMyBackendUserId();
-    } catch (error) {
-      console.warn('[AuthContext] fetchMyBackendUserId failed:', error);
     }
 
-    if (resolved) {
-      setBackendUserIdState(resolved);
-      await safeSetStorageItem(storageKey(supabaseId), resolved);
+    try {
+      const backendUser = await fetchMyBackendUser();
+      if (backendUser) {
+        setBackendUserIdState(backendUser.id);
+        setUserPlan(backendUser.plan);
+        await safeSetStorageItem(storageKey(userId), backendUser.id);
+      }
+    } catch (error) {
+      console.warn('[AuthContext] fetchMyBackendUser failed:', error);
     }
   }, [safeGetStorageItem, safeSetStorageItem]);
 
   useEffect(() => {
-    // 1. Obtener sesión inicial y restaurar backendUserId persistido
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: any } }) => {
-      setSession(session);
+    getStoredAuthSession().then((storedSession) => {
+      setSession(storedSession);
       setLoading(false);
 
-      if (!session) {
-        router.replace('/login' as any);
-      } else {
-        const supabaseId = session.user?.id;
-        if (supabaseId) {
-          void resolveBackendUserId(supabaseId);
-        }
+      const userId = storedSession?.user?.id;
+      if (userId) {
+        void resolveBackendUserId(userId);
       }
     });
-
-    // 2. Escuchar cambios de sesión (login, logout, token refresh)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
-      setSession(session);
-
-      if (!session) {
-        // Limpiar userId al cerrar sesión
-        setBackendUserIdState(null);
-        router.replace('/login' as any);
-      } else {
-        // Al iniciar sesión, resolver backendUserId
-        const supabaseId = session.user?.id;
-        if (supabaseId) {
-          void resolveBackendUserId(supabaseId);
-        }
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [resolveBackendUserId]);
 
-  // ID utilizable: backendUserId si existe, si no el UUID de Supabase
   const currentUserId = backendUserId ?? session?.user?.id ?? null;
+  const userType = session?.user?.userType;
+  const isBookdropUser = isBookdropUserType(userType);
 
   return (
     <AuthContext.Provider
-      value={{ session, backendUserId, currentUserId, loading, setBackendUserId, signOut }}
+      value={{
+        session,
+        backendUserId,
+        currentUserId,
+        userPlan,
+        loading,
+        userType,
+        isBookdropUser,
+        setBackendUserId,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
 }
 
-// ── Hook ───────────────────────────────────────────────
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
   if (!ctx) {
