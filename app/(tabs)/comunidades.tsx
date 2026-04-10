@@ -67,7 +67,7 @@ interface BookspotInfo {
 
 export default function ComunidadesScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabKey>('explorar');
+  const [activeTab, setActiveTab] = useState<TabKey>('mis');
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
@@ -426,19 +426,19 @@ export default function ComunidadesScreen() {
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <Pressable
-          style={[styles.tab, activeTab === 'explorar' && styles.tabActive]}
-          onPress={() => setActiveTab('explorar')}
-        >
-          <Text style={[styles.tabText, activeTab === 'explorar' && styles.tabTextActive]}>
-            Explorar
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.tab, activeTab === 'mis' && styles.tabActive]}
           onPress={() => setActiveTab('mis')}
         >
           <Text style={[styles.tabText, activeTab === 'mis' && styles.tabTextActive]}>
             Mis Comunidades
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'explorar' && styles.tabActive]}
+          onPress={() => setActiveTab('explorar')}
+        >
+          <Text style={[styles.tabText, activeTab === 'explorar' && styles.tabTextActive]}>
+            Explorar
           </Text>
         </Pressable>
       </View>
