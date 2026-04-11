@@ -1,7 +1,7 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Tabs, router, useSegments, usePathname } from 'expo-router';
+import { router, Tabs, usePathname, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -10,6 +10,7 @@ import { useTutorial } from '@/contexts/TutorialContext';
 import { CopilotStep, useCopilot, walkthroughable } from 'react-native-copilot';
 
 const WalkthroughableView = walkthroughable(View);
+const WalkthroughablePressable = walkthroughable(Pressable);
 
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
@@ -98,7 +99,8 @@ export default function TabLayout() {
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
           tabBarInactiveTintColor: '#3d405b',
           tabBarLabelStyle: {
-            fontSize: 11,
+            fontSize: 10,
+            fontFamily: 'Outfit_400Regular',
           },
           tabBarStyle: {
             paddingBottom: 5,
@@ -114,11 +116,15 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="heart" color={color} />,
             tabBarButton: (props) => (
               <CopilotStep
-                text="Matcher 💘 Aquí descubrirás libros de otros usuarios. Desliza a la derecha si te interesa, o a la izquierda para pasar."
+                text={JSON.stringify({
+                  icon: '💘',
+                  title: 'Matcher',
+                  body: 'Desliza a la derecha ❤️ si un libro te interesa, o a la izquierda ✗ para pasar. Si a la otra persona también le interesa el tuyo, ¡es un match! Puedes deshacer el último swipe con el botón de flecha.',
+                })}
                 order={2}
                 name="matcher-tab"
               >
-                <WalkthroughableView {...props} />
+                <WalkthroughablePressable {...props} />
               </CopilotStep>
             ),
           }}
@@ -130,11 +136,15 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="comment" color={color} />,
             tabBarButton: (props) => (
               <CopilotStep
-                text="Chats 💬 Cuando hagas match con alguien, aquí podréis chatear para acordar el intercambio de libros."
+                text={JSON.stringify({
+                  icon: '💬',
+                  title: 'Chats',
+                  body: 'Tus conversaciones organizadas en tres pestañas: "Nuevos" para matches recientes, "En curso" para intercambios aceptados, y "Finalizados" para el historial. Escribe aquí para acordar dónde y cuándo hacer el intercambio.',
+                })}
                 order={3}
                 name="chat-tab"
               >
-                <WalkthroughableView {...props} />
+                <WalkthroughablePressable {...props} />
               </CopilotStep>
             ),
           }}
@@ -146,11 +156,15 @@ export default function TabLayout() {
             tabBarIcon: ({ color }) => <TabBarIcon name="plus" color={color} />,
             tabBarButton: (props) => (
               <CopilotStep
-                text="Subir ➕ Añade los libros que quieras intercambiar. Otros usuarios los verán en su matcher."
+                text={JSON.stringify({
+                  icon: '➕',
+                  title: 'Sube tus libros',
+                  body: 'Añade entre 2 y 4 fotos del libro, luego rellena el título, autor y estado. Cuantos más libros subas, más matches tendrás. ¡Puedes guardar borradores y retomarlo más tarde!',
+                })}
                 order={4}
                 name="subir-tab"
               >
-                <WalkthroughableView {...props} />
+                <WalkthroughablePressable {...props} />
               </CopilotStep>
             ),
           }}
@@ -158,15 +172,19 @@ export default function TabLayout() {
         <Tabs.Screen
           name="comunidades"
           options={{
-            title: 'Comuni...',
+            title: 'Comunidades',
             tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
             tabBarButton: (props) => (
               <CopilotStep
-                text="Comunidades 🏠 Únete a grupos de lectura y conecta con personas que comparten tus gustos literarios."
+                text={JSON.stringify({
+                  icon: '🏡',
+                  title: 'Comunidades',
+                  body: 'Únete a grupos de lectura asociados a un BookSpot cercano. Dentro de cada comunidad tienes: chat grupal, quedadas presenciales, biblioteca compartida y ranking mensual. Explora las disponibles o crea la tuya propia.',
+                })}
                 order={5}
                 name="comunidades-tab"
               >
-                <WalkthroughableView {...props} />
+                <WalkthroughablePressable {...props} />
               </CopilotStep>
             ),
           }}
@@ -174,34 +192,44 @@ export default function TabLayout() {
         <Tabs.Screen
           name="bookspots"
           options={{
-            title: 'BookSp...',
+            title: 'BookSpots',
             tabBarIcon: ({ color }) => <TabBarIcon name="map-marker" color={color} />,
             tabBarButton: (props) => (
               <CopilotStep
-                text="BookSpots 📍 Encuentra puntos de intercambio cercanos en el mapa. ¡Ya estás listo para explorar Bookmerang!"
+                text={JSON.stringify({
+                  icon: '📍',
+                  title: 'BookSpots',
+                  body: 'Puntos físicos donde hacer los intercambios: cafeterías, bibliotecas, librerías... Puedes validar spots propuestos por otros usuarios o proponer uno nuevo con el botón +. ¡Ya lo tienes todo, empieza a explorar!',
+                })}
                 order={6}
                 name="bookspots-tab"
               >
-                <WalkthroughableView {...props} />
+                <WalkthroughablePressable {...props} />
               </CopilotStep>
             ),
           }}
         />
       </Tabs>
 
-      {/* Welcome step - centered anchor for first tutorial box */}
+      {/* Welcome step — anchor posicionado para que el tooltip de 320px quede centrado.
+          Copilot alinea el borde izquierdo del tooltip con el borde izquierdo del anchor,
+          por eso left = (screenWidth - 320) / 2 en lugar de screenWidth / 2. */}
       <View
         style={{
           position: 'absolute',
-          top: screenHeight / 2,
-          left: screenWidth / 2,
+          top: screenHeight * 0.65,
+          left: Math.max(8, (screenWidth - 320) / 2),
           width: 1,
           height: 1,
         }}
         pointerEvents="none"
       >
         <CopilotStep
-          text={`¡Bienvenido a Bookmerang, ${displayName}! 📚\n\nTu nueva app para intercambiar libros con otras personas. Vamos a darte un tour rápido por las secciones principales.`}
+          text={JSON.stringify({
+            icon: '📚',
+            title: `¡Bienvenido, ${displayName}!`,
+            body: 'Bookmerang es tu app para intercambiar libros con personas cerca de ti. En un momento te mostramos cómo funciona.',
+          })}
           order={1}
           name="welcome"
         >

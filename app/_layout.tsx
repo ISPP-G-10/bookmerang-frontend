@@ -10,8 +10,8 @@ import {
 import { useFonts } from "expo-font";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import '../global.css';
@@ -109,6 +109,13 @@ function AuthGate({ children }: { children: ReactNode }) {
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
+  const copilotTooltipStyle = {
+    backgroundColor: 'transparent',
+    paddingTop: 0,
+    paddingHorizontal: 0,
+    borderRadius: 0,
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
@@ -117,11 +124,11 @@ function RootLayoutNav() {
             tooltipComponent={TutorialTooltip}
             stepNumberComponent={() => null}
             overlay="view"
-            backdropColor="rgba(0, 0, 0, 0.75)"
-            animationDuration={350}
-            stopOnOutsideClick={false}
+            backdropColor="rgba(0,0,0,0.7)"
+            animationDuration={300}
+            verticalOffset={0}
             arrowColor="#ffffff"
-            margin={8}
+            tooltipStyle={copilotTooltipStyle}
           >
             <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
               <AuthGate>
