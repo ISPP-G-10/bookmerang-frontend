@@ -31,6 +31,7 @@ interface TinderSwiperProps {
 export interface TinderSwiperRef {
   swipeLeft: () => void;
   swipeRight: () => void;
+  undoSwipe: () => void;
 }
 
 const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
@@ -96,9 +97,22 @@ const TinderSwiper = forwardRef<TinderSwiperRef, TinderSwiperProps>(
       [currentIndex, cards.length, advanceToNext, translateX, translateY, isAnimating, SCREEN_WIDTH]
     );
 
+    const undoSwipe = useCallback(() => {
+      if (isAnimating.value || currentIndex <= 0) return;
+
+      setCurrentIndex((prev) => Math.max(prev - 1, 0));
+      translateX.value = 0;
+      translateY.value = 0;
+      isAnimating.value = false;
+
+      topCardBlurIntensity.value = 1;
+      topCardBlurIntensity.value = withTiming(0, { duration: BLUR_FADE_DURATION });
+    }, [currentIndex, isAnimating, topCardBlurIntensity, translateX, translateY]);
+
     useImperativeHandle(ref, () => ({
       swipeLeft: () => triggerSwipe('left'),
       swipeRight: () => triggerSwipe('right'),
+      undoSwipe,
     }));
 
     // Gesture para arrastrar con el dedo
