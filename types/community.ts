@@ -1,5 +1,5 @@
-export type CommunityStatus = 'CREATED' | 'ACTIVE' | 'ARCHIVED';
-export type CommunityRole = 'MEMBER' | 'MODERATOR';
+export type CommunityStatus = "CREATED" | "ACTIVE" | "ARCHIVED";
+export type CommunityRole = "MEMBER" | "MODERATOR";
 
 export interface CommunityDto {
   id: number;
@@ -43,7 +43,7 @@ export interface CommunityLibraryBookDto {
   likedByMe: boolean;
 }
 
-export type MeetupStatus = 'SCHEDULED' | 'DONE' | 'CANCELLED';
+export type MeetupStatus = "SCHEDULED" | "DONE" | "CANCELLED";
 
 export interface CommunityMeetupAttendeeDto {
   userId: string;
@@ -86,5 +86,32 @@ export interface MeetupAttendanceDto {
   profilePhoto: string;
   selectedBookId: number;
   selectedBookTitle: string;
-  status: 'REGISTERED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED';
+  status: "REGISTERED" | "ATTENDED" | "NO_SHOW" | "CANCELLED";
+}
+
+export interface CommunityRankingEntryDto {
+  userId: string;
+  username: string;
+  name?: string;
+  inkdropsThisMonth: number;
+  exchangesCount?: number;
+  streakDays?: number;
+}
+
+export interface CommunityRankingDto {
+  communityId: number;
+  month: string;
+  ranking: CommunityRankingEntryDto[];
+}
+
+export type InkdropsActionType =
+  | "EXCHANGE_COMPLETED"
+  | "MEETUP_ATTENDED"
+  | "OTHER";
+
+export interface InkdropsHistoryDto {
+  id: number;
+  actionType: InkdropsActionType;
+  pointsGranted: number;
+  createdAt: string;
 }
