@@ -228,14 +228,14 @@ const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
 
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
-  const chatId = parseInt(id ?? "0", 10);
+  const chatId = id ?? "";
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
-  const hasHandled404 = useRef(false);
+  const hasHandledError = useRef(false);
   const handleChatDeleted = useCallback(() => {
-    if (!hasHandled404.current) {
-      hasHandled404.current = true;
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
       if (Platform.OS === "web") {
         window.alert(
           "Chat no disponible: El otro usuario ha desestimado el intercambio o el chat ya no existe.",
@@ -245,6 +245,22 @@ export default function ChatDetailScreen() {
         Alert.alert(
           "Chat no disponible",
           "El otro usuario ha desestimado el intercambio o el chat ya no existe.",
+          [{ text: "OK", onPress: () => router.replace("/(tabs)/chat") }],
+        );
+      }
+    }
+  }, [router]);
+
+  const handleChatForbidden = useCallback(() => {
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
+      if (Platform.OS === "web") {
+        window.alert("Acceso denegado: No tienes permiso para acceder a este chat.");
+        router.replace("/(tabs)/chat");
+      } else {
+        Alert.alert(
+          "Acceso denegado",
+          "No tienes permiso para acceder a este chat.",
           [{ text: "OK", onPress: () => router.replace("/(tabs)/chat") }],
         );
       }
@@ -1030,12 +1046,15 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       setError(err instanceof Error ? err.message : "Error al cargar el chat");
     } finally {
@@ -1052,11 +1071,14 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling
     }
@@ -1072,11 +1094,14 @@ export default function ChatDetailScreen() {
         ),
       );
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling de typing
     }
@@ -1317,12 +1342,15 @@ export default function ChatDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 150);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       // Remover mensaje optimista en caso de error
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
