@@ -1,5 +1,6 @@
 import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
@@ -114,6 +115,7 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
+        <SubscriptionProvider>
         <ThemeProvider
           value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
         >
@@ -145,6 +147,7 @@ function RootLayoutNav() {
                 name="books/create/[id]/estado"
                 options={{ headerShown: false }}
               />
+              <Stack.Screen name="subscription" options={{ headerShown: false }} />
               <Stack.Screen
                 name="chat/[id]"
                 options={{
@@ -155,6 +158,7 @@ function RootLayoutNav() {
             </Stack>
           </AuthGate>
         </ThemeProvider>
+        </SubscriptionProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
