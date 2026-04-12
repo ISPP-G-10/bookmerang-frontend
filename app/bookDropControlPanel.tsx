@@ -304,16 +304,6 @@ function normalizeExchangePin(value: string): string {
   return value.trim().toUpperCase();
 }
 
-function findExchangeByPin(exchanges: BookdropExchange[], rawPin: string): BookdropExchange | null {
-  const pin = normalizeExchangePin(rawPin);
-  if (!pin) return null;
-
-  return (
-    exchanges.find((exchange) => normalizeExchangePin(exchange.pin) === pin) ??
-    null
-  );
-}
-
 function getExchangeActionKind(status: BookdropExchangeStatus): ExchangeActionKind | null {
   if (status === "AWAITING_DROP_1") return "confirm-drop";
   if (status === "BOOK_1_HELD") return "confirm-swap";
@@ -474,7 +464,7 @@ export default function BookDropControlPanelScreen() {
     Record<number, ExchangeParticipantKey | undefined>
   >({});
   const [exchangeCodeInput, setExchangeCodeInput] = useState("");
-  const [exchangeLookupError, setExchangeLookupError] = useState<string | null>(null);
+  const [exchangeActionError, setExchangeActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<BookdropProfile | null>(null);
@@ -569,33 +559,30 @@ export default function BookDropControlPanelScreen() {
     }));
   }, []);
 
-  const openExchangeActionModal = useCallback(() => {
-    const normalizedPin = normalizeExchangePin(exchangeCodeInput);
-    if (!normalizedPin) {
-      setExchangeLookupError("Introduce un PIN valido.");
-      return;
-    }
-
-    const exchange = findExchangeByPin(exchanges, normalizedPin);
-    if (!exchange) {
-      setExchangeLookupError("No se ha encontrado ningun intercambio asociado a ese PIN.");
-      return;
-    }
-
-    setExchangeLookupError(null);
+  const openExchangeActionModal = useCallback((exchange: BookdropExchange) => {
+    setExchangeActionError(null);
+    setExchangeCodeInput("");
     setSelectedExchange(exchange);
     setSelectedLeadParticipantKey(exchangeLeadMap[exchange.meetingId] ?? "firstParticipant");
     setExchangeActionModalOpen(true);
-  }, [exchangeCodeInput, exchangeLeadMap, exchanges]);
+  }, [exchangeLeadMap]);
 
   const closeExchangeActionModal = useCallback(() => {
     if (processingExchange) return;
     setExchangeActionModalOpen(false);
     setSelectedExchange(null);
+    setExchangeActionError(null);
+    setExchangeCodeInput("");
   }, [processingExchange]);
 
   const handleConfirmExchangeAction = useCallback(async () => {
     if (!selectedExchange) return;
+
+    const normalizedPin = normalizeExchangePin(exchangeCodeInput);
+    if (!normalizedPin) {
+      setExchangeActionError("Introduce el PIN que te haya facilitado la persona usuaria.");
+      return;
+    }
 
     const actionKind = getExchangeActionKind(selectedExchange.status);
     if (!actionKind) return;
@@ -608,13 +595,14 @@ export default function BookDropControlPanelScreen() {
       setProcessingExchange(true);
       setError(null);
       setSuccessMessage(null);
+      setExchangeActionError(null);
 
       let updatedExchange: BookdropExchange;
 
       if (actionKind === "confirm-drop") {
         updatedExchange = await confirmBookdropExchangeDrop({
           meetingId: selectedExchange.meetingId,
-          pin: selectedExchange.pin,
+          pin: normalizedPin,
         });
         setExchangeLeadMap((current) => ({
           ...current,
@@ -623,7 +611,7 @@ export default function BookDropControlPanelScreen() {
       } else if (actionKind === "confirm-swap") {
         updatedExchange = await confirmBookdropExchangeSwap({
           meetingId: selectedExchange.meetingId,
-          pin: selectedExchange.pin,
+          pin: normalizedPin,
         });
         setExchangeLeadMap((current) => ({
           ...current,
@@ -632,7 +620,7 @@ export default function BookDropControlPanelScreen() {
       } else {
         updatedExchange = await confirmBookdropExchangePickup({
           meetingId: selectedExchange.meetingId,
-          pin: selectedExchange.pin,
+          pin: normalizedPin,
         });
         setExchangeLeadMap((current) => {
           const next = { ...current };
@@ -656,11 +644,11 @@ export default function BookDropControlPanelScreen() {
       setExchangeActionModalOpen(false);
       setSuccessMessage("Intercambio actualizado correctamente");
     } catch (e: any) {
-      setError(e?.message ?? "No se pudo actualizar el intercambio");
+      setExchangeActionError(e?.message ?? "No se pudo actualizar el intercambio");
     } finally {
       setProcessingExchange(false);
     }
-  }, [exchangeLeadMap, selectedExchange, selectedLeadParticipantKey]);
+  }, [exchangeCodeInput, exchangeLeadMap, selectedExchange, selectedLeadParticipantKey]);
 
   const handleAddressSearch = useCallback(
     (query: string) => {
@@ -1033,42 +1021,11 @@ export default function BookDropControlPanelScreen() {
 
         <Text style={styles.sectionTitle}>Gestion de los intercambios</Text>
         <View style={styles.exchangeControlCard}>
-          <Text style={styles.exchangeControlTitle}>Operar con PIN</Text>
+          <Text style={styles.exchangeControlTitle}>Operar intercambios activos</Text>
           <Text style={styles.exchangeControlDescription}>
-            Introduce el PIN compartido del intercambio y abre el modal con las acciones
-            disponibles en este momento.
+            Selecciona uno de los intercambios activos y, dentro de su ficha, introduce el PIN
+            que te facilite la persona usuaria para confirmar cada paso.
           </Text>
-
-          <TextInput
-            value={exchangeCodeInput}
-            onChangeText={(value) => {
-              setExchangeCodeInput(normalizeExchangePin(value));
-              setExchangeLookupError(null);
-            }}
-            placeholder="Introduce el PIN del intercambio"
-            placeholderTextColor="#a7a1b3"
-            style={styles.input}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-
-          <Pressable
-            style={[styles.primaryButton, processingExchange && styles.buttonDisabled]}
-            onPress={openExchangeActionModal}
-            disabled={processingExchange}
-          >
-            <Ionicons name="key-outline" size={18} color="#fff" />
-            <Text style={styles.primaryButtonText}>Abrir acciones del intercambio</Text>
-          </Pressable>
-
-          {exchangeLookupError ? (
-            <View style={styles.exchangeControlInfoBox}>
-              <Ionicons name="alert-circle-outline" size={18} color="#b42318" />
-              <Text style={[styles.exchangeControlInfoText, styles.exchangeControlErrorText]}>
-                {exchangeLookupError}
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.exchangesList}>
@@ -1077,6 +1034,7 @@ export default function BookDropControlPanelScreen() {
               key={exchange.meetingId}
               exchange={exchange}
               leadParticipantKey={exchangeLeadMap[exchange.meetingId]}
+              onOpenActions={() => openExchangeActionModal(exchange)}
             />
           ))}
         </View>
@@ -1213,6 +1171,28 @@ export default function BookDropControlPanelScreen() {
               <Text style={styles.exchangeModalHelpText}>
                 {getExchangeActionHelpText(selectedExchange, selectedLeadParticipantKey)}
               </Text>
+
+              <TextInput
+                value={exchangeCodeInput}
+                onChangeText={(value) => {
+                  setExchangeCodeInput(normalizeExchangePin(value));
+                  setExchangeActionError(null);
+                }}
+                placeholder="Introduce el PIN compartido por la persona usuaria"
+                placeholderTextColor="#a7a1b3"
+                style={styles.input}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+
+              {exchangeActionError ? (
+                <View style={styles.exchangeControlInfoBox}>
+                  <Ionicons name="alert-circle-outline" size={18} color="#b42318" />
+                  <Text style={[styles.exchangeControlInfoText, styles.exchangeControlErrorText]}>
+                    {exchangeActionError}
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={styles.exchangeActionInfoBox}>
                 <Ionicons name="person-outline" size={18} color="#e07a5f" />
@@ -1507,9 +1487,11 @@ function InfoCard({
 function ExchangeCard({
   exchange,
   leadParticipantKey,
+  onOpenActions,
 }: {
   exchange: BookdropExchange;
   leadParticipantKey?: ExchangeParticipantKey;
+  onOpenActions: () => void;
 }) {
   const statusMeta = getExchangeStatusMeta(exchange.status);
 
@@ -1539,6 +1521,11 @@ function ExchangeCard({
           participantKey="secondParticipant"
         />
       </View>
+
+      <Pressable style={styles.exchangeCardActionButton} onPress={onOpenActions}>
+        <Ionicons name="key-outline" size={16} color="#fff" />
+        <Text style={styles.exchangeCardActionText}>Abrir acciones</Text>
+      </Pressable>
     </View>
   );
 }
@@ -2025,6 +2012,21 @@ const styles = StyleSheet.create({
   exchangeParticipants: {
     flexDirection: "row",
     gap: 10,
+  },
+  exchangeCardActionButton: {
+    marginTop: 14,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: "#e07a5f",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  exchangeCardActionText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   exchangeParticipantCard: {
     flex: 1,

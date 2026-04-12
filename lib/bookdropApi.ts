@@ -31,7 +31,6 @@ export type BookdropExchangeStatus =
 
 export interface BookdropExchange {
   meetingId: number;
-  pin: string;
   status: BookdropExchangeStatus;
   book1Title: string;
   book2Title: string;
@@ -68,16 +67,18 @@ function normalizeBookdropExchange(raw: any): BookdropExchange {
             ? "COMPLETED"
             : (rawStatus as BookdropExchangeStatus);
 
+  const rawMeetingId = raw?.meetingId ?? raw?.exchangeMeetingId ?? 0;
+  const rawScheduledAt = raw?.scheduledAt ?? raw?.meetingDate ?? null;
+
   return {
-    meetingId: Number(raw?.meetingId ?? 0),
-    pin: typeof raw?.pin === "string" ? raw.pin : "",
+    meetingId: Number(rawMeetingId),
     status,
     book1Title: typeof raw?.book1Title === "string" ? raw.book1Title : "",
     book2Title: typeof raw?.book2Title === "string" ? raw.book2Title : "",
     user1Name: typeof raw?.user1Name === "string" ? raw.user1Name : "",
     user2Name: typeof raw?.user2Name === "string" ? raw.user2Name : "",
-    scheduledAt: typeof raw?.scheduledAt === "string" && raw.scheduledAt.trim()
-      ? raw.scheduledAt
+    scheduledAt: typeof rawScheduledAt === "string" && rawScheduledAt.trim()
+      ? rawScheduledAt
       : null,
   };
 }

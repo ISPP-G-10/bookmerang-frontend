@@ -38,11 +38,11 @@ import {
   acceptExchange,
   acceptExchangeMeeting,
   completeExchangeMeeting,
+  counterProposeExchangeMeeting,
   createExchangeMeeting,
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
   rejectExchange,
-  rejectExchangeMeeting,
   reportExchange,
 } from "@/lib/exchangeApi";
 import {
@@ -228,7 +228,8 @@ const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
 
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
-  const chatId = parseInt(id ?? "0", 10);
+  const chatId = id ?? "";
+  const exchangeChatId = chatId;
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
@@ -642,12 +643,14 @@ export default function ChatDetailScreen() {
       setMeetingSubmitting(true);
       setError(null);
 
-      if (isCounterProposalMode && exchangeMeeting) {
-        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-      }
-
-      const createdMeeting = await createExchangeMeeting(payload);
-      setExchangeMeeting(createdMeeting);
+      const savedMeeting =
+        isCounterProposalMode && exchangeMeeting
+          ? await counterProposeExchangeMeeting(
+              exchangeMeeting.exchangeMeetingId,
+              payload,
+            )
+          : await createExchangeMeeting(payload);
+      setExchangeMeeting(savedMeeting);
 
       closeMeetingForm();
       Alert.alert("Propuesta enviada", "Tu propuesta de quedada se ha enviado correctamente.");
@@ -986,6 +989,12 @@ export default function ChatDetailScreen() {
   };
 
   const loadData = useCallback(async () => {
+    if (!chatId) {
+      setError("Chat no disponible");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -1011,7 +1020,7 @@ export default function ChatDetailScreen() {
         }
       }
 
-      const exchangeData = await getExchangeByChatIdWithMatch(chatId);
+      const exchangeData = await getExchangeByChatIdWithMatch(exchangeChatId);
       if (!exchangeData && chatData.type !== "COMMUNITY") {
         throw new Error("404: Exchange no encontrado");
       }
@@ -1041,10 +1050,12 @@ export default function ChatDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [chatId, router]);
+  }, [chatId, exchangeChatId, router]);
 
   // Polling: recargar mensajes cada 3 segundos para ver actualizaciones
   const refreshMessages = useCallback(async () => {
+    if (!chatId) return;
+
     try {
       const messagesData = await fetchMessages(chatId);
       const sorted = [...messagesData].sort(
@@ -1063,6 +1074,8 @@ export default function ChatDetailScreen() {
   }, [chatId, router]);
 
   const refreshTyping = useCallback(async () => {
+    if (!chatId) return;
+
     try {
       const users = await getTypingUsers(chatId);
       // Filter out our own user
@@ -1096,6 +1109,8 @@ export default function ChatDetailScreen() {
   }, [refreshMessages, refreshTyping]);
 
   useEffect(() => {
+    if (!chatId) return;
+
     return () => {
       if (isTypingRef.current) {
         stopTyping(chatId).catch(() => {});
@@ -1252,6 +1267,8 @@ export default function ChatDetailScreen() {
   const handleInputChange = (text: string) => {
     setInputText(text);
 
+    if (!chatId) return;
+
     if (!isTypingRef.current && text.trim().length > 0) {
       isTypingRef.current = true;
       startTyping(chatId).catch(() => {});
@@ -1276,7 +1293,7 @@ export default function ChatDetailScreen() {
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || !chatId) return;
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -1453,7 +1470,7 @@ export default function ChatDetailScreen() {
     setError(null);
     try {
       const updated = await rejectExchange(exchange.exchangeId);
-      setExchange(updated);
+      setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
 
       // Como el backend ahora borra el chat al desestimar el intercambio,
       // salimos de esta pantalla para evitar errores 404 al intentar refrescar.
@@ -1544,9 +1561,13 @@ export default function ChatDetailScreen() {
     exchange.status !== "COMPLETED";
   const canProposeMeeting =
     exchange?.status === "ACCEPTED" &&
-    (!exchangeMeeting || exchangeMeeting.meetingStatus === "REFUSED");
+    !exchangeMeeting;
   const hasMeetingProposal = exchangeMeeting?.meetingStatus === "PROPOSAL";
   const hasMeetingAccepted = exchangeMeeting?.meetingStatus === "ACCEPTED";
+  const bookdropPin =
+    hasMeetingAccepted && exchangeMeeting?.exchangeMode === "BOOKDROP"
+      ? exchangeMeeting.pin
+      : null;
   const isMeetingProposalReceived =
     !!exchangeMeeting &&
     hasMeetingProposal &&
@@ -1632,22 +1653,6 @@ export default function ChatDetailScreen() {
       setExchangeMeeting(accepted);
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo aceptar la propuesta.";
-      setError(message);
-    } finally {
-      setMeetingSubmitting(false);
-    }
-  };
-
-  const handleRejectMeetingProposal = async () => {
-    if (!exchangeMeeting || meetingSubmitting) return;
-
-    try {
-      setMeetingSubmitting(true);
-      setError(null);
-      await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-      setExchangeMeeting(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo rechazar la propuesta.";
       setError(message);
     } finally {
       setMeetingSubmitting(false);
@@ -1796,7 +1801,7 @@ export default function ChatDetailScreen() {
 
       if (exchange?.exchangeId) {
         try {
-          const updatedExchange = await getExchangeByChatIdWithMatch(chatId);
+          const updatedExchange = await getExchangeByChatIdWithMatch(exchangeChatId);
           if (updatedExchange) {
             setExchange(updatedExchange);
           }
@@ -1853,7 +1858,7 @@ export default function ChatDetailScreen() {
       setError(null);
 
       const updatedExchange = await reportExchange(exchange.exchangeId);
-      setExchange(updatedExchange);
+      setExchange((prev) => (prev ? { ...prev, ...updatedExchange } : updatedExchange));
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo reportar el intercambio.";
       setError(message);
@@ -1864,7 +1869,7 @@ export default function ChatDetailScreen() {
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject" | "meeting-accept" | "meeting-reject",
+    mode: "accept" | "reject" | "meeting-accept",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -1881,10 +1886,6 @@ export default function ChatDetailScreen() {
 
   const openAcceptMeetingConfirm = () => {
     openConfirm(handleAcceptMeetingProposal, "meeting-accept");
-  };
-
-  const openRejectMeetingConfirm = () => {
-    openConfirm(handleRejectMeetingProposal, "meeting-reject");
   };
 
   const getConfirmModalContent = () => {
@@ -2233,6 +2234,19 @@ export default function ChatDetailScreen() {
                       </View>
                     </View>
 
+                    {bookdropPin ? (
+                      <View style={styles.meetingPinBox}>
+                        <View style={styles.meetingPinHeader}>
+                          <FontAwesome name="key" size={16} color="#9A683A" />
+                          <Text style={styles.meetingPinTitle}>PIN del BookDrop</Text>
+                        </View>
+                        <Text style={styles.meetingPinValue}>{bookdropPin}</Text>
+                        <Text style={styles.meetingPinDescription}>
+                          Indica este PIN en el BookDrop para que puedan gestionar el intercambio.
+                        </Text>
+                      </View>
+                    ) : null}
+
                     {isMeetingProposalReceived && (
                       <View style={styles.meetingProposalActionsRow}>
                         <Pressable
@@ -2258,16 +2272,6 @@ export default function ChatDetailScreen() {
                           <Text style={styles.meetingProposalCounterText}>Contraproponer</Text>
                         </Pressable>
 
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.meetingProposalRejectButton,
-                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
-                          ]}
-                          onPress={openRejectMeetingConfirm}
-                          disabled={meetingSubmitting}
-                        >
-                          <FontAwesome name="times" size={16} color="#fff" />
-                        </Pressable>
                       </View>
                     )}
                   </View>
@@ -3700,6 +3704,41 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 13,
     color: "#6B7280",
+  },
+  meetingPinBox: {
+    marginTop: 4,
+    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E7D2BF",
+    backgroundColor: "#FFF7EF",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  meetingPinHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "transparent",
+  },
+  meetingPinTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#9A683A",
+  },
+  meetingPinValue: {
+    marginTop: 8,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: 3,
+    color: "#3F2C1F",
+  },
+  meetingPinDescription: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#6B4A2F",
+    backgroundColor: "transparent",
   },
   meetingProposalActionsRow: {
     marginTop: 8,
