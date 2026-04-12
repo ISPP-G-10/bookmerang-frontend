@@ -25,6 +25,7 @@ import {
   updateStoredAuthUser,
 } from "../lib/authSession";
 import supabase from "../lib/supabase";
+import { useTutorial } from '@/contexts/TutorialContext';
 
 const PROFILE_STORAGE_BUCKET =
   process.env.EXPO_PUBLIC_PROFILE_IMAGES_BUCKET ??
@@ -1114,6 +1115,7 @@ function SettingsRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { resetTutorial } = useTutorial();
   const { userPlan } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
@@ -1727,6 +1729,20 @@ export default function SettingsScreen() {
             right={
               <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
             }
+          />
+        </View>
+
+        {sectionLabel("Soporte")}
+        <View style={card}>
+          <SettingsRow
+            icon="question-circle"
+            label="Repetir tutorial"
+            subtitle="Vuelve a ver la guía de la app"
+            onPress={async () => {
+              await resetTutorial();
+              router.replace('/(tabs)/matcher' as any);
+            }}
+            isLast
           />
         </View>
 
