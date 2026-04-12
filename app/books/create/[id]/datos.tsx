@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
+import DraftsModal from "@/components/book-upload/DraftsModal";
 import {
   MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
@@ -35,6 +36,7 @@ import {
   Image,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -128,11 +130,9 @@ export default function UploadDataScreen() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
-  const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
-  const [showDraftsModal, setShowDraftsModal] = useState(false);
+    const [showDraftsModal, setShowDraftsModal] = useState(false);
   const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
-  const [pendingDeleteDraft, setPendingDeleteDraft] = useState<BookDraftSummary | null>(null);
-  const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
+    const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
 
   const [genres, setGenres] = useState<GenreOption[]>([]);
   const [languages, setLanguages] = useState<LanguageOption[]>([]);
@@ -149,6 +149,7 @@ export default function UploadDataScreen() {
   const [photoCount, setPhotoCount] = useState(0);
   const [showIsbnScanner, setShowIsbnScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -381,50 +382,15 @@ export default function UploadDataScreen() {
     router.replace(`/books/create/${draft.id}/datos` as any);
   };
 
-  const performDeleteDraft = async (draft: BookDraftSummary) => {
-    setDeletingDraftId(draft.id);
-    setError(null);
-    setPendingDeleteDraft(null);
-
-    try {
-      await deleteBook(draft.id);
-      setDrafts((current) => current.filter((item) => item.id !== draft.id));
-      setFeedback("Borrador eliminado correctamente.");
-
-      if (draft.id === bookId) {
-        setShowDraftsModal(false);
-        router.replace("/subir" as any);
-      }
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setDeletingDraftId(null);
-    }
-  };
-
-  const handleDeleteDraft = (draft: BookDraftSummary) => {
-    if (deletingDraftId) return;
-    setPendingDeleteDraft(draft);
-  };
-
-  const closeDeleteDraftModal = () => {
-    setPendingDeleteDraft(null);
-  };
-
-  const confirmDeleteDraft = () => {
-    if (!pendingDeleteDraft) return;
-    performDeleteDraft(pendingDeleteDraft);
-  };
-
+  
   const handleCancel = () => {
-    Alert.alert(
-      "Cancelar",
-      "Se perderán los cambios no guardados de este paso.",
-      [
-        { text: "Seguir editando", style: "cancel" },
-        { text: "Salir", style: "destructive", onPress: () => router.replace("/subir" as any) },
-      ],
-    );
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = async () => {
+    setShowCancelModal(false);
+    await markUploadFlowResetNeeded();
+    router.replace("/matcher" as any);
   };
 
   const handleBack = () => {
@@ -538,10 +504,12 @@ export default function UploadDataScreen() {
                   autoCapitalize="characters"
                   autoCorrect={false}
                 />
-                <TouchableOpacity style={styles.scanIsbnButton} onPress={handleOpenIsbnScanner}>
-                  <FontAwesome name="barcode" size={16} color="#fff" />
-                  <Text style={styles.scanIsbnButtonText}>Escanear</Text>
-                </TouchableOpacity>
+                {Platform.OS !== "web" ? (
+                  <TouchableOpacity style={styles.scanIsbnButton} onPress={handleOpenIsbnScanner}>
+                    <FontAwesome name="barcode" size={16} color="#fff" />
+                    <Text style={styles.scanIsbnButtonText}>Escanear</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
 
@@ -657,62 +625,21 @@ export default function UploadDataScreen() {
         </>
       )}
 
-      <Modal
-        transparent
+      <DraftsModal
         visible={showDraftsModal}
-        animationType="slide"
-        onRequestClose={() => setShowDraftsModal(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowDraftsModal(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Tus borradores</Text>
-            {drafts.length === 0 ? (
-              <Text style={styles.emptyDraftsText}>No tienes borradores guardados.</Text>
-            ) : (
-              <ScrollView style={styles.modalList}>
-                {drafts.map((draft) => (
-                  <View key={draft.id} style={styles.draftItem}>
-                    <TouchableOpacity
-                      style={styles.draftMainArea}
-                      onPress={() => handleLoadDraft(draft)}
-                      disabled={Boolean(deletingDraftId)}
-                    >
-                      {draft.thumbnailUrl ? (
-                        <Image source={{ uri: draft.thumbnailUrl }} style={styles.draftThumb} />
-                      ) : (
-                        <View style={styles.draftThumbPlaceholder}>
-                          <FontAwesome name="book" size={16} color="#b2a89b" />
-                        </View>
-                      )}
-                      <View style={styles.draftInfo}>
-                        <Text numberOfLines={1} style={styles.draftTitle}>
-                          {draft.titulo?.trim() || "Sin título"}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.draftSubtitle}>
-                          {draft.autor?.trim() || "Autor sin definir"}
-                        </Text>
-                        <Text style={styles.draftDate}>{formatUpdatedAt(draft.updatedAt)}</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.draftDeleteButton}
-                      onPress={() => handleDeleteDraft(draft)}
-                      disabled={deletingDraftId === draft.id}
-                    >
-                      {deletingDraftId === draft.id ? (
-                        <ActivityIndicator size="small" color="#d5785f" />
-                      ) : (
-                        <FontAwesome name="trash" size={16} color="#d5785f" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowDraftsModal(false)}
+        drafts={drafts}
+        onLoadDraft={handleLoadDraft}
+        onDraftDeleted={(draftIdToDelete) => {
+          setDrafts((current) => current.filter((item) => item.id !== draftIdToDelete));
+          if (bookId === draftIdToDelete) {
+            setShowDraftsModal(false);
+            router.replace("/subir" as any);
+          }
+        }}
+        onError={setError}
+        onSuccess={setFeedback}
+      />
 
       <FlowInfoModal
         visible={Boolean(infoModal)}
@@ -731,9 +658,6 @@ export default function UploadDataScreen() {
             style={styles.scannerPreview}
             facing="back"
             onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
-            barcodeScannerSettings={{
-              barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
-            }}
           />
           <View pointerEvents="none" style={styles.scannerFrameWrapper}>
             <View style={styles.scannerFrame} />
@@ -764,14 +688,14 @@ export default function UploadDataScreen() {
         onSecondaryPress={() => setShowSaveDraftModal(false)}
       />
 
-      <FlowInfoModal
-        visible={Boolean(pendingDeleteDraft)}
-        title="Eliminar borrador"
-        message="Esta acción eliminará el borrador de forma permanente."
-        primaryLabel="Eliminar"
-        secondaryLabel="Cancelar"
-        onPrimaryPress={confirmDeleteDraft}
-        onSecondaryPress={closeDeleteDraftModal}
+            <FlowInfoModal
+        visible={showCancelModal}
+        title="Cancelar subida"
+        message="¿Estás seguro de que quieres cancelar? Perderás los cambios no guardados."
+        primaryLabel="Sí, cancelar"
+        secondaryLabel="Seguir editando"
+        onPrimaryPress={confirmCancel}
+        onSecondaryPress={() => setShowCancelModal(false)}
       />
     </View>
   );
