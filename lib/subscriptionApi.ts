@@ -69,3 +69,26 @@ export async function cancelSubscription(): Promise<void> {
     throw new Error(message);
   }
 }
+
+/**
+ * Sync subscription state directly from the Stripe API.
+ * Fallback for when webhooks are unavailable (e.g. local dev).
+ * Returns the updated subscription status.
+ */
+export async function syncSubscriptionFromStripe(): Promise<SubscriptionStatus> {
+  const res = await apiRequest('/subscriptions/sync', {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    let message = errorText;
+    try {
+      const errorJson = JSON.parse(errorText);
+      message = errorJson.error || errorJson.message || errorText;
+    } catch {}
+    throw new Error(message);
+  }
+
+  return res.json();
+}

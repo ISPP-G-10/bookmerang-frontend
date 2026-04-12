@@ -10,6 +10,7 @@ import {
   getSubscriptionStatus,
   createCheckoutSession,
   cancelSubscription as cancelSubscriptionApi,
+  syncSubscriptionFromStripe,
   SubscriptionStatus,
 } from '@/lib/subscriptionApi';
 import { useAuth } from './AuthContext';
@@ -24,6 +25,8 @@ interface SubscriptionContextType {
   cancelSubscription: () => Promise<void>;
   /** Re-fetches subscription status from backend */
   refreshStatus: () => Promise<void>;
+  /** Syncs subscription directly from Stripe API (webhook-free fallback) */
+  syncFromStripe: () => Promise<void>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType>({
@@ -33,6 +36,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   getCheckoutUrl: async () => '',
   cancelSubscription: async () => {},
   refreshStatus: async () => {},
+  syncFromStripe: async () => {},
 });
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
@@ -60,6 +64,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     await refreshStatus();
   }, [refreshStatus]);
 
+  const syncFromStripe = useCallback(async () => {
+    try {
+      const status = await syncSubscriptionFromStripe();
+      setSubscriptionStatus(status);
+      await refreshUserPlan();
+    } catch (error) {
+      console.warn('[SubscriptionContext] syncFromStripe failed, falling back to refreshStatus:', error);
+      await refreshStatus();
+    }
+  }, [refreshStatus, refreshUserPlan]);
+
   // Load subscription status when authenticated
   useEffect(() => {
     if (!session) {
@@ -83,6 +98,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         getCheckoutUrl,
         cancelSubscription,
         refreshStatus,
+        syncFromStripe,
       }}
     >
       {children}

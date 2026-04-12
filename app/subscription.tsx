@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { ConfirmModal } from "@/components/ConfirmationModal";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
 // WebView only works on native platforms
@@ -90,24 +91,26 @@ export default function SubscriptionScreen() {
     getCheckoutUrl,
     cancelSubscription,
     refreshStatus,
+    syncFromStripe,
   } = useSubscription();
 
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [showWebView, setShowWebView] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   // ── Handle successful payment ──────────────────────────────────────
 
   const handlePaymentSuccess = useCallback(async () => {
     setTimeout(async () => {
-      await refreshStatus();
+      await syncFromStripe();
       Alert.alert(
         "¡Suscripción activada!",
         "Ahora eres un usuario Premium. Disfruta de todas las funciones."
       );
     }, 2000);
-  }, [refreshStatus]);
+  }, [syncFromStripe]);
 
   // ── Checkout: WebView (native) or popup (web) ──────────────────────
 
@@ -152,7 +155,6 @@ export default function SubscriptionScreen() {
   // ── Cancel subscription ────────────────────────────────────────────
 
   const handleCancelSubscription = () => {
-    // Don't show cancel if already marked to cancel
     if (subscriptionStatus?.subscription?.cancelsAtPeriodEnd) {
       Alert.alert(
         "Suscripción ya cancelada",
@@ -160,35 +162,26 @@ export default function SubscriptionScreen() {
       );
       return;
     }
+    setShowCancelModal(true);
+  };
 
-    Alert.alert(
-      "Cancelar suscripción",
-      "Tu suscripción seguirá activa hasta el final del período actual. Después de esa fecha, perderás el acceso a las funciones Premium.",
-      [
-        { text: "No, mantener", style: "cancel" },
-        {
-          text: "Sí, cancelar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsCancelling(true);
-              await cancelSubscription();
-              Alert.alert(
-                "Suscripción cancelada",
-                "Tu suscripción se cancelará al final del período actual. Seguirás teniendo acceso a Premium hasta entonces."
-              );
-            } catch (error: any) {
-              Alert.alert(
-                "Error",
-                error.message || "No se pudo cancelar la suscripción"
-              );
-            } finally {
-              setIsCancelling(false);
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmCancel = async () => {
+    setShowCancelModal(false);
+    try {
+      setIsCancelling(true);
+      await cancelSubscription();
+      Alert.alert(
+        "Suscripción cancelada",
+        "Tu suscripción se cancelará al final del período actual. Seguirás teniendo acceso a Premium hasta entonces."
+      );
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        error.message || "No se pudo cancelar la suscripción"
+      );
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   // ── Styles ─────────────────────────────────────────────────────────
@@ -231,7 +224,7 @@ export default function SubscriptionScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.push("/settings")}
+          onPress={() => router.replace("/(tabs)/matcher")}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <FontAwesome name="chevron-left" size={18} color="#8B7355" />
@@ -565,6 +558,18 @@ export default function SubscriptionScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ═══ CANCEL SUBSCRIPTION CONFIRMATION MODAL ═══ */}
+      <ConfirmModal
+        visible={showCancelModal}
+        title="Cancelar suscripción"
+        message="Tu suscripción seguirá activa hasta el final del período actual. Después de esa fecha, perderás el acceso a las funciones Premium."
+        confirmLabel="Sí, cancelar"
+        cancelLabel="No, mantener"
+        confirmColor="danger"
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setShowCancelModal(false)}
+      />
     </>
   );
 }
