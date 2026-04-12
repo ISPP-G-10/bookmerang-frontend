@@ -2,7 +2,7 @@
 
 export interface ExchangeWithMatchDto {
     exchangeId: number,
-    chatId: number,
+    chatId: string,
     matchId: number,
     user1Id: string,
     user2Id: string,

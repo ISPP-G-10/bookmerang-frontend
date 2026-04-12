@@ -41,7 +41,7 @@ export interface SwipeResultDto {
 
 export interface MatchCreatedDto {
   matchId: number;
-  chatId: number;
+  chatId: string;
   otherUserId: string;
   otherUsername: string;
 }

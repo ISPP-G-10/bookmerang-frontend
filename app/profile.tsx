@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import InkdropsHistoryModal from "@/components/InkdropsHistoryModal";
 import PreferencesModal from "@/components/PreferencesModal";
 import { useAuth } from "@/contexts/AuthContext";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -6,23 +7,21 @@ import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  DimensionValue,
-  Image,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-  useWindowDimensions,
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+    useWindowDimensions,
 } from "react-native";
 import { apiRequest } from "../lib/api";
-import {
-  getMyLibrary,
-  toConditionLabel,
-  type BookListItem,
-} from "../lib/books";
 import { getStoredAuthSession } from "../lib/authSession";
-import { MatcherCard } from "@/types/matcher";
+import {
+    getMyLibrary,
+    toConditionLabel,
+    type BookListItem,
+} from "../lib/books";
 
 const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
   if (!Array.isArray(books)) return [];
@@ -82,6 +81,7 @@ export default function ProfileScreen() {
     longitude: number;
   } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [inkdropsModalVisible, setInkdropsModalVisible] = useState(false);
 
   useEffect(() => {
     if (!authLoading && isBookdropUser) {
@@ -111,8 +111,14 @@ export default function ProfileScreen() {
             latitude: lat,
             longitude: lon,
             radioKm: preferences.distanceKm || 10,
-            extension: preferences.bookLength.includes("0-200") ? "SHORT" : preferences.bookLength.includes("400+") ? "LONG" : "MEDIUM",
-            genreIds: availableGenres.filter(g => preferences.genres.includes(g.name)).map(g => g.id),
+            extension: preferences.bookLength.includes("0-200")
+              ? "SHORT"
+              : preferences.bookLength.includes("400+")
+                ? "LONG"
+                : "MEDIUM",
+            genreIds: availableGenres
+              .filter((g) => preferences.genres.includes(g.name))
+              .map((g) => g.id),
           }),
         });
       }
@@ -183,76 +189,71 @@ export default function ProfileScreen() {
     },
     [router],
   );
-  
+
   const loadProfileData = useCallback(async (): Promise<any | null> => {
-  const session = await getStoredAuthSession();
-  const currentUser = session?.user;
-  if (!currentUser) {
-    router.replace("/login" as any);
-    return null;
-  }
-
-  try {
-    const res = await apiRequest("/Auth/perfil", { method: "GET" });
-    if (res.ok) {
-      const json = await res.json();
-      setProfile(json);
-
-      const maybeLat =
-        json.latitud ??
-        json.Latitud ??
-        json.latitude ??
-        json.Latitude ??
-        json.lat ??
-        json.Lat;
-      const maybeLon =
-        json.longitud ??
-        json.Longitud ??
-        json.longitude ??
-        json.Longitude ??
-        json.lon ??
-        json.Lon ??
-        json.Long;
-
-      const parsedLat =
-        typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
-      const parsedLon =
-        typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
-
-      if (
-        parsedLat &&
-        parsedLon &&
-        !isNaN(parsedLat) &&
-        !isNaN(parsedLon)
-      ) {
-        setUserLocation({ latitude: parsedLat, longitude: parsedLon });
-        reverseGeocodeAndSet(parsedLat, parsedLon);
-      } else if (json.location) {
-        setLocationLabel(json.location);
-      }
-
-      return json;
+    const session = await getStoredAuthSession();
+    const currentUser = session?.user;
+    if (!currentUser) {
+      router.replace("/login" as any);
+      return null;
     }
 
-    const u = session?.user;
-    setProfile({
-      email: u?.email,
-      name: u?.name ?? "",
-      username: u?.username ?? "",
-      avatar: u?.profilePhoto ?? null,
-    });
-    return null;
-  } catch {
-    const u = session?.user;
-    setProfile({
-      email: u?.email,
-      name: u?.name ?? "",
-      username: u?.username ?? "",
-      avatar: u?.profilePhoto ?? null,
-    });
-    return null;
-  }
-}, [router]);
+    try {
+      const res = await apiRequest("/Auth/perfil", { method: "GET" });
+      if (res.ok) {
+        const json = await res.json();
+        setProfile(json);
+
+        const maybeLat =
+          json.latitud ??
+          json.Latitud ??
+          json.latitude ??
+          json.Latitude ??
+          json.lat ??
+          json.Lat;
+        const maybeLon =
+          json.longitud ??
+          json.Longitud ??
+          json.longitude ??
+          json.Longitude ??
+          json.lon ??
+          json.Lon ??
+          json.Long;
+
+        const parsedLat =
+          typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
+        const parsedLon =
+          typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
+
+        if (parsedLat && parsedLon && !isNaN(parsedLat) && !isNaN(parsedLon)) {
+          setUserLocation({ latitude: parsedLat, longitude: parsedLon });
+          reverseGeocodeAndSet(parsedLat, parsedLon);
+        } else if (json.location) {
+          setLocationLabel(json.location);
+        }
+
+        return json;
+      }
+
+      const u = session?.user;
+      setProfile({
+        email: u?.email,
+        name: u?.name ?? "",
+        username: u?.username ?? "",
+        avatar: u?.profilePhoto ?? null,
+      });
+      return null;
+    } catch {
+      const u = session?.user;
+      setProfile({
+        email: u?.email,
+        name: u?.name ?? "",
+        username: u?.username ?? "",
+        avatar: u?.profilePhoto ?? null,
+      });
+      return null;
+    }
+  }, [router]);
 
   useEffect(() => {
     (async () => {
@@ -299,10 +300,10 @@ export default function ProfileScreen() {
   }, [message]);
 
   useFocusEffect(
-          useCallback(() => {
-            void loadProfileData();
-          }, [loadProfileData]),
-        );
+    useCallback(() => {
+      void loadProfileData();
+    }, [loadProfileData]),
+  );
 
   const handleSavePreferences = async (newPreferences: {
     distanceKm: number;
@@ -616,45 +617,72 @@ export default function ProfileScreen() {
               borderColor: "#F3E9E0",
             }}
           >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 4,
-              }}
-            >
-              <FontAwesome name="tint" size={20} color="#e07a5f" />
-              <Text
-                style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
+            <View style={{ width: "100%", alignItems: "center" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 4,
+                }}
               >
-                {profile?.monthlyInkDrops ?? 250}
+                <FontAwesome name="tint" size={20} color="#e07a5f" />
+                <Text
+                  style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
+                >
+                  {profile?.monthlyInkDrops ?? 250}
+                </Text>
+              </View>
+              <Text
+                style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}
+              >
+                InkDrops
+              </Text>
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: "700",
+                  color: "#8B7355",
+                  marginTop: 2,
+                }}
+              >
+                MENSUALES
+              </Text>
+              <Text
+                style={{
+                  fontSize: 9,
+                  fontWeight: "700",
+                  color: "#e07a5f",
+                  marginTop: 2,
+                }}
+              >
+                Reinicia en {profile?.daysUntilReset ?? 12} días
               </Text>
             </View>
-            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
-              InkDrops
-            </Text>
-            <Text
-              style={{
-                fontSize: 10,
-                fontWeight: "700",
-                color: "#8B7355",
-                marginTop: 2,
-              }}
-            >
-              MENSUALES
-            </Text>
-            <Text
-              style={{
-                fontSize: 9,
-                fontWeight: "700",
-                color: "#e07a5f",
-                marginTop: 2,
-              }}
-            >
-              Reinicia en {profile?.daysUntilReset ?? 12} días
-            </Text>
           </View>
+        </View>
+
+        {/* ── Botón Consulta Histórial ── */}
+        <View
+          style={{
+            marginHorizontal: 20,
+            marginBottom: 12,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => setInkdropsModalVisible(true)}
+            style={{
+              backgroundColor: "#e07a5f",
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderRadius: 8,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>
+              Historial de Inkdrops
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── Progreso ── */}
@@ -968,7 +996,11 @@ export default function ProfileScreen() {
         error={preferencesError}
         loading={preferencesLoading}
       />
+
+      <InkdropsHistoryModal
+        visible={inkdropsModalVisible}
+        onClose={() => setInkdropsModalVisible(false)}
+      />
     </View>
   );
 }
-
