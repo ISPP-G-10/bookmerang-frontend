@@ -1,5 +1,6 @@
 import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
@@ -136,47 +137,50 @@ function RootLayoutNav() {
             arrowColor="#ffffff"
             tooltipStyle={copilotTooltipStyle}
           >
-            <ThemeProvider
-              value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-            >
-              <AuthGate>
-                <Stack>
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="login" options={{ headerShown: false }} />
-                  <Stack.Screen name="modal" options={{ presentation: "modal" }} />
-                  <Stack.Screen name="register" options={{ headerShown: false }} />
-                  <Stack.Screen name="profile" options={{ headerShown: false }} />
-                  <Stack.Screen
-                    name="bookDropControlPanel"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="books/[id]/index"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="books/[id]/edit"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="books/create/[id]/datos"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="books/create/[id]/estado"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="chat/[id]"
-                    options={{
-                      headerShown: true,
-                      title: "Chat",
-                    }}
-                  />
-                </Stack>
-              </AuthGate>
-            </ThemeProvider>
+            <SubscriptionProvider>
+              <ThemeProvider
+                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+              >
+                <AuthGate>
+                  <Stack>
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="login" options={{ headerShown: false }} />
+                    <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+                    <Stack.Screen name="register" options={{ headerShown: false }} />
+                    <Stack.Screen name="profile" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="bookDropControlPanel"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="books/[id]/index"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="books/[id]/edit"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="books/create/[id]/datos"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="books/create/[id]/estado"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen name="subscription" options={{ headerShown: false }} />
+                    <Stack.Screen
+                      name="chat/[id]"
+                      options={{
+                        headerShown: true,
+                        title: "Chat",
+                      }}
+                    />
+                  </Stack>
+                </AuthGate>
+              </ThemeProvider>
+            </SubscriptionProvider>
           </CopilotProvider>
         </TutorialProvider>
       </AuthProvider>

@@ -2,6 +2,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
 import React from "react";
 import {
   ActivityIndicator,
@@ -1115,6 +1116,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { resetTutorial } = useTutorial();
+  const { userPlan } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
@@ -1708,6 +1710,12 @@ export default function SettingsScreen() {
             label="Cambiar contraseña"
             subtitle="Actualiza tu contraseña"
             onPress={() => setChangePasswordOpen(true)}
+          />
+          <SettingsRow
+            icon="crown"
+            label="Plan / Suscripción"
+            subtitle={`Plan actual: ${userPlan}`}
+            onPress={() => router.push("/subscription")}
             isLast
           />
         </View>
