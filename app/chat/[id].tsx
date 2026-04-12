@@ -1,8 +1,6 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +14,8 @@ import {
   StyleSheet,
   TextInput,
 } from "react-native";
+import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 
 import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
@@ -25,7 +25,6 @@ import { fetchMyBackendUser } from "@/lib/api";
 import { authService } from "@/lib/authService";
 import { BookDetail, getBookDetail } from "@/lib/books";
 import { BookspotDTO, getActiveBookspots } from "@/lib/bookspotApi";
-import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
 import {
   sendMessage as apiSendMessage,
   getChat as fetchChat,
@@ -45,6 +44,7 @@ import {
   rejectExchange,
   reportExchange,
 } from "@/lib/exchangeApi";
+import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
 import {
   ChatDto,
   ChatParticipantDto,
@@ -233,10 +233,10 @@ export default function ChatDetailScreen() {
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
-  const hasHandled404 = useRef(false);
+  const hasHandledError = useRef(false);
   const handleChatDeleted = useCallback(() => {
-    if (!hasHandled404.current) {
-      hasHandled404.current = true;
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
       if (Platform.OS === "web") {
         window.alert(
           "Chat no disponible: El otro usuario ha desestimado el intercambio o el chat ya no existe.",
@@ -246,6 +246,22 @@ export default function ChatDetailScreen() {
         Alert.alert(
           "Chat no disponible",
           "El otro usuario ha desestimado el intercambio o el chat ya no existe.",
+          [{ text: "OK", onPress: () => router.replace("/(tabs)/chat") }],
+        );
+      }
+    }
+  }, [router]);
+
+  const handleChatForbidden = useCallback(() => {
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
+      if (Platform.OS === "web") {
+        window.alert("Acceso denegado: No tienes permiso para acceder a este chat.");
+        router.replace("/(tabs)/chat");
+      } else {
+        Alert.alert(
+          "Acceso denegado",
+          "No tienes permiso para acceder a este chat.",
           [{ text: "OK", onPress: () => router.replace("/(tabs)/chat") }],
         );
       }
@@ -1039,12 +1055,15 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       setError(err instanceof Error ? err.message : "Error al cargar el chat");
     } finally {
@@ -1063,11 +1082,14 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling
     }
@@ -1085,11 +1107,14 @@ export default function ChatDetailScreen() {
         ),
       );
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling de typing
     }
@@ -1334,12 +1359,15 @@ export default function ChatDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 150);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       // Remover mensaje optimista en caso de error
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));

@@ -1,5 +1,5 @@
 import { getAccessToken } from '@/lib/authSession';
-import { encryptMessage, decryptMessage } from '@/lib/crypto';
+import { decryptMessage, encryptMessage } from '@/lib/crypto';
 import {
   ChatDto,
   CreateChatRequest,
@@ -71,6 +71,8 @@ export async function getMyChats(): Promise<ChatDto[]> {
 /**
  * Obtiene un chat específico por ID.
  * GET /api/chat/{chatId}
+ * Lanza un error con código 404 si el chat no existe.
+ * Lanza un error con código 403 si el usuario no tiene acceso.
  */
 export async function getChat(chatId: string | number): Promise<ChatDto> {
   const headers = await getAuthHeaders();

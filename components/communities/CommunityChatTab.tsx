@@ -34,7 +34,7 @@ import {
 
 type Props = {
   communityId: number;
-  chatId: number;
+  chatId: string;
 };
 
 function formatMessageTime(dateStr: string): string {
