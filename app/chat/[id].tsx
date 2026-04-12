@@ -1609,6 +1609,12 @@ export default function ChatDetailScreen() {
   const canShowMeetingCompletionBanner =
     !!exchangeMeeting &&
     hasMeetingAccepted &&
+    exchangeMeeting.exchangeMode !== "BOOKDROP" &&
+    exchange?.status === "ACCEPTED";
+  const canShowBookdropManagedBanner =
+    !!exchangeMeeting &&
+    hasMeetingAccepted &&
+    exchangeMeeting.exchangeMode === "BOOKDROP" &&
     exchange?.status === "ACCEPTED";
   const isCurrentUserMeetingProposer =
     !!exchangeMeeting && !!backendUserId && exchangeMeeting.proposerId === backendUserId;
@@ -1797,6 +1803,7 @@ export default function ChatDetailScreen() {
 
   const handleCompleteExchangeAfterMeeting = async () => {
     if (!exchangeMeeting || meetingCompletionSubmitting) return;
+    if (exchangeMeeting.exchangeMode === "BOOKDROP") return;
 
     try {
       setMeetingCompletionSubmitting(true);
@@ -1880,6 +1887,7 @@ export default function ChatDetailScreen() {
 
   const handleReportCompletedExchange = async () => {
     if (!exchange?.exchangeId || meetingCompletionSubmitting) return;
+    if (exchangeMeeting?.exchangeMode === "BOOKDROP") return;
 
     try {
       setMeetingCompletionSubmitting(true);
@@ -2349,6 +2357,22 @@ export default function ChatDetailScreen() {
                           <Text style={styles.meetingCompletionReportText}>Reportar</Text>
                         </Pressable>
                       </View>
+                    </View>
+                  </View>
+                )}
+
+                {canShowBookdropManagedBanner && (
+                  <View style={styles.meetingCompletionWrapper}>
+                    <View style={styles.meetingBookdropInfoCard}>
+                      <View style={styles.meetingCompletionHeader}>
+                        <FontAwesome name="building-o" size={20} color="#9A683A" />
+                        <Text style={styles.meetingCompletionTitle}>Gestionado por BookDrop</Text>
+                      </View>
+
+                      <Text style={styles.meetingCompletionDescription}>
+                        Este intercambio se valida directamente en el establecimiento. Aqui no se
+                        puede completar ni reportar manualmente.
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -3828,6 +3852,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: "#F5FCF8",
+  },
+  meetingBookdropInfoCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E7D2BF",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#FFF7EF",
   },
   meetingCompletionHeader: {
     flexDirection: "row",
