@@ -3,6 +3,7 @@ import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
 import DraftsModal from "@/components/book-upload/DraftsModal";
+import IsbnScannerWeb from "@/components/book-upload/IsbnScannerWeb";
 import {
   MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
@@ -404,22 +405,26 @@ export default function UploadDataScreen() {
   };
 
   const handleOpenIsbnScanner = async () => {
-    const permission = await Camera.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permiso de cámara necesario",
-        "Para escanear el ISBN debes permitir el acceso a la cámara.",
-        [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Abrir ajustes",
-            onPress: () => {
-              Linking.openSettings().catch(() => undefined);
+    // On web, the browser handles camera permissions natively via getUserMedia.
+    // We only need to request permission through expo-camera on native (iOS/Android).
+    if (Platform.OS !== "web") {
+      const permission = await Camera.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permiso de cámara necesario",
+          "Para escanear el ISBN debes permitir el acceso a la cámara.",
+          [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Abrir ajustes",
+              onPress: () => {
+                Linking.openSettings().catch(() => undefined);
+              },
             },
-          },
-        ],
-      );
-      return;
+          ],
+        );
+        return;
+      }
     }
 
     setScannerLocked(false);
@@ -430,6 +435,26 @@ export default function UploadDataScreen() {
     if (scannerLocked) return;
     setScannerLocked(true);
 
+    const parsedIsbn = parseScannedIsbn(data);
+
+    if (!parsedIsbn) {
+      closeIsbnScanner();
+      setInfoModal({
+        title: "ISBN no válido",
+        message:
+          "El código detectado no corresponde a un ISBN válido. Prueba a escanear de nuevo la tapa del libro.",
+      });
+      return;
+    }
+
+    setIsbn(parsedIsbn);
+    setError(null);
+    setFeedback("ISBN detectado correctamente desde el escáner.");
+    closeIsbnScanner();
+  };
+
+  /** Handler for the web-specific scanner (receives raw barcode string). */
+  const handleWebIsbnScanned = (data: string) => {
     const parsedIsbn = parseScannedIsbn(data);
 
     if (!parsedIsbn) {
@@ -504,12 +529,10 @@ export default function UploadDataScreen() {
                   autoCapitalize="characters"
                   autoCorrect={false}
                 />
-                {Platform.OS !== "web" ? (
-                  <TouchableOpacity style={styles.scanIsbnButton} onPress={handleOpenIsbnScanner}>
-                    <FontAwesome name="barcode" size={16} color="#fff" />
-                    <Text style={styles.scanIsbnButtonText}>Escanear</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity style={styles.scanIsbnButton} onPress={handleOpenIsbnScanner}>
+                  <FontAwesome name="barcode" size={16} color="#fff" />
+                  <Text style={styles.scanIsbnButtonText}>Escanear</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -648,35 +671,47 @@ export default function UploadDataScreen() {
         onPrimaryPress={closeInfoModal}
       />
 
-      <Modal
-        visible={showIsbnScanner}
-        animationType="slide"
-        onRequestClose={closeIsbnScanner}
-      >
-        <View style={styles.scannerModalContainer}>
-          <CameraView
-            style={styles.scannerPreview}
-            facing="back"
-            onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
-          />
-          <View pointerEvents="none" style={styles.scannerFrameWrapper}>
-            <View style={styles.scannerFrame} />
-          </View>
+      {/* ISBN Scanner – web uses custom component, native uses expo-camera */}
+      {Platform.OS === "web" ? (
+        <IsbnScannerWeb
+          visible={showIsbnScanner}
+          onClose={closeIsbnScanner}
+          onScanned={handleWebIsbnScanned}
+        />
+      ) : (
+        <Modal
+          visible={showIsbnScanner}
+          animationType="slide"
+          onRequestClose={closeIsbnScanner}
+        >
+          <View style={styles.scannerModalContainer}>
+            <CameraView
+              style={styles.scannerPreview}
+              facing="back"
+              onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
+              barcodeScannerSettings={{
+                barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
+              }}
+            />
+            <View pointerEvents="none" style={styles.scannerFrameWrapper}>
+              <View style={styles.scannerFrame} />
+            </View>
 
-          <View style={styles.scannerTopBar}>
-            <TouchableOpacity style={styles.scannerCloseButton} onPress={closeIsbnScanner}>
-              <FontAwesome name="times" size={18} color="#fff" />
-              <Text style={styles.scannerCloseText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.scannerTopBar}>
+              <TouchableOpacity style={styles.scannerCloseButton} onPress={closeIsbnScanner}>
+                <FontAwesome name="times" size={18} color="#fff" />
+                <Text style={styles.scannerCloseText}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.scannerBottomBar}>
-            <Text style={styles.scannerHintText}>
-              Enfoca el código de barras de la tapa trasera para completar el ISBN.
-            </Text>
+            <View style={styles.scannerBottomBar}>
+              <Text style={styles.scannerHintText}>
+                Enfoca el código de barras de la tapa trasera para completar el ISBN.
+              </Text>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       <FlowInfoModal
         visible={showSaveDraftModal}
