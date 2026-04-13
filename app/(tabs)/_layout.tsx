@@ -29,7 +29,7 @@ export default function TabLayout() {
   const pathname = usePathname();
   const isTabsActive = segments[0] === '(tabs)';
 
-  const displayName = session?.user?.user_metadata?.display_name || 'lector/a';
+  const displayName = session?.user?.name || session?.user?.username || 'lector/a';
 
   // Redirect bookdrop users away from tabs
   useEffect(() => {
@@ -124,7 +124,7 @@ export default function TabLayout() {
                 order={2}
                 name="matcher-tab"
               >
-                <WalkthroughablePressable {...props} />
+                <WalkthroughablePressable {...(props as any)} />
               </CopilotStep>
             ),
           }}
@@ -144,7 +144,7 @@ export default function TabLayout() {
                 order={3}
                 name="chat-tab"
               >
-                <WalkthroughablePressable {...props} />
+                <WalkthroughablePressable {...(props as any)} />
               </CopilotStep>
             ),
           }}
@@ -164,7 +164,7 @@ export default function TabLayout() {
                 order={4}
                 name="subir-tab"
               >
-                <WalkthroughablePressable {...props} />
+                <WalkthroughablePressable {...(props as any)} />
               </CopilotStep>
             ),
           }}
@@ -184,7 +184,7 @@ export default function TabLayout() {
                 order={5}
                 name="comunidades-tab"
               >
-                <WalkthroughablePressable {...props} />
+                <WalkthroughablePressable {...(props as any)} />
               </CopilotStep>
             ),
           }}
@@ -204,7 +204,7 @@ export default function TabLayout() {
                 order={6}
                 name="bookspots-tab"
               >
-                <WalkthroughablePressable {...props} />
+                <WalkthroughablePressable {...(props as any)} />
               </CopilotStep>
             ),
           }}
