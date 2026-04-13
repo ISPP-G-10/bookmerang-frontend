@@ -31,6 +31,7 @@ import { getMyLibrary, BookListItem } from '@/lib/books';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityMeetupDto } from '@/types/community';
 import { ConfirmModal } from '@/components/ConfirmationModal';
+import { getFrameById, getNameColorById } from '@/lib/rewardsSystem';
 
 type Props = {
   communityId: number;
@@ -657,24 +658,53 @@ export default function CommunityMeetupTab({
           </View>
         ) : (
           <View style={styles.attendeesList}>
-            {displayedAttendees.map((attendee) => (
+            {displayedAttendees.map((attendee) => {
+              const frame = attendee.activeFrameId ? getFrameById(attendee.activeFrameId) : undefined;
+              const frameColor = frame?.animationColors?.[0] ?? frame?.borderColor ?? null;
+              const bw = frame?.borderWidth ?? 0;
+              const nameColor = attendee.activeColorId ? getNameColorById(attendee.activeColorId) : undefined;
+              return (
               <View key={attendee.userId} style={styles.attendeeRow}>
-                <View
-                  style={[
-                    styles.attendeeAvatar,
-                    {
-                      backgroundColor:
-                        attendee.userId === currentUserId ? '#D77B63' : getAvatarColor(attendee.userId),
-                    },
-                  ]}
-                >
-                  <Text style={styles.attendeeAvatarText}>
-                    {attendee.userId === currentUserId ? 'TU' : getInitials(attendee.username)}
-                  </Text>
+                {/* Avatar con marco superpuesto (position absolute, no afecta layout) */}
+                <View style={{ width: 42, height: 42 }}>
+                  <View
+                    style={[
+                      styles.attendeeAvatar,
+                      {
+                        backgroundColor:
+                          attendee.userId === currentUserId ? '#D77B63' : getAvatarColor(attendee.userId),
+                      },
+                    ]}
+                  >
+                    <Text style={styles.attendeeAvatarText}>
+                      {attendee.userId === currentUserId ? 'TU' : getInitials(attendee.username)}
+                    </Text>
+                  </View>
+                  {frame && frameColor && (
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: -(bw + 2),
+                        left: -(bw + 2),
+                        width: 42 + (bw + 2) * 2,
+                        height: 42 + (bw + 2) * 2,
+                        borderRadius: (42 + (bw + 2) * 2) / 2,
+                        borderWidth: bw,
+                        borderColor: frameColor,
+                      }}
+                    />
+                  )}
                 </View>
 
                 <View style={styles.attendeeInfo}>
-                  <Text style={styles.attendeeName} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.attendeeName,
+                      nameColor ? { color: nameColor.color } : undefined,
+                    ]}
+                    numberOfLines={1}
+                  >
                     {attendee.userId === currentUserId ? 'Tú' : attendee.username}
                   </Text>
                   <View style={styles.attendeeBookRow}>
@@ -685,7 +715,8 @@ export default function CommunityMeetupTab({
                   </View>
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
 

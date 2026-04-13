@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
 import { useAuth } from "@/contexts/AuthContext";
 import { getCommunityRanking } from "@/lib/inkdropsApi";
+import { getFrameById, getNameColorById } from "@/lib/rewardsSystem";
 import {
   CommunityRankingDto,
   CommunityRankingEntryDto,
@@ -45,22 +46,47 @@ function LeaderCard({
   const cardBg = "#fef3c7";
   const cardBorder = "#f59e0b";
 
+  const frame = entry.activeFrameId ? getFrameById(entry.activeFrameId) : undefined;
+  const frameColor = frame?.animationColors?.[0] ?? frame?.borderColor ?? null;
+  const bw = frame?.borderWidth ?? 0;
+  const nameColor = entry.activeColorId ? getNameColorById(entry.activeColorId) : undefined;
+
   return (
     <View
       className="mx-3 mb-2 rounded-2xl p-3 flex-row items-center border-2"
       style={{ backgroundColor: cardBg, borderColor: cardBorder }}
     >
-      {/* Círculo dorado con icono de corona */}
-      <View
-        className="w-11 h-11 rounded-full items-center justify-center mr-3"
-        style={{ backgroundColor: "#f59e0b" }}
-      >
-        <Ionicons name="trophy" size={20} color="#ffffff" />
+      {/* Círculo dorado con icono de corona + marco */}
+      <View className="w-11 h-11 items-center justify-center mr-3">
+        <View
+          className="w-11 h-11 rounded-full items-center justify-center"
+          style={{ backgroundColor: "#f59e0b" }}
+        >
+          <Ionicons name="trophy" size={20} color="#ffffff" />
+        </View>
+        {frame && frameColor && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -(bw + 2),
+              left: -(bw + 2),
+              width: 44 + (bw + 2) * 2,
+              height: 44 + (bw + 2) * 2,
+              borderRadius: (44 + (bw + 2) * 2) / 2,
+              borderWidth: bw,
+              borderColor: frameColor,
+            }}
+          />
+        )}
       </View>
 
       <VStack className="flex-1 gap-0.5">
         <HStack className="items-center gap-2 flex-wrap">
-          <Text className="text-sm font-bold text-[#1f2937]">
+          <Text
+            className="text-sm font-bold"
+            style={{ color: nameColor?.color ?? "#1f2937" }}
+          >
             {displayName}
           </Text>
           <View
@@ -101,25 +127,47 @@ function RankingRow({
   const cardBg = isMe ? "#fff8f7" : "#ffffff";
   const cardBorder = isMe ? "#e4715f" : "#f0ece4";
 
+  const frame = entry.activeFrameId ? getFrameById(entry.activeFrameId) : undefined;
+  const frameColor = frame?.animationColors?.[0] ?? frame?.borderColor ?? null;
+  const bw = frame?.borderWidth ?? 0;
+  const nameColor = entry.activeColorId ? getNameColorById(entry.activeColorId) : undefined;
+
   return (
     <View
       className="flex-row items-center rounded-xl p-3 mb-2 border"
       style={{ backgroundColor: cardBg, borderColor: cardBorder }}
     >
-      {/* Círculo con posición coloreada por medalla */}
-      <View
-        className="w-11 h-11 rounded-full items-center justify-center mr-3"
-        style={{ backgroundColor: bg }}
-      >
-        <Text className="text-sm font-bold" style={{ color: text }}>
-          #{position}
-        </Text>
+      {/* Círculo con posición coloreada por medalla + marco */}
+      <View className="w-11 h-11 items-center justify-center mr-3">
+        <View
+          className="w-11 h-11 rounded-full items-center justify-center"
+          style={{ backgroundColor: bg }}
+        >
+          <Text className="text-sm font-bold" style={{ color: text }}>
+            #{position}
+          </Text>
+        </View>
+        {frame && frameColor && (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: -(bw + 2),
+              left: -(bw + 2),
+              width: 44 + (bw + 2) * 2,
+              height: 44 + (bw + 2) * 2,
+              borderRadius: (44 + (bw + 2) * 2) / 2,
+              borderWidth: bw,
+              borderColor: frameColor,
+            }}
+          />
+        )}
       </View>
 
       <VStack className="flex-1 gap-1">
         <Text
           className="text-sm font-semibold"
-          style={{ color: isMe ? "#e4715f" : "#1f2937" }}
+          style={{ color: nameColor?.color ?? (isMe ? "#e4715f" : "#1f2937") }}
         >
           {displayName}
         </Text>

@@ -4,12 +4,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   View as RNView,
   StyleSheet,
   TextInput,
 } from "react-native";
+import ChatAvatar from "@/components/ChatAvatar";
 
 import { Text, View } from "@/components/Themed";
 import Header from "@/components/Header";
@@ -83,13 +83,13 @@ function ChatListItem({
     >
       {/* Avatar */}
       <RNView style={styles.avatarWrapper}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        ) : (
-          <RNView style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </RNView>
-        )}
+        <ChatAvatar
+          profilePhoto={avatarUrl}
+          username={displayName}
+          size={54}
+          activeFrameId={otherParticipant?.activeFrameId}
+          activeColorId={otherParticipant?.activeColorId}
+        />
       </RNView>
 
       {/* Contenido */}
@@ -369,26 +369,6 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: {
     marginRight: 14,
-  },
-  avatarImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#D1D5DB",
-  },
-  avatarPlaceholder: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#e4715f",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    color: "#000000",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
   },
   chatContent: {
     flex: 1,

@@ -23,8 +23,10 @@ import {
 import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 
+import ChatAvatar from "@/components/ChatAvatar";
 import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
+import { getNameColorById } from "@/lib/rewardsSystem";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchMyBackendUser } from "@/lib/api";
@@ -238,7 +240,7 @@ const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
 
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
-  const chatId = parseInt(id ?? "0", 10);
+  const chatId = id ?? "";
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
@@ -1455,18 +1457,13 @@ export default function ChatDetailScreen() {
           {/* Avatar solo para mensajes de otros en chats de comunidad */}
           {showSenderName && (
             <View style={styles.messageAvatarContainer}>
-              {sender?.profilePhoto ? (
-                <Image
-                  source={{ uri: sender.profilePhoto }}
-                  style={styles.messageAvatar}
-                />
-              ) : (
-                <View style={styles.messageAvatarPlaceholder}>
-                  <Text style={styles.messageAvatarText}>
-                    {sender?.username?.charAt(0) ?? "?"}
-                  </Text>
-                </View>
-              )}
+              <ChatAvatar
+                profilePhoto={sender?.profilePhoto}
+                username={sender?.username}
+                size={30}
+                activeFrameId={item.senderActiveFrameId}
+                activeColorId={item.senderActiveColorId}
+              />
             </View>
           )}
 
@@ -1477,7 +1474,14 @@ export default function ChatDetailScreen() {
             ]}
           >
             {showSenderName && (
-              <Text style={styles.senderName}>
+              <Text
+                style={[
+                  styles.senderName,
+                  item.senderActiveColorId
+                    ? { color: getNameColorById(item.senderActiveColorId)?.color ?? '#e4715f' }
+                    : undefined,
+                ]}
+              >
                 {sender?.username ?? "Usuario"}
               </Text>
             )}

@@ -9,7 +9,7 @@ export interface CommunityDto {
   creatorId: string;
   createdAt: string;
   currentUserRole?: CommunityRole | null;
-  chatId?: number;
+  chatId?: string;
   memberCount: number;
   avatarUrl?: string | null;
   profilePhoto?: string | null;
@@ -50,6 +50,8 @@ export interface CommunityMeetupAttendeeDto {
   username: string;
   selectedBookId: number;
   selectedBookTitle: string;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface CommunityMeetupDto {
@@ -96,6 +98,8 @@ export interface CommunityRankingEntryDto {
   inkdropsThisMonth: number;
   exchangesCount?: number;
   streakDays?: number;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface CommunityRankingDto {

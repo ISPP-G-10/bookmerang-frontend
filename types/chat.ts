@@ -6,19 +6,23 @@ export interface ChatParticipantDto {
   profilePhoto: string;
   joinedAt: string;
   role?: 'MEMBER' | 'MODERATOR' | null;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface MessageDto {
   id: number;
-  chatId: number;
+  chatId: string;
   senderId: string;
   senderUsername: string;
   body: string;
   sentAt: string;
+  senderActiveFrameId?: string | null;
+  senderActiveColorId?: string | null;
 }
 
 export interface ChatDto {
-  id: number;
+  id: string;
   type: string;
   createdAt: string;
   participants: ChatParticipantDto[];
