@@ -3,6 +3,7 @@ import { AuthInput } from "@/components/auth/AuthInput";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { authService } from "@/lib/authService";
+import { getEmailValidationError, normalizeEmail } from "@/lib/emailValidation";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
@@ -19,10 +20,16 @@ export default function LoginScreen() {
       return;
     }
 
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      setError(emailError);
+      return;
+    }
+
     setLoading(true);
     setError("");
     try {
-      await authService.signIn(email, password);
+      await authService.signIn(normalizeEmail(email), password);
       router.replace("/" as any);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión");
@@ -37,7 +44,10 @@ export default function LoginScreen() {
         icon="mail-outline"
         placeholder="Correo electrónico"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          setEmail(value);
+          if (error) setError("");
+        }}
         autoCapitalize="none"
         keyboardType="email-address"
         returnKeyType="next"

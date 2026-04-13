@@ -2,7 +2,7 @@ import Header from '@/components/Header';
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
 import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
-import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
+import { MATCHER_LAYOUT, getEffectiveWidth } from '@/constants/matcherLayout';
 import { fetchFeed, sendSwipe, undoLastSwipe, type SwipeResultDto } from '@/lib/matcherApi';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
@@ -77,13 +77,14 @@ export default function MatcherScreen() {
 
   const styles = useMemo(() => {
     const config = MATCHER_LAYOUT;
+    const W = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT);
     
-    const cardWidth = SCREEN_WIDTH * config.card.widthPercent;
+    const cardWidth = W * config.card.widthPercent;
     const cardHeight = cardWidth * config.card.heightRatio;
     
-    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
-    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
-    const buttonGap = SCREEN_WIDTH * config.buttons.buttonGapPercent;
+    const dislikeButtonSize = W * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = W * config.buttons.likeButtonPercent;
+    const buttonGap = W * config.buttons.buttonGapPercent;
     
     const buttonBottom = Math.max(
       insets.bottom - 10,
@@ -130,8 +131,9 @@ export default function MatcherScreen() {
 
   const iconSize = useMemo(() => {
     const config = MATCHER_LAYOUT;
-    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
-    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
+    const W = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT);
+    const dislikeButtonSize = W * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = W * config.buttons.likeButtonPercent;
     
     return {
       dislike: dislikeButtonSize * config.buttons.iconSizeRatio,
@@ -316,8 +318,8 @@ export default function MatcherScreen() {
               styles.actionButton,
               {
                 marginTop: 24,
-                width: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
-                height: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                width: getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                height: getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent,
                 backgroundColor: canUndo ? '#f2cc8f' : '#e8e8e8',
                 opacity: canUndo ? 1 : 0.4,
               },
@@ -325,7 +327,7 @@ export default function MatcherScreen() {
           >
             <Ionicons
               name="arrow-undo"
-              size={SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
+              size={getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
               color={canUndo ? '#3e2723' : '#bbb'}
             />
           </Pressable>
@@ -363,8 +365,8 @@ export default function MatcherScreen() {
             style={[
               styles.actionButton,
               {
-                width: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
-                height: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                width: getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent,
+                height: getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent,
                 backgroundColor: canUndo ? '#f2cc8f' : '#e8e8e8',
                 opacity: canUndo ? 1 : 0.4,
               },
@@ -372,7 +374,7 @@ export default function MatcherScreen() {
           >
             <Ionicons
               name="arrow-undo"
-              size={SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
+              size={getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
               color={canUndo ? '#3e2723' : '#bbb'}
             />
           </Pressable>

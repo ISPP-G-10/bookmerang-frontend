@@ -357,9 +357,22 @@ async function parseApiError(
   response: Response,
   fallbackMessage: string,
 ): Promise<string> {
+  const fallbackByStatus =
+    response.status === 400
+      ? "La solicitud no es válida."
+      : response.status === 401
+        ? "Tu sesión ha expirado. Inicia sesión de nuevo."
+        : response.status === 403
+          ? "No tienes permiso para modificar este libro."
+          : response.status === 404
+            ? "No se encontró el libro."
+            : response.status >= 500
+              ? "El servidor no pudo completar la operación."
+              : fallbackMessage;
+
   try {
     const text = await response.text();
-    if (!text) return fallbackMessage;
+    if (!text) return fallbackByStatus;
 
     try {
       const parsed = JSON.parse(text);
@@ -370,13 +383,29 @@ async function parseApiError(
         parsed.message.trim().length > 0
       )
         return parsed.message;
+      if (typeof parsed?.detail === "string" && parsed.detail.trim().length > 0)
+        return parsed.detail;
+      if (typeof parsed?.title === "string" && parsed.title.trim().length > 0)
+        return parsed.title;
+      if (parsed?.errors && typeof parsed.errors === "object") {
+        const messages = Object.values(parsed.errors)
+          .flatMap((value) =>
+            Array.isArray(value)
+              ? value.filter((item): item is string => typeof item === "string")
+              : [],
+          )
+          .map((message) => message.trim())
+          .filter((message) => message.length > 0);
+
+        if (messages.length > 0) return messages.join(" ");
+      }
     } catch {
       // Si no es JSON devolvemos el texto tal cual.
     }
 
     return text;
   } catch {
-    return fallbackMessage;
+    return fallbackByStatus;
   }
 }
 
