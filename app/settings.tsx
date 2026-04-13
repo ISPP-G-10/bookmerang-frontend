@@ -2,6 +2,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
 import React from "react";
 import {
   ActivityIndicator,
@@ -24,6 +25,7 @@ import {
   updateStoredAuthUser,
 } from "../lib/authSession";
 import supabase from "../lib/supabase";
+import { useTutorial } from '@/contexts/TutorialContext';
 
 const PROFILE_STORAGE_BUCKET =
   process.env.EXPO_PUBLIC_PROFILE_IMAGES_BUCKET ??
@@ -1113,6 +1115,8 @@ function SettingsRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { resetTutorial } = useTutorial();
+  const { userPlan } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
@@ -1706,6 +1710,12 @@ export default function SettingsScreen() {
             label="Cambiar contraseña"
             subtitle="Actualiza tu contraseña"
             onPress={() => setChangePasswordOpen(true)}
+          />
+          <SettingsRow
+            icon="crown"
+            label="Plan / Suscripción"
+            subtitle={`Plan actual: ${userPlan}`}
+            onPress={() => router.push("/subscription")}
             isLast
           />
         </View>
@@ -1719,6 +1729,20 @@ export default function SettingsScreen() {
             right={
               <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
             }
+          />
+        </View>
+
+        {sectionLabel("Soporte")}
+        <View style={card}>
+          <SettingsRow
+            icon="question-circle"
+            label="Repetir tutorial"
+            subtitle="Vuelve a ver la guía de la app"
+            onPress={async () => {
+              await resetTutorial();
+              router.replace('/(tabs)/matcher' as any);
+            }}
+            isLast
           />
         </View>
 
