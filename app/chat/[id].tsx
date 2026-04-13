@@ -800,6 +800,11 @@ export default function ChatDetailScreen() {
         setIsLoadingBookspots(true);
         setBookspotSuggestionFeedback(null);
 
+        if (!exchange.user1Id || !exchange.user2Id) {
+          setBookspotSuggestionFeedback('No se pudieron cargar los datos de usuario');
+          return;
+        }
+
         const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
           authService.getPreferences(exchange.user1Id),
           authService.getPreferences(exchange.user2Id),
@@ -874,6 +879,11 @@ export default function ChatDetailScreen() {
       try {
         setIsLoadingBookdrops(true);
         setBookdropSuggestionFeedback(null);
+
+        if (!exchange.user1Id || !exchange.user2Id) {
+          setBookdropSuggestionFeedback('No se pudieron cargar los datos de usuario');
+          return;
+        }
 
         const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
           authService.getPreferences(exchange.user1Id),
@@ -1165,6 +1175,11 @@ export default function ChatDetailScreen() {
 
         const myBookId = isUser1 ? exchange.book1Id : exchange.book2Id;
         const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
+
+        if (!myBookId || !otherBookId) {
+          console.warn('Book IDs are missing from exchange');
+          return;
+        }
 
         const [myBookData, otherBookData] = await Promise.all([
           getBookDetail(myBookId),
