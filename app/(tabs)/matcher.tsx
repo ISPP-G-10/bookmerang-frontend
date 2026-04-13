@@ -23,7 +23,8 @@ export default function MatcherScreen() {
   const [matchResult, setMatchResult] = useState<SwipeResultDto['match'] | null>(null);
   const [swipeError, setSwipeError] = useState<string | null>(null);
   const isSwiping = useRef(false);
-  const [canUndo, setCanUndo] = useState(false);
+  const [undoStackCount, setUndoStackCount] = useState(0);
+  const canUndo = undoStackCount > 0;
 
   const [cards, setCards] = useState<MatcherCard[]>([]);
   const [page, setPage] = useState(0);
@@ -31,6 +32,7 @@ export default function MatcherScreen() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [allSwiped, setAllSwiped] = useState(false);
+  const [swiperKey, setSwiperKey] = useState(0);
   const loadingMore = useRef(false);
 
   const loadFeed = useCallback(async (pageNum: number, append = false) => {
@@ -43,7 +45,11 @@ export default function MatcherScreen() {
       setCards((prev) => (append ? [...prev, ...result.cards] : result.cards));
       setHasMore(result.hasMore);
       setPage(pageNum);
-      if (!append) setAllSwiped(false);
+      if (!append) {
+        setAllSwiped(false);
+        setUndoStackCount(0);
+        setSwiperKey((prev) => prev + 1);
+      }
     } catch (e: any) {
       setError(e.message ?? 'Error al cargar el feed');
     } finally {
@@ -164,16 +170,16 @@ export default function MatcherScreen() {
             bookTitle: card.book.titulo,
             bookCoverUrl: card.book.photos?.[0]?.url ?? null,
           });
-          setCanUndo(false);
-        } else {
-          setCanUndo(true);
+        }
+
+        if (result.outcome === 'Recorded' || result.outcome === 'MatchCreated') {
+          setUndoStackCount((prev) => prev + 1);
         }
         setSwipeError(null);
       } catch (e: any) {
         console.warn('Error al registrar swipe:', e.message);
         setSwipeError(e.message ?? 'Error al registrar el swipe');
         setTimeout(() => setSwipeError(null), 3000);
-        setCanUndo(false);
       } finally {
         isSwiping.current = false;
       }
@@ -204,15 +210,18 @@ export default function MatcherScreen() {
   }, []);
 
   const handleUndo = useCallback(async () => {
+    if (!canUndo) return;
+
     try {
       await undoLastSwipe();
-      setCanUndo(false);
-      await loadFeed(0);
+      swiperRef.current?.undoSwipe();
+      setUndoStackCount((prev) => Math.max(prev - 1, 0));
+      setAllSwiped(false);
     } catch (e: any) {
       setSwipeError(e.message ?? 'No se pudo deshacer el swipe');
       setTimeout(() => setSwipeError(null), 3000);
     }
-  }, [loadFeed]);
+  }, [canUndo]);
 
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
@@ -278,7 +287,7 @@ export default function MatcherScreen() {
     );
   }
 
-  if (cards.length === 0 || allSwiped) {
+  if (cards.length === 0 || (allSwiped && !canUndo)) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" />
@@ -329,17 +338,16 @@ export default function MatcherScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <Header />
-      <View className="flex-1 items-center justify-center overflow-hidden">
-        <View style={{ flex: 1, alignSelf: 'stretch' }}>
-          <TinderSwiper
-            ref={swiperRef}
-            cards={cards}
-            onSwipeLeft={handleSwipeLeft}
-            onSwipeRight={handleSwipeRight}
-            onTap={handleTap}
-            onEmpty={handleEmpty}
-          />
-        </View>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <TinderSwiper
+          key={swiperKey}
+          ref={swiperRef}
+          cards={cards}
+          onSwipeLeft={handleSwipeLeft}
+          onSwipeRight={handleSwipeRight}
+          onTap={handleTap}
+          onEmpty={handleEmpty}
+        />
 
         <View style={styles.actionsContainer}>
           <Pressable

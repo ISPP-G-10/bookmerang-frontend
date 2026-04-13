@@ -42,6 +42,7 @@ import {
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
   rejectExchange,
+  rejectExchangeMeeting,
   reportExchange,
 } from "@/lib/exchangeApi";
 import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
@@ -270,7 +271,7 @@ export default function ChatDetailScreen() {
 
   const [chat, setChat] = useState<ChatDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
-  const [inputText, setInputText] = useState(draft ?? "");
+  const [inputText, setInputText] = useState("");
   const [typingUsers, setTypingUsers] = useState<TypingUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -288,7 +289,7 @@ export default function ChatDetailScreen() {
     (() => Promise<void>) | null
   >(null);
   const [confirmMode, setConfirmMode] = useState<
-    "accept" | "reject" | "meeting-accept" | "meeting-reject" | null
+    "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject" | null
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
@@ -327,6 +328,7 @@ export default function ChatDetailScreen() {
   const [webMinuteDraft, setWebMinuteDraft] = useState(
     Math.ceil(new Date().getMinutes() / 5) * 5 % 60,
   );
+  const draftPrefilledRef = useRef(false);
 
   type MeetingType = "ARBITRARY" | "BOOKSPOT" | "BOOKDROP";
 
@@ -1157,6 +1159,29 @@ export default function ChatDetailScreen() {
   }, [chatId]);
 
   useEffect(() => {
+    draftPrefilledRef.current = false;
+    setInputText("");
+  }, [chatId]);
+
+  useEffect(() => {
+    if (draftPrefilledRef.current) return;
+    if (!draft || !chat) return;
+
+    if (chat.type === "COMMUNITY") {
+      draftPrefilledRef.current = true;
+      return;
+    }
+
+    if (messages.length > 0) {
+      draftPrefilledRef.current = true;
+      return;
+    }
+
+    setInputText((current) => (current.trim().length > 0 ? current : draft));
+    draftPrefilledRef.current = true;
+  }, [chat, draft, messages.length]);
+
+  useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => {});
     const hideSub = Keyboard.addListener("keyboardDidHide", () => {});
     return () => {
@@ -1507,16 +1532,27 @@ export default function ChatDetailScreen() {
     }
   };
 
-  // Desestima el intercambio
-  const handleRejectExchange = async () => {
+  const executeRejectExchange = async (cleanupMeetingFirst: boolean) => {
     if (!exchange?.exchangeId) return;
     setError(null);
+
     try {
+      if (
+        cleanupMeetingFirst &&
+        exchangeMeeting &&
+        (exchangeMeeting.meetingStatus === "PROPOSAL" ||
+          exchangeMeeting.meetingStatus === "ACCEPTED")
+      ) {
+        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+        setExchangeMeeting((prev) =>
+          prev ? { ...prev, meetingStatus: "REFUSED" } : null,
+        );
+      }
+
       const updated = await rejectExchange(exchange.exchangeId);
       setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
 
-      // Como el backend ahora borra el chat al desestimar el intercambio,
-      // salimos de esta pantalla para evitar errores 404 al intentar refrescar.
+      // Tras desestimar, volvemos al listado de chats.
       router.replace("/(tabs)/chat");
     } catch (err) {
       if (
@@ -1526,12 +1562,23 @@ export default function ChatDetailScreen() {
         handleChatDeleted();
         return;
       }
+
       const msg =
         err instanceof Error
           ? err.message
           : "Error al desestimar el intercambio";
       setError(msg);
     }
+  };
+
+  // Desestima el intercambio sin tocar propuestas.
+  const handleRejectExchange = async () => {
+    await executeRejectExchange(false);
+  };
+
+  // Desestima el intercambio eliminando antes la propuesta/quedada activa.
+  const handleRejectExchangeWithMeetingCleanup = async () => {
+    await executeRejectExchange(true);
   };
 
   const getAcceptButtonState = () => {
@@ -1920,7 +1967,7 @@ export default function ChatDetailScreen() {
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject" | "meeting-accept",
+    mode: "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -1932,7 +1979,13 @@ export default function ChatDetailScreen() {
   };
 
   const openRejectConfirm = () => {
-    openConfirm(handleRejectExchange, "reject");
+    const shouldCleanupMeetingFirst = hasMeetingProposal || hasMeetingAccepted;
+    openConfirm(
+      shouldCleanupMeetingFirst
+        ? handleRejectExchangeWithMeetingCleanup
+        : handleRejectExchange,
+      shouldCleanupMeetingFirst ? "reject-with-meeting-cleanup" : "reject",
+    );
   };
 
   const openAcceptMeetingConfirm = () => {
@@ -1954,6 +2007,14 @@ export default function ChatDetailScreen() {
           message:
             "¿Seguro que quieres desestimar este intercambio? Esta acción terminará las negocioaciones y es irreversible.",
           confirmLabel: "Desestimar",
+          confirmColor: "danger" as const,
+        };
+      case "reject-with-meeting-cleanup":
+        return {
+          title: "Desestimar intercambio",
+          message:
+            "Hay una propuesta o quedada activa. Si continuas, primero se eliminara esa propuesta y despues se desestimara el intercambio.",
+          confirmLabel: "Eliminar y desestimar",
           confirmColor: "danger" as const,
         };
       case "meeting-accept":
