@@ -6,9 +6,11 @@ export async function apiRequest(endpoint: string, options?: RequestInit) {
   const token = await getAccessToken();
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
+    cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },

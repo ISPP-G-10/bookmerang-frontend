@@ -8,6 +8,9 @@ import ValidationCard, {
 } from "@/components/bookspots/ValidationCard";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 
+import { fetchMyBackendUserId } from "@/lib/api";
+import { authService } from "@/lib/authService";
+import { getStoredUserId, updateStoredAuthUser } from "@/lib/authSession";
 import {
   DEFAULT_RADIUS_KM,
   MAX_RADIUS_KM,
@@ -19,10 +22,8 @@ import {
   getUserPendingBookspots,
   updateBookspotName,
 } from "@/lib/bookspotApi";
-import { authService } from "@/lib/authService";
-import { fetchMyBackendUserId } from "@/lib/api";
-import { getStoredUserId, updateStoredAuthUser } from "@/lib/authSession";
 
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -82,47 +83,65 @@ export default function BookSpotsScreen() {
   const validationFetchedRef = useRef(false);
 
   // ── Ubicación ─────────────────
-  useEffect(() => {
-    (async () => {
-      try {
-        const storedUserId = await getStoredUserId();
-        const backendUserId = await fetchMyBackendUserId();
-        const userId = backendUserId ?? storedUserId;
+  // Se ejecuta al montar Y cada vez que la pantalla recupera el foco
+  // (ej. el usuario vuelve desde Perfil tras actualizar su ubicación).
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        try {
+          const storedUserId = await getStoredUserId();
+          const backendUserId = await fetchMyBackendUserId();
+          const userId = backendUserId ?? storedUserId;
 
-        if (!userId) {
-          setPermissionDenied(true);
-          setLoading(false);
-          return;
+          if (!userId) {
+            if (!cancelled) {
+              setPermissionDenied(true);
+              setLoading(false);
+            }
+            return;
+          }
+
+          // Tras resets de BD puede quedar un id antiguo en storage.
+          if (backendUserId && backendUserId !== storedUserId) {
+            await updateStoredAuthUser({ id: backendUserId });
+          }
+
+          const preferences = await authService.getPreferences(userId);
+          const lat = preferences?.location?.latitude;
+          const lng = preferences?.location?.longitude;
+
+          if (typeof lat !== "number" || typeof lng !== "number") {
+            if (!cancelled) {
+              setPermissionDenied(true);
+              setLoading(false);
+            }
+            return;
+          }
+
+          const coords = { latitude: lat, longitude: lng };
+
+          if (!cancelled) {
+            // Solo actualiza si la ubicación cambió para evitar rerenders
+            if (
+              locationRef.current?.latitude !== lat ||
+              locationRef.current?.longitude !== lng
+            ) {
+              locationRef.current = coords;
+              setLocation(coords);
+            }
+            setLoading(false);
+          }
+        } catch {
+          // Fallo silencioso: no rompe la pantalla si hay error de red
+          if (!cancelled) setLoading(false);
         }
-
-        // Tras resets de BD puede quedar un id antiguo en storage.
-        if (backendUserId && backendUserId !== storedUserId) {
-          await updateStoredAuthUser({ id: backendUserId });
-        }
-
-        const preferences = await authService.getPreferences(userId);
-        const lat = preferences?.location?.latitude;
-        const lng = preferences?.location?.longitude;
-
-        if (typeof lat !== "number" || typeof lng !== "number") {
-          setPermissionDenied(true);
-          setLoading(false);
-          return;
-        }
-
-        const coords = {
-          latitude: lat,
-          longitude: lng,
-        };
-        locationRef.current = coords;
-        setLocation(coords);
-      } catch {
-        setPermissionDenied(true);
-      }
-      setLoading(false);
-    })();
-    return () => {};
-  }, []);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   // ── Validacion ─────────────────
   const fetchNextValidation = useCallback(async (delayMs = 0) => {
@@ -350,7 +369,7 @@ export default function BookSpotsScreen() {
   const anyModalOpen =
     menuOpen || createModalOpen || pendingModalOpen || mapModalOpen;
 
-  // "Mi ubicación" button — centro alineado con el centro del FAB
+  // "Mi ubicación" button — icono compacto
   const LocationButton =
     locationBtnVisible && !anyModalOpen ? (
       <Pressable
@@ -359,13 +378,12 @@ export default function BookSpotsScreen() {
           position: "absolute",
           bottom: LOC_BTN_BOTTOM,
           left: 16,
+          width: LOC_BTN_HEIGHT,
           height: LOC_BTN_HEIGHT,
-          flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          justifyContent: "center",
           backgroundColor: "white",
-          borderRadius: 12,
-          paddingHorizontal: 14,
+          borderRadius: 10,
           elevation: 4,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 2 },
@@ -374,15 +392,15 @@ export default function BookSpotsScreen() {
           borderWidth: 1,
           borderColor: "rgba(0,0,0,0.06)",
           opacity: pressed ? 0.85 : 1,
-          transform: [{ scale: pressed ? 0.97 : 1 }],
+          transform: [{ scale: pressed ? 0.95 : 1 }],
           zIndex: 10,
         })}
       >
         {/* crosshair icon */}
         <View
           style={{
-            width: 15,
-            height: 15,
+            width: 18,
+            height: 18,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -390,9 +408,9 @@ export default function BookSpotsScreen() {
           <View
             style={{
               position: "absolute",
-              width: 9,
-              height: 9,
-              borderRadius: 4.5,
+              width: 10,
+              height: 10,
+              borderRadius: 5,
               borderWidth: 2,
               borderColor: "#3b82f6",
             }}
@@ -400,25 +418,22 @@ export default function BookSpotsScreen() {
           <View
             style={{
               position: "absolute",
-              width: 1.5,
-              height: 15,
+              width: 2,
+              height: 18,
               backgroundColor: "#3b82f6",
-              opacity: 0.5,
+              opacity: 0.45,
             }}
           />
           <View
             style={{
               position: "absolute",
-              width: 15,
-              height: 1.5,
+              width: 18,
+              height: 2,
               backgroundColor: "#3b82f6",
-              opacity: 0.5,
+              opacity: 0.45,
             }}
           />
         </View>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#3d405b" }}>
-          Mi ubicación
-        </Text>
       </Pressable>
     ) : null;
 
