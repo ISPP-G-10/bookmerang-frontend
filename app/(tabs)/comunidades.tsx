@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -76,6 +76,7 @@ export default function ComunidadesScreen() {
   const [bookspotInfoMap, setBookspotInfoMap] = useState<Record<number, BookspotInfo>>({});
   const [communityGenresMap, setCommunityGenresMap] = useState<Record<number, string[]>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
   const [joiningId, setJoiningId] = useState<number | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
   const [selectedCommunity, setSelectedCommunity] = useState<CommunityDto | null>(null);
@@ -157,13 +158,14 @@ export default function ComunidadesScreen() {
     }
 
     await fetchCommunities(lat, lon);
+    hasLoadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
   }, [fetchCommunities]);
 
   useFocusEffect(
     useCallback(() => {
-      loadLocationAndData();
+      loadLocationAndData(!hasLoadedOnce.current ? false : true);
     }, [loadLocationAndData])
   );
 

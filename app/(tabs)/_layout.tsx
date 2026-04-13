@@ -19,11 +19,20 @@ function TabBarIcon(props: {
   return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
 }
 
+/** Strip `href` from tab-button props so Pressable renders a <div> instead of
+ *  an <a> on web — prevents the browser from doing a full-page navigation
+ *  (the `onPress` handler already does client-side SPA routing). */
+function stripHref(props: any): any {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { href, ...rest } = props ?? {};
+  return rest;
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { session, isBookdropUser, loading } = useAuth();
   const { tutorialCompleted, tutorialLoading, completeTutorial } = useTutorial();
-  const { start, copilotEvents } = useCopilot();
+  const { start, copilotEvents, visible: copilotVisible } = useCopilot();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const segments = useSegments();
   const pathname = usePathname();
@@ -52,7 +61,7 @@ export default function TabLayout() {
   // Navigate tabs in sync with tutorial steps
   useEffect(() => {
     const handleStepChange = (step: any) => {
-      if (!step) return;
+      if (!step || !copilotVisible) return;
       switch (step.name) {
         case 'welcome':
         case 'matcher-tab':
@@ -73,16 +82,18 @@ export default function TabLayout() {
       }
     };
 
-    copilotEvents.on('stepChange', handleStepChange);
-    copilotEvents.on('stop', () => {
+    const handleStop = () => {
       completeTutorial();
       router.navigate('/(tabs)/matcher' as any);
-    });
-    return () => {
-      copilotEvents.off('stepChange');
-      copilotEvents.off('stop');
     };
-  }, [completeTutorial]);
+
+    copilotEvents.on('stepChange', handleStepChange);
+    copilotEvents.on('stop', handleStop);
+    return () => {
+      copilotEvents.off('stepChange', handleStepChange);
+      copilotEvents.off('stop', handleStop);
+    };
+  }, [completeTutorial, copilotVisible]);
 
   if (loading) {
     return null;
@@ -93,7 +104,7 @@ export default function TabLayout() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: '#fdfbf7' }}>
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
@@ -114,7 +125,9 @@ export default function TabLayout() {
           options={{
             title: 'Matcher',
             tabBarIcon: ({ color }) => <TabBarIcon name="heart" color={color} />,
-            tabBarButton: (props) => (
+            tabBarButton: (props) => tutorialCompleted ? (
+              <Pressable {...stripHref(props)} />
+            ) : (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '💘',
@@ -124,7 +137,7 @@ export default function TabLayout() {
                 order={2}
                 name="matcher-tab"
               >
-                <WalkthroughablePressable {...(props as any)} />
+                <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
             ),
           }}
@@ -134,7 +147,9 @@ export default function TabLayout() {
           options={{
             title: 'Chats',
             tabBarIcon: ({ color }) => <TabBarIcon name="comment" color={color} />,
-            tabBarButton: (props) => (
+            tabBarButton: (props) => tutorialCompleted ? (
+              <Pressable {...stripHref(props)} />
+            ) : (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '💬',
@@ -144,7 +159,7 @@ export default function TabLayout() {
                 order={3}
                 name="chat-tab"
               >
-                <WalkthroughablePressable {...(props as any)} />
+                <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
             ),
           }}
@@ -154,7 +169,9 @@ export default function TabLayout() {
           options={{
             title: 'Subir',
             tabBarIcon: ({ color }) => <TabBarIcon name="plus" color={color} />,
-            tabBarButton: (props) => (
+            tabBarButton: (props) => tutorialCompleted ? (
+              <Pressable {...stripHref(props)} />
+            ) : (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '➕',
@@ -164,7 +181,7 @@ export default function TabLayout() {
                 order={4}
                 name="subir-tab"
               >
-                <WalkthroughablePressable {...(props as any)} />
+                <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
             ),
           }}
@@ -174,7 +191,9 @@ export default function TabLayout() {
           options={{
             title: 'Comunidades',
             tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-            tabBarButton: (props) => (
+            tabBarButton: (props) => tutorialCompleted ? (
+              <Pressable {...stripHref(props)} />
+            ) : (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '🏡',
@@ -184,7 +203,7 @@ export default function TabLayout() {
                 order={5}
                 name="comunidades-tab"
               >
-                <WalkthroughablePressable {...(props as any)} />
+                <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
             ),
           }}
@@ -194,7 +213,9 @@ export default function TabLayout() {
           options={{
             title: 'BookSpots',
             tabBarIcon: ({ color }) => <TabBarIcon name="map-marker" color={color} />,
-            tabBarButton: (props) => (
+            tabBarButton: (props) => tutorialCompleted ? (
+              <Pressable {...stripHref(props)} />
+            ) : (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '📍',
@@ -204,17 +225,15 @@ export default function TabLayout() {
                 order={6}
                 name="bookspots-tab"
               >
-                <WalkthroughablePressable {...(props as any)} />
+                <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
             ),
           }}
         />
       </Tabs>
 
-      {/* Welcome step — anchor posicionado para que el tooltip de 320px quede centrado.
-          Copilot alinea el borde izquierdo del tooltip con el borde izquierdo del anchor,
-          por eso left = (screenWidth - 320) / 2 en lugar de screenWidth / 2. */}
-      <View
+      {/* Welcome step — solo se monta si el tutorial no ha sido completado */}
+      {!tutorialCompleted && <View
         style={{
           position: 'absolute',
           top: screenHeight * 0.65,
@@ -241,7 +260,7 @@ export default function TabLayout() {
             }}
           />
         </CopilotStep>
-      </View>
+      </View>}
     </View>
   );
 }
