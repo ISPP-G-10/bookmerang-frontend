@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import { authService } from "../lib/authService";
+import { getEmailValidationError, normalizeEmail } from "../lib/emailValidation";
 import {
   getStoredAuthSession,
   updateStoredAuthUser,
@@ -93,6 +94,23 @@ const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
 
     reader.readAsDataURL(blob);
   });
+
+const readApiError = async (response: Response, fallback: string): Promise<string> => {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string" && parsed.error.trim()) return parsed.error;
+    if (typeof parsed?.message === "string" && parsed.message.trim()) return parsed.message;
+    if (typeof parsed?.detail === "string" && parsed.detail.trim()) return parsed.detail;
+    if (typeof parsed?.title === "string" && parsed.title.trim()) return parsed.title;
+  } catch {
+    // Keep raw text when body is not JSON.
+  }
+
+  return raw;
+};
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -608,10 +626,12 @@ function ChangeEmailModal({
   }, [visible]);
 
   const handleSave = async () => {
-    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(newEmail);
     const normalizedPassword = password.trim();
 
     if (!normalizedEmail) return setError("Introduce el nuevo email");
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) return setError(emailError);
     if (!normalizedPassword) return setError("Introduce tu contraseña actual");
 
     setSaving(true);
@@ -720,7 +740,10 @@ function ChangeEmailModal({
             <TextInput
               style={inputStyle}
               value={newEmail}
-              onChangeText={setNewEmail}
+              onChangeText={(value) => {
+                setNewEmail(value);
+                if (error) setError("");
+              }}
               placeholder="nuevo@email.com"
               placeholderTextColor="#c4a882"
               keyboardType="email-address"
@@ -1466,8 +1489,9 @@ export default function SettingsScreen() {
           }),
         });
         if (!patchRes.ok) {
-          const txt = await patchRes.text().catch(() => "");
-          throw new Error(txt || "Error actualizando perfil en el servidor");
+          throw new Error(
+            await readApiError(patchRes, "Error actualizando perfil en el servidor"),
+          );
         }
         savedProfile = await patchRes.json().catch(() => null);
       } catch (err: any) {

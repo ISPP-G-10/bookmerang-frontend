@@ -21,6 +21,9 @@ import {
 import {
   buildMissingFieldsMessage,
   getDataStepMissingFields,
+  getIsbnValidationError,
+  normalizeIsbnForSubmission,
+  parseScannedIsbn,
 } from "@/lib/bookUploadValidation";
 import { markUploadFlowResetNeeded } from "@/lib/uploadFlowState";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -89,41 +92,6 @@ function mapCoverToApi(selection: CoverSelection | null): BookDetail["cover"] | 
   return selection === "Hardcover" ? "Hardcover" : "Paperback";
 }
 
-function normalizeIsbnInput(value: string): string {
-  return value.replace(/[^0-9xX]/g, "").toUpperCase();
-}
-
-function isValidIsbn10(isbn: string): boolean {
-  if (!/^\d{9}[\dX]$/.test(isbn)) return false;
-
-  const checksum = isbn.split("").reduce((sum, char, index) => {
-    const value = char === "X" ? 10 : Number(char);
-    return sum + value * (10 - index);
-  }, 0);
-
-  return checksum % 11 === 0;
-}
-
-function isValidIsbn13(isbn: string): boolean {
-  if (!/^\d{13}$/.test(isbn)) return false;
-  if (!isbn.startsWith("978") && !isbn.startsWith("979")) return false;
-
-  const checksumBase = isbn
-    .slice(0, 12)
-    .split("")
-    .reduce((sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
-
-  const checksum = (10 - (checksumBase % 10)) % 10;
-  return checksum === Number(isbn[12]);
-}
-
-function parseScannedIsbn(rawValue: string): string | null {
-  const normalized = normalizeIsbnInput(rawValue);
-  if (normalized.length === 13 && isValidIsbn13(normalized)) return normalized;
-  if (normalized.length === 10 && isValidIsbn10(normalized)) return normalized;
-  return null;
-}
-
 export default function UploadDataScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
@@ -155,6 +123,10 @@ export default function UploadDataScreen() {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
+  const [showIsbnValidationError, setShowIsbnValidationError] = useState(false);
+  const isbnValidationError = useMemo(() => getIsbnValidationError(isbn), [isbn]);
+  const visibleIsbnValidationError =
+    showIsbnValidationError && isbnValidationError ? isbnValidationError : null;
 
   const selectedLanguageLabel = useMemo(() => {
     if (!selectedLanguageId) return "Selecciona idioma";
@@ -277,7 +249,7 @@ export default function UploadDataScreen() {
       await updateBookDataStep(bookId, {
         titulo: title.trim(),
         autor: author.trim(),
-        isbn: isbn.trim(),
+        isbn: normalizeIsbnForSubmission(isbn),
         numPaginas: numPages.trim() ? Number(numPages.trim()) : null,
         cover: mapCoverToApi(cover),
         genreIds: selectedGenreIds,
@@ -329,6 +301,16 @@ export default function UploadDataScreen() {
       return;
     }
 
+    if (isbnValidationError) {
+      setError(isbnValidationError);
+      setFeedback(null);
+      setShowIsbnValidationError(true);
+      return;
+    }
+
+    setError(null);
+    setShowIsbnValidationError(false);
+
     if (photoCount < MIN_BOOK_PHOTOS || photoCount > MAX_BOOK_PHOTOS) {
       setInfoModal({
         title: "Foto requerida",
@@ -347,7 +329,7 @@ export default function UploadDataScreen() {
       await updateBookDataStep(bookId, {
         titulo: title.trim(),
         autor: author.trim(),
-        isbn: isbn.trim(),
+        isbn: normalizeIsbnForSubmission(isbn),
         numPaginas: parsedPages,
         cover: mapCoverToApi(cover),
         genreIds: selectedGenreIds,
@@ -522,10 +504,20 @@ export default function UploadDataScreen() {
               <View style={styles.isbnRow}>
                 <TextInput
                   value={isbn}
-                  onChangeText={setIsbn}
+                  onChangeText={(value) => {
+                    setIsbn(value.toUpperCase());
+                    if (showIsbnValidationError) {
+                      setShowIsbnValidationError(false);
+                      setError(null);
+                    }
+                  }}
                   placeholder="ISBN"
                   placeholderTextColor="#a79a89"
-                  style={[styles.input, styles.isbnInput]}
+                  style={[
+                    styles.input,
+                    styles.isbnInput,
+                    visibleIsbnValidationError ? styles.inputError : null,
+                  ]}
                   autoCapitalize="characters"
                   autoCorrect={false}
                 />
@@ -534,6 +526,9 @@ export default function UploadDataScreen() {
                   <Text style={styles.scanIsbnButtonText}>Escanear</Text>
                 </TouchableOpacity>
               </View>
+              {visibleIsbnValidationError ? (
+                <Text style={styles.fieldErrorText}>{visibleIsbnValidationError}</Text>
+              ) : null}
             </View>
 
             <View style={styles.fieldBlock}>
@@ -808,6 +803,15 @@ const styles = StyleSheet.create({
   scanIsbnButtonText: {
     color: "#fff",
     fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+  },
+  inputError: {
+    borderColor: "#d05b57",
+  },
+  fieldErrorText: {
+    marginTop: 8,
+    color: "#d05b57",
+    fontFamily: "Outfit_400Regular",
     fontSize: 14,
   },
   chipsWrap: {

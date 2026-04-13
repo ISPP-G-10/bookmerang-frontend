@@ -5,6 +5,7 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/authService";
+import { getEmailValidationError, normalizeEmail } from "@/lib/emailValidation";
 import { GeocodingSuggestion, searchGeocodingSuggestions } from "@/lib/geocodingApi";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
@@ -54,8 +55,9 @@ export default function RegisterScreen() {
       setError("La contraseña debe tener al menos 6 caracteres");
       return false;
     }
-    if (!email.includes("@")) {
-      setError("El correo electrónico no es válido");
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      setError(emailError);
       return false;
     }
     return true;
@@ -74,8 +76,9 @@ export default function RegisterScreen() {
       setError("La contraseña debe tener al menos 6 caracteres");
       return false;
     }
-    if (!email.includes("@")) {
-      setError("El correo electrónico no es válido");
+    const emailError = getEmailValidationError(email);
+    if (emailError) {
+      setError(emailError);
       return false;
     }
     return true;
@@ -132,7 +135,7 @@ export default function RegisterScreen() {
 
       // 2) Backend Register
       const userData = await authService.registerBackendProfile({
-        email,
+        email: normalizeEmail(email),
         password,
         username,
         name,
@@ -166,7 +169,7 @@ export default function RegisterScreen() {
     try {
       // La ubicación viene de la dirección seleccionada por geocoding
       const userData = await authService.registerBookdropBackendProfile({
-        Email: email,
+        Email: normalizeEmail(email),
         Password: password,
         Username: username,
         Name: name,
@@ -308,7 +311,10 @@ export default function RegisterScreen() {
         icon="mail-outline"
         placeholder="Correo electrónico"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(value) => {
+          setEmail(value);
+          if (error) setError("");
+        }}
         autoCapitalize="none"
         keyboardType="email-address"
       />
