@@ -1,14 +1,14 @@
-import { getAccessToken } from '@/lib/authSession';
-import { encryptMessage, decryptMessage } from '@/lib/crypto';
+import { getAccessToken } from "@/lib/authSession";
+import { decryptMessage, encryptMessage } from "@/lib/crypto";
 import {
   ChatDto,
   CreateChatRequest,
   MessageDto,
   SendMessageRequest,
   TypingUserDto,
-} from '@/types/chat';
+} from "@/types/chat";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5044/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5044/api";
 
 /**
  * Dado un array de chats del usuario, deduce cuál es su userId interno.
@@ -42,7 +42,7 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   const token = await getAccessToken();
 
   return {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
@@ -60,7 +60,7 @@ export async function getMyChats(): Promise<ChatDto[]> {
   }
 
   const chats: ChatDto[] = await res.json();
-  return chats.map(chat => {
+  return chats.map((chat) => {
     if (chat.lastMessage) {
       chat.lastMessage.body = decryptMessage(chat.lastMessage.body);
     }
@@ -71,8 +71,10 @@ export async function getMyChats(): Promise<ChatDto[]> {
 /**
  * Obtiene un chat específico por ID.
  * GET /api/chat/{chatId}
+ * Lanza un error con código 404 si el chat no existe.
+ * Lanza un error con código 403 si el usuario no tiene acceso.
  */
-export async function getChat(chatId: string): Promise<ChatDto> {
+export async function getChat(chatId: string | number): Promise<ChatDto> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}`, { headers });
 
@@ -92,28 +94,29 @@ export async function getChat(chatId: string): Promise<ChatDto> {
  * GET /api/chat/{chatId}/messages?page=1&pageSize=50
  */
 export async function getMessages(
-  chatId: string,
+  chatId: string | number,
   page: number = 1,
-  pageSize: number = 50
+  pageSize: number = 50,
 ): Promise<MessageDto[]> {
   const headers = await getAuthHeaders();
   const params = new URLSearchParams({
     page: page.toString(),
     pageSize: pageSize.toString(),
   });
-  const res = await fetch(
-    `${API_URL}/chat/${chatId}/messages?${params}`,
-    { headers }
-  );
+  const res = await fetch(`${API_URL}/chat/${chatId}/messages?${params}`, {
+    headers,
+  });
 
   if (!res.ok) {
-    throw new Error(`Error al obtener mensajes del chat ${chatId}: ${res.status}`);
+    throw new Error(
+      `Error al obtener mensajes del chat ${chatId}: ${res.status}`,
+    );
   }
 
   const messages: MessageDto[] = await res.json();
-  return messages.map(msg => ({
+  return messages.map((msg) => ({
     ...msg,
-    body: decryptMessage(msg.body)
+    body: decryptMessage(msg.body),
   }));
 }
 
@@ -124,15 +127,15 @@ export async function getMessages(
  * esto nos permite resolver el userId de forma definitiva.
  */
 export async function sendMessage(
-  chatId: string,
-  body: string
+  chatId: string | number,
+  body: string,
 ): Promise<MessageDto> {
   const headers = await getAuthHeaders();
   const encryptedBody = encryptMessage(body);
   const request: SendMessageRequest = { body: encryptedBody };
 
   const res = await fetch(`${API_URL}/chat/${chatId}/messages`, {
-    method: 'POST',
+    method: "POST",
     headers,
     body: JSON.stringify(request),
   });
@@ -152,13 +155,13 @@ export async function sendMessage(
  */
 export async function createChat(
   type: string,
-  participantIds: string[]
+  participantIds: string[],
 ): Promise<ChatDto> {
   const headers = await getAuthHeaders();
   const request: CreateChatRequest = { type, participantIds };
 
   const res = await fetch(`${API_URL}/chat`, {
-    method: 'POST',
+    method: "POST",
     headers,
     body: JSON.stringify(request),
   });
@@ -174,10 +177,10 @@ export async function createChat(
  * Indica que el usuario está escribiendo en un chat.
  * POST /api/chat/{chatId}/typing
  */
-export async function startTyping(chatId: string): Promise<void> {
+export async function startTyping(chatId: string | number): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
-    method: 'POST',
+    method: "POST",
     headers,
   });
 
@@ -190,10 +193,10 @@ export async function startTyping(chatId: string): Promise<void> {
  * Indica que el usuario dejó de escribir en un chat.
  * DELETE /api/chat/{chatId}/typing
  */
-export async function stopTyping(chatId: string): Promise<void> {
+export async function stopTyping(chatId: string | number): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
-    method: 'DELETE',
+    method: "DELETE",
     headers,
   });
 
@@ -206,10 +209,12 @@ export async function stopTyping(chatId: string): Promise<void> {
  * Obtiene los usuarios que están escribiendo en un chat.
  * GET /api/chat/{chatId}/typing
  */
-export async function getTypingUsers(chatId: string): Promise<TypingUserDto[]> {
+export async function getTypingUsers(
+  chatId: string | number,
+): Promise<TypingUserDto[]> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_URL}/chat/${chatId}/typing`, {
-    method: 'GET',
+    method: "GET",
     headers,
   });
 

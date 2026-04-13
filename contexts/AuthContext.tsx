@@ -37,6 +37,7 @@ interface AuthContextType {
   isBookdropUser: boolean;
   setBackendUserId: (id: string) => void;
   signOut: () => Promise<void>;
+  refreshUserPlan: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -49,6 +50,7 @@ const AuthContext = createContext<AuthContextType>({
   isBookdropUser: false,
   setBackendUserId: () => {},
   signOut: async () => {},
+  refreshUserPlan: async () => {},
 });
 
 const storageKey = (userId: string) => `backendUserId_${userId}`;
@@ -130,6 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [safeGetStorageItem, safeSetStorageItem]);
 
+  const refreshUserPlan = useCallback(async () => {
+    try {
+      const backendUser = await fetchMyBackendUser();
+      if (backendUser) {
+        setUserPlan(backendUser.plan);
+      }
+    } catch (error) {
+      console.warn('[AuthContext] refreshUserPlan failed:', error);
+    }
+  }, []);
+
   useEffect(() => {
     getStoredAuthSession().then((storedSession) => {
       setSession(storedSession);
@@ -158,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isBookdropUser,
         setBackendUserId,
         signOut,
+        refreshUserPlan,
       }}
     >
       {children}

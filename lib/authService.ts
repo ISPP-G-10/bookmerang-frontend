@@ -1,4 +1,5 @@
 import { apiRequest } from "./api";
+import { getEmailValidationError, normalizeEmail } from "./emailValidation";
 import {
   clearStoredAuthSession,
   setStoredAuthSession,
@@ -13,6 +14,20 @@ async function readApiError(response: Response, fallback: string): Promise<strin
     const parsed = JSON.parse(raw);
     if (typeof parsed?.error === "string") return parsed.error;
     if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.detail === "string") return parsed.detail;
+    if (typeof parsed?.title === "string") return parsed.title;
+    if (parsed?.errors && typeof parsed.errors === "object") {
+      const messages = Object.values(parsed.errors)
+        .flatMap((value) =>
+          Array.isArray(value)
+            ? value.filter((item): item is string => typeof item === "string")
+            : [],
+        )
+        .map((message) => message.trim())
+        .filter((message) => message.length > 0);
+
+      if (messages.length > 0) return messages.join(" ");
+    }
   } catch {
     // Keep raw text when body is not JSON.
   }
@@ -67,9 +82,13 @@ export interface UserPreferencesResponse {
 
 export const authService = {
   async signIn(email: string, password: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
     const response = await apiRequest("/Auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: normalizedEmail, password }),
     });
 
     if (!response.ok) {
@@ -94,10 +113,15 @@ export const authService = {
   },
 
   async registerBackendProfile(profileData: RegisterProfileData) {
+    const normalizedEmail = normalizeEmail(profileData.email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
     const response = await apiRequest("/Auth/register", {
       method: "POST",
       body: JSON.stringify({
         ...profileData,
+        email: normalizedEmail,
         profilePhoto: profileData.profilePhoto || "",
         userType: profileData.userType || 2,
       }),
@@ -125,10 +149,15 @@ export const authService = {
   },
 
   async registerBookdropBackendProfile(bookdropProfileData: RegisterBookdropProfileData) {
+    const normalizedEmail = normalizeEmail(bookdropProfileData.Email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
     const response = await apiRequest("/Auth/register/business", {
       method: "POST",
       body: JSON.stringify({
         ...bookdropProfileData,
+        Email: normalizedEmail,
         profilePhoto: bookdropProfileData.ProfilePhoto || "",
       }),
     });
@@ -155,8 +184,10 @@ export const authService = {
   },
 
   async patchEmail(newEmail: string, currentPassword: string) {
-    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(newEmail);
     const normalizedPassword = currentPassword.trim();
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
 
     const response = await apiRequest("/Auth/email", {
       method: "PATCH",

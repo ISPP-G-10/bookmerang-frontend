@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   StyleSheet,
   View,
@@ -67,7 +67,7 @@ interface BookspotInfo {
 
 export default function ComunidadesScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabKey>('explorar');
+  const [activeTab, setActiveTab] = useState<TabKey>('mis');
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
@@ -76,6 +76,7 @@ export default function ComunidadesScreen() {
   const [bookspotInfoMap, setBookspotInfoMap] = useState<Record<number, BookspotInfo>>({});
   const [communityGenresMap, setCommunityGenresMap] = useState<Record<number, string[]>>({});
   const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
   const [joiningId, setJoiningId] = useState<number | null>(null);
   const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
   const [selectedCommunity, setSelectedCommunity] = useState<CommunityDto | null>(null);
@@ -157,13 +158,14 @@ export default function ComunidadesScreen() {
     }
 
     await fetchCommunities(lat, lon);
+    hasLoadedOnce.current = true;
     setLoading(false);
     setRefreshing(false);
   }, [fetchCommunities]);
 
   useFocusEffect(
     useCallback(() => {
-      loadLocationAndData();
+      loadLocationAndData(!hasLoadedOnce.current ? false : true);
     }, [loadLocationAndData])
   );
 
@@ -426,19 +428,19 @@ export default function ComunidadesScreen() {
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <Pressable
-          style={[styles.tab, activeTab === 'explorar' && styles.tabActive]}
-          onPress={() => setActiveTab('explorar')}
-        >
-          <Text style={[styles.tabText, activeTab === 'explorar' && styles.tabTextActive]}>
-            Explorar
-          </Text>
-        </Pressable>
-        <Pressable
           style={[styles.tab, activeTab === 'mis' && styles.tabActive]}
           onPress={() => setActiveTab('mis')}
         >
           <Text style={[styles.tabText, activeTab === 'mis' && styles.tabTextActive]}>
             Mis Comunidades
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'explorar' && styles.tabActive]}
+          onPress={() => setActiveTab('explorar')}
+        >
+          <Text style={[styles.tabText, activeTab === 'explorar' && styles.tabTextActive]}>
+            Explorar
           </Text>
         </Pressable>
       </View>

@@ -1,4 +1,6 @@
 import CustomizationModal from "@/components/CustomizationModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTutorial } from "@/contexts/TutorialContext";
 import { getUserTier } from "@/lib/rewardsSystem";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
@@ -22,6 +24,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import { authService } from "../lib/authService";
 import { getStoredAuthSession, updateStoredAuthUser } from "../lib/authSession";
+import {
+  getEmailValidationError,
+  normalizeEmail,
+} from "../lib/emailValidation";
 import supabase from "../lib/supabase";
 
 const PROFILE_STORAGE_BUCKET =
@@ -80,6 +86,30 @@ const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
     };
     reader.readAsDataURL(blob);
   });
+
+const readApiError = async (
+  response: Response,
+  fallback: string,
+): Promise<string> => {
+  const raw = await response.text().catch(() => "");
+  if (!raw) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string" && parsed.error.trim())
+      return parsed.error;
+    if (typeof parsed?.message === "string" && parsed.message.trim())
+      return parsed.message;
+    if (typeof parsed?.detail === "string" && parsed.detail.trim())
+      return parsed.detail;
+    if (typeof parsed?.title === "string" && parsed.title.trim())
+      return parsed.title;
+  } catch {
+    // Keep raw text when body is not JSON.
+  }
+
+  return raw;
+};
 
 // ── Switch custom ────────────────────────────────────────────────────
 function CustomSwitch({
@@ -585,9 +615,11 @@ function ChangeEmailModal({
   }, [visible]);
 
   const handleSave = async () => {
-    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(newEmail);
     const normalizedPassword = password.trim();
     if (!normalizedEmail) return setError("Introduce el nuevo email");
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) return setError(emailError);
     if (!normalizedPassword) return setError("Introduce tu contraseña actual");
     setSaving(true);
     setError("");
@@ -691,7 +723,10 @@ function ChangeEmailModal({
             <TextInput
               style={inputStyle}
               value={newEmail}
-              onChangeText={setNewEmail}
+              onChangeText={(value) => {
+                setNewEmail(value);
+                if (error) setError("");
+              }}
               placeholder="nuevo@email.com"
               placeholderTextColor="#c4a882"
               keyboardType="email-address"
@@ -1080,13 +1115,16 @@ function SettingsRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { resetTutorial } = useTutorial();
+  const { userPlan } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
   const [customizationOpen, setCustomizationOpen] = React.useState(false);
   const [profile, setProfile] = React.useState<any>(null);
   const [currentEmail, setCurrentEmail] = React.useState("");
-  const [pushNotif, setPushNotif] = React.useState(true);
+  const [selectedLanguage, setSelectedLanguage] = React.useState("es");
+  const [languageOpen, setLanguageOpen] = React.useState(false);
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
   const [persistedAvatar, setPersistedAvatar] = React.useState<string | null>(
@@ -1102,6 +1140,12 @@ export default function SettingsScreen() {
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
+  };
+
+  const handleSelectLanguage = (code: string) => {
+    setSelectedLanguage(code);
+    setLanguageOpen(false);
+    showToast("Idioma actualizado correctamente");
   };
 
   const normalizeProfile = (
@@ -1387,8 +1431,12 @@ export default function SettingsScreen() {
           }),
         });
         if (!patchRes.ok) {
-          const txt = await patchRes.text().catch(() => "");
-          throw new Error(txt || "Error actualizando perfil en el servidor");
+          throw new Error(
+            await readApiError(
+              patchRes,
+              "Error actualizando perfil en el servidor",
+            ),
+          );
         }
         savedProfile = await patchRes.json().catch(() => null);
       } catch (err: any) {
@@ -1649,6 +1697,12 @@ export default function SettingsScreen() {
             label="Cambiar contraseña"
             subtitle="Actualiza tu contraseña"
             onPress={() => setChangePasswordOpen(true)}
+          />
+          <SettingsRow
+            icon="crown"
+            label="Plan / Suscripción"
+            subtitle={`Plan actual: ${userPlan}`}
+            onPress={() => router.push("/subscription")}
             isLast
           />
         </View>
@@ -1665,15 +1719,17 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {sectionLabel("Notificaciones")}
+        {sectionLabel("Soporte")}
         <View style={card}>
           <SettingsRow
-            icon="bell"
-            label="Notificaciones push"
-            subtitle="Recibe alertas en tu dispositivo"
-            right={
-              <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
-            }
+            icon="question-circle"
+            label="Repetir tutorial"
+            subtitle="Vuelve a ver la guía de la app"
+            onPress={async () => {
+              await resetTutorial();
+              router.replace("/(tabs)/matcher" as any);
+            }}
+            isLast
           />
         </View>
 

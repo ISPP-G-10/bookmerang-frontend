@@ -5,7 +5,7 @@ import { HStack } from '@/components/ui/hstack';
 import { Image } from '@/components/ui/image';
 import { Text } from '@/components/ui/text';
 import { VStack } from '@/components/ui/vstack';
-import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
+import { MATCHER_LAYOUT, getEffectiveWidth } from '@/constants/matcherLayout';
 import type { BookCondition, MatcherCard } from '@/types/matcher';
 import React, { useMemo } from 'react';
 import { View, useColorScheme, useWindowDimensions } from 'react-native';
@@ -60,8 +60,9 @@ export default function BookCard({ card, onTap }: BookCardProps) {
 
   const { cardWidth, cardHeight } = useMemo(() => {
     const config = MATCHER_LAYOUT;
+    const W = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    const width = SCREEN_WIDTH * config.card.widthPercent;
+    const width = W * config.card.widthPercent;
     const height = width * config.card.heightRatio;
 
     return {
@@ -73,7 +74,7 @@ export default function BookCard({ card, onTap }: BookCardProps) {
   const { book, owner, distanceKm } = card;
   const heroPhoto = book.photos[0]?.url;
 
-  const isCompact = SCREEN_WIDTH < 390;
+  const isCompact = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT) < 390;
 
   // Reducido para quitar hueco blanco excesivo.
   const adjustedCardHeight = isCompact ? cardHeight * 1.02 : cardHeight * 1.04;

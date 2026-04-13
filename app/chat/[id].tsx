@@ -26,7 +26,6 @@ import DateTimePickerModal from "react-native-modal-datetime-picker";
 import ChatAvatar from "@/components/ChatAvatar";
 import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
-import { getNameColorById } from "@/lib/rewardsSystem";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchMyBackendUser } from "@/lib/api";
@@ -45,6 +44,7 @@ import {
   acceptExchange,
   acceptExchangeMeeting,
   completeExchangeMeeting,
+  counterProposeExchangeMeeting,
   createExchangeMeeting,
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
@@ -53,6 +53,7 @@ import {
   reportExchange,
 } from "@/lib/exchangeApi";
 import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
+import { getNameColorById } from "@/lib/rewardsSystem";
 import {
   ChatDto,
   ChatParticipantDto,
@@ -241,13 +242,14 @@ const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
   const chatId = id ?? "";
+  const exchangeChatId = chatId;
   const router = useRouter();
   const { backendUserId, currentUserId, setBackendUserId } = useAuth();
 
-  const hasHandled404 = useRef(false);
+  const hasHandledError = useRef(false);
   const handleChatDeleted = useCallback(() => {
-    if (!hasHandled404.current) {
-      hasHandled404.current = true;
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
       if (Platform.OS === "web") {
         window.alert(
           "Chat no disponible: El otro usuario ha desestimado el intercambio o el chat ya no existe.",
@@ -263,9 +265,27 @@ export default function ChatDetailScreen() {
     }
   }, [router]);
 
+  const handleChatForbidden = useCallback(() => {
+    if (!hasHandledError.current) {
+      hasHandledError.current = true;
+      if (Platform.OS === "web") {
+        window.alert(
+          "Acceso denegado: No tienes permiso para acceder a este chat.",
+        );
+        router.replace("/(tabs)/chat");
+      } else {
+        Alert.alert(
+          "Acceso denegado",
+          "No tienes permiso para acceder a este chat.",
+          [{ text: "OK", onPress: () => router.replace("/(tabs)/chat") }],
+        );
+      }
+    }
+  }, [router]);
+
   const [chat, setChat] = useState<ChatDto | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
-  const [inputText, setInputText] = useState(draft ?? "");
+  const [inputText, setInputText] = useState("");
   const [typingUsers, setTypingUsers] = useState<TypingUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -284,7 +304,12 @@ export default function ChatDetailScreen() {
     (() => Promise<void>) | null
   >(null);
   const [confirmMode, setConfirmMode] = useState<
-    "accept" | "reject" | "meeting-accept" | "meeting-reject" | null
+    | "accept"
+    | "reject"
+    | "reject-with-meeting-cleanup"
+    | "meeting-accept"
+    | "meeting-reject"
+    | null
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
@@ -344,6 +369,7 @@ export default function ChatDetailScreen() {
   const [webMinuteDraft, setWebMinuteDraft] = useState(
     (Math.ceil(new Date().getMinutes() / 5) * 5) % 60,
   );
+  const draftPrefilledRef = useRef(false);
 
   type MeetingType = "ARBITRARY" | "BOOKSPOT" | "BOOKDROP";
 
@@ -690,12 +716,14 @@ export default function ChatDetailScreen() {
       setMeetingSubmitting(true);
       setError(null);
 
-      if (isCounterProposalMode && exchangeMeeting) {
-        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-      }
-
-      const createdMeeting = await createExchangeMeeting(payload);
-      setExchangeMeeting(createdMeeting);
+      const savedMeeting =
+        isCounterProposalMode && exchangeMeeting
+          ? await counterProposeExchangeMeeting(
+              exchangeMeeting.exchangeMeetingId,
+              payload,
+            )
+          : await createExchangeMeeting(payload);
+      setExchangeMeeting(savedMeeting);
 
       closeMeetingForm();
       Alert.alert(
@@ -844,6 +872,13 @@ export default function ChatDetailScreen() {
         setIsLoadingBookspots(true);
         setBookspotSuggestionFeedback(null);
 
+        if (!exchange.user1Id || !exchange.user2Id) {
+          setBookspotSuggestionFeedback(
+            "No se pudieron cargar los datos de usuario",
+          );
+          return;
+        }
+
         const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
           authService.getPreferences(exchange.user1Id),
           authService.getPreferences(exchange.user2Id),
@@ -925,6 +960,13 @@ export default function ChatDetailScreen() {
       try {
         setIsLoadingBookdrops(true);
         setBookdropSuggestionFeedback(null);
+
+        if (!exchange.user1Id || !exchange.user2Id) {
+          setBookdropSuggestionFeedback(
+            "No se pudieron cargar los datos de usuario",
+          );
+          return;
+        }
 
         const [user1Prefs, user2Prefs, activeBookspots] = await Promise.all([
           authService.getPreferences(exchange.user1Id),
@@ -1066,6 +1108,12 @@ export default function ChatDetailScreen() {
   };
 
   const loadData = useCallback(async () => {
+    if (!chatId) {
+      setError("Chat no disponible");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -1091,7 +1139,7 @@ export default function ChatDetailScreen() {
         }
       }
 
-      const exchangeData = await getExchangeByChatIdWithMatch(chatId);
+      const exchangeData = await getExchangeByChatIdWithMatch(exchangeChatId);
       if (!exchangeData && chatData.type !== "COMMUNITY") {
         throw new Error("404: Exchange no encontrado");
       }
@@ -1112,21 +1160,26 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       setError(err instanceof Error ? err.message : "Error al cargar el chat");
     } finally {
       setLoading(false);
     }
-  }, [chatId, router]);
+  }, [chatId, exchangeChatId, router]);
 
   // Polling: recargar mensajes cada 3 segundos para ver actualizaciones
   const refreshMessages = useCallback(async () => {
+    if (!chatId) return;
+
     try {
       const messagesData = await fetchMessages(chatId);
       const sorted = [...messagesData].sort(
@@ -1134,17 +1187,22 @@ export default function ChatDetailScreen() {
       );
       setMessages(sorted);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling
     }
   }, [chatId, router]);
 
   const refreshTyping = useCallback(async () => {
+    if (!chatId) return;
+
     try {
       const users = await getTypingUsers(chatId);
       // Filter out our own user
@@ -1154,11 +1212,14 @@ export default function ChatDetailScreen() {
         ),
       );
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+        }
       }
       // Silenciar errores de polling de typing
     }
@@ -1178,6 +1239,8 @@ export default function ChatDetailScreen() {
   }, [refreshMessages, refreshTyping]);
 
   useEffect(() => {
+    if (!chatId) return;
+
     return () => {
       if (isTypingRef.current) {
         stopTyping(chatId).catch(() => {});
@@ -1187,6 +1250,29 @@ export default function ChatDetailScreen() {
       }
     };
   }, [chatId]);
+
+  useEffect(() => {
+    draftPrefilledRef.current = false;
+    setInputText("");
+  }, [chatId]);
+
+  useEffect(() => {
+    if (draftPrefilledRef.current) return;
+    if (!draft || !chat) return;
+
+    if (chat.type === "COMMUNITY") {
+      draftPrefilledRef.current = true;
+      return;
+    }
+
+    if (messages.length > 0) {
+      draftPrefilledRef.current = true;
+      return;
+    }
+
+    setInputText((current) => (current.trim().length > 0 ? current : draft));
+    draftPrefilledRef.current = true;
+  }, [chat, draft, messages.length]);
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => {});
@@ -1207,6 +1293,11 @@ export default function ChatDetailScreen() {
 
         const myBookId = isUser1 ? exchange.book1Id : exchange.book2Id;
         const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
+
+        if (!myBookId || !otherBookId) {
+          console.warn("Book IDs are missing from exchange");
+          return;
+        }
 
         const [myBookData, otherBookData] = await Promise.all([
           getBookDetail(myBookId),
@@ -1338,6 +1429,8 @@ export default function ChatDetailScreen() {
   const handleInputChange = (text: string) => {
     setInputText(text);
 
+    if (!chatId) return;
+
     if (!isTypingRef.current && text.trim().length > 0) {
       isTypingRef.current = true;
       startTyping(chatId).catch(() => {});
@@ -1362,7 +1455,7 @@ export default function ChatDetailScreen() {
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || !chatId) return;
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -1403,12 +1496,15 @@ export default function ChatDetailScreen() {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 150);
     } catch (err) {
-      if (
-        err instanceof Error &&
-        (err.message.includes("404") || err.message.includes("403"))
-      ) {
-        handleChatDeleted();
-        return;
+      if (err instanceof Error) {
+        if (err.message.includes("403")) {
+          handleChatForbidden();
+          return;
+        }
+        if (err.message.includes("404")) {
+          handleChatDeleted();
+          return;
+        }
       }
       // Remover mensaje optimista en caso de error
       setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
@@ -1478,7 +1574,11 @@ export default function ChatDetailScreen() {
                 style={[
                   styles.senderName,
                   item.senderActiveColorId
-                    ? { color: getNameColorById(item.senderActiveColorId)?.color ?? '#e4715f' }
+                    ? {
+                        color:
+                          getNameColorById(item.senderActiveColorId)?.color ??
+                          "#e4715f",
+                      }
                     : undefined,
                 ]}
               >
@@ -1535,16 +1635,27 @@ export default function ChatDetailScreen() {
     }
   };
 
-  // Desestima el intercambio
-  const handleRejectExchange = async () => {
+  const executeRejectExchange = async (cleanupMeetingFirst: boolean) => {
     if (!exchange?.exchangeId) return;
     setError(null);
-    try {
-      const updated = await rejectExchange(exchange.exchangeId);
-      setExchange(updated);
 
-      // Como el backend ahora borra el chat al desestimar el intercambio,
-      // salimos de esta pantalla para evitar errores 404 al intentar refrescar.
+    try {
+      if (
+        cleanupMeetingFirst &&
+        exchangeMeeting &&
+        (exchangeMeeting.meetingStatus === "PROPOSAL" ||
+          exchangeMeeting.meetingStatus === "ACCEPTED")
+      ) {
+        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+        setExchangeMeeting((prev) =>
+          prev ? { ...prev, meetingStatus: "REFUSED" } : null,
+        );
+      }
+
+      const updated = await rejectExchange(exchange.exchangeId);
+      setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
+
+      // Tras desestimar, volvemos al listado de chats.
       router.replace("/(tabs)/chat");
     } catch (err) {
       if (
@@ -1554,12 +1665,23 @@ export default function ChatDetailScreen() {
         handleChatDeleted();
         return;
       }
+
       const msg =
         err instanceof Error
           ? err.message
           : "Error al desestimar el intercambio";
       setError(msg);
     }
+  };
+
+  // Desestima el intercambio sin tocar propuestas.
+  const handleRejectExchange = async () => {
+    await executeRejectExchange(false);
+  };
+
+  // Desestima el intercambio eliminando antes la propuesta/quedada activa.
+  const handleRejectExchangeWithMeetingCleanup = async () => {
+    await executeRejectExchange(true);
   };
 
   const getAcceptButtonState = () => {
@@ -1630,11 +1752,13 @@ export default function ChatDetailScreen() {
     exchange.status !== "REJECTED" &&
     exchange.status !== "INCIDENT" &&
     exchange.status !== "COMPLETED";
-  const canProposeMeeting =
-    exchange?.status === "ACCEPTED" &&
-    (!exchangeMeeting || exchangeMeeting.meetingStatus === "REFUSED");
+  const canProposeMeeting = exchange?.status === "ACCEPTED" && !exchangeMeeting;
   const hasMeetingProposal = exchangeMeeting?.meetingStatus === "PROPOSAL";
   const hasMeetingAccepted = exchangeMeeting?.meetingStatus === "ACCEPTED";
+  const bookdropPin =
+    hasMeetingAccepted && exchangeMeeting?.exchangeMode === "BOOKDROP"
+      ? exchangeMeeting.pin
+      : null;
   const isMeetingProposalReceived =
     !!exchangeMeeting &&
     hasMeetingProposal &&
@@ -1646,7 +1770,15 @@ export default function ChatDetailScreen() {
     !!backendUserId &&
     exchangeMeeting.proposerId === backendUserId;
   const canShowMeetingCompletionBanner =
-    !!exchangeMeeting && hasMeetingAccepted && exchange?.status === "ACCEPTED";
+    !!exchangeMeeting &&
+    hasMeetingAccepted &&
+    exchangeMeeting.exchangeMode !== "BOOKDROP" &&
+    exchange?.status === "ACCEPTED";
+  const canShowBookdropManagedBanner =
+    !!exchangeMeeting &&
+    hasMeetingAccepted &&
+    exchangeMeeting.exchangeMode === "BOOKDROP" &&
+    exchange?.status === "ACCEPTED";
   const isCurrentUserMeetingProposer =
     !!exchangeMeeting &&
     !!backendUserId &&
@@ -1867,6 +1999,7 @@ export default function ChatDetailScreen() {
 
   const handleCompleteExchangeAfterMeeting = async () => {
     if (!exchangeMeeting || meetingCompletionSubmitting) return;
+    if (exchangeMeeting.exchangeMode === "BOOKDROP") return;
 
     try {
       setMeetingCompletionSubmitting(true);
@@ -1906,7 +2039,8 @@ export default function ChatDetailScreen() {
 
       if (exchange?.exchangeId) {
         try {
-          const updatedExchange = await getExchangeByChatIdWithMatch(chatId);
+          const updatedExchange =
+            await getExchangeByChatIdWithMatch(exchangeChatId);
           if (updatedExchange) {
             setExchange(updatedExchange);
           }
@@ -1959,13 +2093,16 @@ export default function ChatDetailScreen() {
 
   const handleReportCompletedExchange = async () => {
     if (!exchange?.exchangeId || meetingCompletionSubmitting) return;
+    if (exchangeMeeting?.exchangeMode === "BOOKDROP") return;
 
     try {
       setMeetingCompletionSubmitting(true);
       setError(null);
 
       const updatedExchange = await reportExchange(exchange.exchangeId);
-      setExchange(updatedExchange);
+      setExchange((prev) =>
+        prev ? { ...prev, ...updatedExchange } : updatedExchange,
+      );
     } catch (err) {
       const message =
         err instanceof Error
@@ -1979,7 +2116,12 @@ export default function ChatDetailScreen() {
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject" | "meeting-accept" | "meeting-reject",
+    mode:
+      | "accept"
+      | "reject"
+      | "reject-with-meeting-cleanup"
+      | "meeting-accept"
+      | "meeting-reject",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -1991,15 +2133,17 @@ export default function ChatDetailScreen() {
   };
 
   const openRejectConfirm = () => {
-    openConfirm(handleRejectExchange, "reject");
+    const shouldCleanupMeetingFirst = hasMeetingProposal || hasMeetingAccepted;
+    openConfirm(
+      shouldCleanupMeetingFirst
+        ? handleRejectExchangeWithMeetingCleanup
+        : handleRejectExchange,
+      shouldCleanupMeetingFirst ? "reject-with-meeting-cleanup" : "reject",
+    );
   };
 
   const openAcceptMeetingConfirm = () => {
     openConfirm(handleAcceptMeetingProposal, "meeting-accept");
-  };
-
-  const openRejectMeetingConfirm = () => {
-    openConfirm(handleRejectMeetingProposal, "meeting-reject");
   };
 
   const getConfirmModalContent = () => {
@@ -2017,6 +2161,14 @@ export default function ChatDetailScreen() {
           message:
             "¿Seguro que quieres desestimar este intercambio? Esta acción terminará las negocioaciones y es irreversible.",
           confirmLabel: "Desestimar",
+          confirmColor: "danger" as const,
+        };
+      case "reject-with-meeting-cleanup":
+        return {
+          title: "Desestimar intercambio",
+          message:
+            "Hay una propuesta o quedada activa. Si continuas, primero se eliminara esa propuesta y despues se desestimara el intercambio.",
+          confirmLabel: "Eliminar y desestimar",
           confirmColor: "danger" as const,
         };
       case "meeting-accept":
@@ -2348,6 +2500,24 @@ export default function ChatDetailScreen() {
                       </View>
                     </View>
 
+                    {bookdropPin ? (
+                      <View style={styles.meetingPinBox}>
+                        <View style={styles.meetingPinHeader}>
+                          <FontAwesome name="key" size={16} color="#9A683A" />
+                          <Text style={styles.meetingPinTitle}>
+                            PIN del BookDrop
+                          </Text>
+                        </View>
+                        <Text style={styles.meetingPinValue}>
+                          {bookdropPin}
+                        </Text>
+                        <Text style={styles.meetingPinDescription}>
+                          Indica este PIN en el BookDrop para que puedan
+                          gestionar el intercambio.
+                        </Text>
+                      </View>
+                    ) : null}
+
                     {isMeetingProposalReceived && (
                       <View style={styles.meetingProposalActionsRow}>
                         <Pressable
@@ -2459,6 +2629,29 @@ export default function ChatDetailScreen() {
                           </Text>
                         </Pressable>
                       </View>
+                    </View>
+                  </View>
+                )}
+
+                {canShowBookdropManagedBanner && (
+                  <View style={styles.meetingCompletionWrapper}>
+                    <View style={styles.meetingBookdropInfoCard}>
+                      <View style={styles.meetingCompletionHeader}>
+                        <FontAwesome
+                          name="building-o"
+                          size={20}
+                          color="#9A683A"
+                        />
+                        <Text style={styles.meetingCompletionTitle}>
+                          Gestionado por BookDrop
+                        </Text>
+                      </View>
+
+                      <Text style={styles.meetingCompletionDescription}>
+                        Este intercambio se valida directamente en el
+                        establecimiento. Aqui no se puede completar ni reportar
+                        manualmente.
+                      </Text>
                     </View>
                   </View>
                 )}
@@ -4003,6 +4196,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6B7280",
   },
+  meetingPinBox: {
+    marginTop: 4,
+    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E7D2BF",
+    backgroundColor: "#FFF7EF",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  meetingPinHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "transparent",
+  },
+  meetingPinTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#9A683A",
+  },
+  meetingPinValue: {
+    marginTop: 8,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: 3,
+    color: "#3F2C1F",
+  },
+  meetingPinDescription: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20,
+    color: "#6B4A2F",
+    backgroundColor: "transparent",
+  },
   meetingProposalActionsRow: {
     marginTop: 8,
     flexDirection: "row",
@@ -4063,6 +4291,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     backgroundColor: "#F5FCF8",
+  },
+  meetingBookdropInfoCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E7D2BF",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#FFF7EF",
   },
   meetingCompletionHeader: {
     flexDirection: "row",

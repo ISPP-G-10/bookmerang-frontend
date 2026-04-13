@@ -2,6 +2,8 @@ import Header from "@/components/Header";
 import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
+import DraftsModal from "@/components/book-upload/DraftsModal";
+import IsbnScannerWeb from "@/components/book-upload/IsbnScannerWeb";
 import {
   MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
@@ -19,6 +21,9 @@ import {
 import {
   buildMissingFieldsMessage,
   getDataStepMissingFields,
+  getIsbnValidationError,
+  normalizeIsbnForSubmission,
+  parseScannedIsbn,
 } from "@/lib/bookUploadValidation";
 import { markUploadFlowResetNeeded } from "@/lib/uploadFlowState";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -35,6 +40,7 @@ import {
   Image,
   Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -86,41 +92,6 @@ function mapCoverToApi(selection: CoverSelection | null): BookDetail["cover"] | 
   return selection === "Hardcover" ? "Hardcover" : "Paperback";
 }
 
-function normalizeIsbnInput(value: string): string {
-  return value.replace(/[^0-9xX]/g, "").toUpperCase();
-}
-
-function isValidIsbn10(isbn: string): boolean {
-  if (!/^\d{9}[\dX]$/.test(isbn)) return false;
-
-  const checksum = isbn.split("").reduce((sum, char, index) => {
-    const value = char === "X" ? 10 : Number(char);
-    return sum + value * (10 - index);
-  }, 0);
-
-  return checksum % 11 === 0;
-}
-
-function isValidIsbn13(isbn: string): boolean {
-  if (!/^\d{13}$/.test(isbn)) return false;
-  if (!isbn.startsWith("978") && !isbn.startsWith("979")) return false;
-
-  const checksumBase = isbn
-    .slice(0, 12)
-    .split("")
-    .reduce((sum, digit, index) => sum + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
-
-  const checksum = (10 - (checksumBase % 10)) % 10;
-  return checksum === Number(isbn[12]);
-}
-
-function parseScannedIsbn(rawValue: string): string | null {
-  const normalized = normalizeIsbnInput(rawValue);
-  if (normalized.length === 13 && isValidIsbn13(normalized)) return normalized;
-  if (normalized.length === 10 && isValidIsbn10(normalized)) return normalized;
-  return null;
-}
-
 export default function UploadDataScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const bookId = Number(id);
@@ -128,11 +99,9 @@ export default function UploadDataScreen() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
-  const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
-  const [showDraftsModal, setShowDraftsModal] = useState(false);
+    const [showDraftsModal, setShowDraftsModal] = useState(false);
   const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
-  const [pendingDeleteDraft, setPendingDeleteDraft] = useState<BookDraftSummary | null>(null);
-  const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
+    const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
 
   const [genres, setGenres] = useState<GenreOption[]>([]);
   const [languages, setLanguages] = useState<LanguageOption[]>([]);
@@ -149,10 +118,15 @@ export default function UploadDataScreen() {
   const [photoCount, setPhotoCount] = useState(0);
   const [showIsbnScanner, setShowIsbnScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
+  const [showIsbnValidationError, setShowIsbnValidationError] = useState(false);
+  const isbnValidationError = useMemo(() => getIsbnValidationError(isbn), [isbn]);
+  const visibleIsbnValidationError =
+    showIsbnValidationError && isbnValidationError ? isbnValidationError : null;
 
   const selectedLanguageLabel = useMemo(() => {
     if (!selectedLanguageId) return "Selecciona idioma";
@@ -275,7 +249,7 @@ export default function UploadDataScreen() {
       await updateBookDataStep(bookId, {
         titulo: title.trim(),
         autor: author.trim(),
-        isbn: isbn.trim(),
+        isbn: normalizeIsbnForSubmission(isbn),
         numPaginas: numPages.trim() ? Number(numPages.trim()) : null,
         cover: mapCoverToApi(cover),
         genreIds: selectedGenreIds,
@@ -327,6 +301,16 @@ export default function UploadDataScreen() {
       return;
     }
 
+    if (isbnValidationError) {
+      setError(isbnValidationError);
+      setFeedback(null);
+      setShowIsbnValidationError(true);
+      return;
+    }
+
+    setError(null);
+    setShowIsbnValidationError(false);
+
     if (photoCount < MIN_BOOK_PHOTOS || photoCount > MAX_BOOK_PHOTOS) {
       setInfoModal({
         title: "Foto requerida",
@@ -345,7 +329,7 @@ export default function UploadDataScreen() {
       await updateBookDataStep(bookId, {
         titulo: title.trim(),
         autor: author.trim(),
-        isbn: isbn.trim(),
+        isbn: normalizeIsbnForSubmission(isbn),
         numPaginas: parsedPages,
         cover: mapCoverToApi(cover),
         genreIds: selectedGenreIds,
@@ -381,50 +365,15 @@ export default function UploadDataScreen() {
     router.replace(`/books/create/${draft.id}/datos` as any);
   };
 
-  const performDeleteDraft = async (draft: BookDraftSummary) => {
-    setDeletingDraftId(draft.id);
-    setError(null);
-    setPendingDeleteDraft(null);
-
-    try {
-      await deleteBook(draft.id);
-      setDrafts((current) => current.filter((item) => item.id !== draft.id));
-      setFeedback("Borrador eliminado correctamente.");
-
-      if (draft.id === bookId) {
-        setShowDraftsModal(false);
-        router.replace("/subir" as any);
-      }
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setDeletingDraftId(null);
-    }
-  };
-
-  const handleDeleteDraft = (draft: BookDraftSummary) => {
-    if (deletingDraftId) return;
-    setPendingDeleteDraft(draft);
-  };
-
-  const closeDeleteDraftModal = () => {
-    setPendingDeleteDraft(null);
-  };
-
-  const confirmDeleteDraft = () => {
-    if (!pendingDeleteDraft) return;
-    performDeleteDraft(pendingDeleteDraft);
-  };
-
+  
   const handleCancel = () => {
-    Alert.alert(
-      "Cancelar",
-      "Se perderán los cambios no guardados de este paso.",
-      [
-        { text: "Seguir editando", style: "cancel" },
-        { text: "Salir", style: "destructive", onPress: () => router.replace("/subir" as any) },
-      ],
-    );
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = async () => {
+    setShowCancelModal(false);
+    await markUploadFlowResetNeeded();
+    router.replace("/matcher" as any);
   };
 
   const handleBack = () => {
@@ -438,22 +387,26 @@ export default function UploadDataScreen() {
   };
 
   const handleOpenIsbnScanner = async () => {
-    const permission = await Camera.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Permiso de cámara necesario",
-        "Para escanear el ISBN debes permitir el acceso a la cámara.",
-        [
-          { text: "Cancelar", style: "cancel" },
-          {
-            text: "Abrir ajustes",
-            onPress: () => {
-              Linking.openSettings().catch(() => undefined);
+    // On web, the browser handles camera permissions natively via getUserMedia.
+    // We only need to request permission through expo-camera on native (iOS/Android).
+    if (Platform.OS !== "web") {
+      const permission = await Camera.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Permiso de cámara necesario",
+          "Para escanear el ISBN debes permitir el acceso a la cámara.",
+          [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Abrir ajustes",
+              onPress: () => {
+                Linking.openSettings().catch(() => undefined);
+              },
             },
-          },
-        ],
-      );
-      return;
+          ],
+        );
+        return;
+      }
     }
 
     setScannerLocked(false);
@@ -464,6 +417,26 @@ export default function UploadDataScreen() {
     if (scannerLocked) return;
     setScannerLocked(true);
 
+    const parsedIsbn = parseScannedIsbn(data);
+
+    if (!parsedIsbn) {
+      closeIsbnScanner();
+      setInfoModal({
+        title: "ISBN no válido",
+        message:
+          "El código detectado no corresponde a un ISBN válido. Prueba a escanear de nuevo la tapa del libro.",
+      });
+      return;
+    }
+
+    setIsbn(parsedIsbn);
+    setError(null);
+    setFeedback("ISBN detectado correctamente desde el escáner.");
+    closeIsbnScanner();
+  };
+
+  /** Handler for the web-specific scanner (receives raw barcode string). */
+  const handleWebIsbnScanned = (data: string) => {
     const parsedIsbn = parseScannedIsbn(data);
 
     if (!parsedIsbn) {
@@ -531,10 +504,20 @@ export default function UploadDataScreen() {
               <View style={styles.isbnRow}>
                 <TextInput
                   value={isbn}
-                  onChangeText={setIsbn}
+                  onChangeText={(value) => {
+                    setIsbn(value.toUpperCase());
+                    if (showIsbnValidationError) {
+                      setShowIsbnValidationError(false);
+                      setError(null);
+                    }
+                  }}
                   placeholder="ISBN"
                   placeholderTextColor="#a79a89"
-                  style={[styles.input, styles.isbnInput]}
+                  style={[
+                    styles.input,
+                    styles.isbnInput,
+                    visibleIsbnValidationError ? styles.inputError : null,
+                  ]}
                   autoCapitalize="characters"
                   autoCorrect={false}
                 />
@@ -543,6 +526,9 @@ export default function UploadDataScreen() {
                   <Text style={styles.scanIsbnButtonText}>Escanear</Text>
                 </TouchableOpacity>
               </View>
+              {visibleIsbnValidationError ? (
+                <Text style={styles.fieldErrorText}>{visibleIsbnValidationError}</Text>
+              ) : null}
             </View>
 
             <View style={styles.fieldBlock}>
@@ -657,62 +643,21 @@ export default function UploadDataScreen() {
         </>
       )}
 
-      <Modal
-        transparent
+      <DraftsModal
         visible={showDraftsModal}
-        animationType="slide"
-        onRequestClose={() => setShowDraftsModal(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowDraftsModal(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Tus borradores</Text>
-            {drafts.length === 0 ? (
-              <Text style={styles.emptyDraftsText}>No tienes borradores guardados.</Text>
-            ) : (
-              <ScrollView style={styles.modalList}>
-                {drafts.map((draft) => (
-                  <View key={draft.id} style={styles.draftItem}>
-                    <TouchableOpacity
-                      style={styles.draftMainArea}
-                      onPress={() => handleLoadDraft(draft)}
-                      disabled={Boolean(deletingDraftId)}
-                    >
-                      {draft.thumbnailUrl ? (
-                        <Image source={{ uri: draft.thumbnailUrl }} style={styles.draftThumb} />
-                      ) : (
-                        <View style={styles.draftThumbPlaceholder}>
-                          <FontAwesome name="book" size={16} color="#b2a89b" />
-                        </View>
-                      )}
-                      <View style={styles.draftInfo}>
-                        <Text numberOfLines={1} style={styles.draftTitle}>
-                          {draft.titulo?.trim() || "Sin título"}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.draftSubtitle}>
-                          {draft.autor?.trim() || "Autor sin definir"}
-                        </Text>
-                        <Text style={styles.draftDate}>{formatUpdatedAt(draft.updatedAt)}</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.draftDeleteButton}
-                      onPress={() => handleDeleteDraft(draft)}
-                      disabled={deletingDraftId === draft.id}
-                    >
-                      {deletingDraftId === draft.id ? (
-                        <ActivityIndicator size="small" color="#d5785f" />
-                      ) : (
-                        <FontAwesome name="trash" size={16} color="#d5785f" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowDraftsModal(false)}
+        drafts={drafts}
+        onLoadDraft={handleLoadDraft}
+        onDraftDeleted={(draftIdToDelete) => {
+          setDrafts((current) => current.filter((item) => item.id !== draftIdToDelete));
+          if (bookId === draftIdToDelete) {
+            setShowDraftsModal(false);
+            router.replace("/subir" as any);
+          }
+        }}
+        onError={setError}
+        onSuccess={setFeedback}
+      />
 
       <FlowInfoModal
         visible={Boolean(infoModal)}
@@ -721,38 +666,47 @@ export default function UploadDataScreen() {
         onPrimaryPress={closeInfoModal}
       />
 
-      <Modal
-        visible={showIsbnScanner}
-        animationType="slide"
-        onRequestClose={closeIsbnScanner}
-      >
-        <View style={styles.scannerModalContainer}>
-          <CameraView
-            style={styles.scannerPreview}
-            facing="back"
-            onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
-            barcodeScannerSettings={{
-              barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
-            }}
-          />
-          <View pointerEvents="none" style={styles.scannerFrameWrapper}>
-            <View style={styles.scannerFrame} />
-          </View>
+      {/* ISBN Scanner – web uses custom component, native uses expo-camera */}
+      {Platform.OS === "web" ? (
+        <IsbnScannerWeb
+          visible={showIsbnScanner}
+          onClose={closeIsbnScanner}
+          onScanned={handleWebIsbnScanned}
+        />
+      ) : (
+        <Modal
+          visible={showIsbnScanner}
+          animationType="slide"
+          onRequestClose={closeIsbnScanner}
+        >
+          <View style={styles.scannerModalContainer}>
+            <CameraView
+              style={styles.scannerPreview}
+              facing="back"
+              onBarcodeScanned={scannerLocked ? undefined : handleIsbnScanned}
+              barcodeScannerSettings={{
+                barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128"],
+              }}
+            />
+            <View pointerEvents="none" style={styles.scannerFrameWrapper}>
+              <View style={styles.scannerFrame} />
+            </View>
 
-          <View style={styles.scannerTopBar}>
-            <TouchableOpacity style={styles.scannerCloseButton} onPress={closeIsbnScanner}>
-              <FontAwesome name="times" size={18} color="#fff" />
-              <Text style={styles.scannerCloseText}>Cerrar</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.scannerTopBar}>
+              <TouchableOpacity style={styles.scannerCloseButton} onPress={closeIsbnScanner}>
+                <FontAwesome name="times" size={18} color="#fff" />
+                <Text style={styles.scannerCloseText}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.scannerBottomBar}>
-            <Text style={styles.scannerHintText}>
-              Enfoca el código de barras de la tapa trasera para completar el ISBN.
-            </Text>
+            <View style={styles.scannerBottomBar}>
+              <Text style={styles.scannerHintText}>
+                Enfoca el código de barras de la tapa trasera para completar el ISBN.
+              </Text>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
 
       <FlowInfoModal
         visible={showSaveDraftModal}
@@ -764,14 +718,14 @@ export default function UploadDataScreen() {
         onSecondaryPress={() => setShowSaveDraftModal(false)}
       />
 
-      <FlowInfoModal
-        visible={Boolean(pendingDeleteDraft)}
-        title="Eliminar borrador"
-        message="Esta acción eliminará el borrador de forma permanente."
-        primaryLabel="Eliminar"
-        secondaryLabel="Cancelar"
-        onPrimaryPress={confirmDeleteDraft}
-        onSecondaryPress={closeDeleteDraftModal}
+            <FlowInfoModal
+        visible={showCancelModal}
+        title="Cancelar subida"
+        message="¿Estás seguro de que quieres cancelar? Perderás los cambios no guardados."
+        primaryLabel="Sí, cancelar"
+        secondaryLabel="Seguir editando"
+        onPrimaryPress={confirmCancel}
+        onSecondaryPress={() => setShowCancelModal(false)}
       />
     </View>
   );
@@ -849,6 +803,15 @@ const styles = StyleSheet.create({
   scanIsbnButtonText: {
     color: "#fff",
     fontFamily: "Outfit_700Bold",
+    fontSize: 14,
+  },
+  inputError: {
+    borderColor: "#d05b57",
+  },
+  fieldErrorText: {
+    marginTop: 8,
+    color: "#d05b57",
+    fontFamily: "Outfit_400Regular",
     fontSize: 14,
   },
   chipsWrap: {

@@ -1,0 +1,93 @@
+name: "🐛 Bug / Fix"
+description: "Reportar un error o comportamiento incorrecto"
+title: "[Frontend] - "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Bug / Fix
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: "📝 Descripción del error"
+      description: "¿Qué ocurre? ¿Cuándo ocurre?"
+      placeholder: |
+        Ejemplo: Al volver desde Perfil a BookSpots, el mapa sigue centrado en la ubicación antigua aunque se haya actualizado.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduccion
+    attributes:
+      label: "🔁 Pasos para reproducirlo"
+      placeholder: |
+        1. Ir a Perfil → Actualizar ubicación
+        2. Volver a BookSpots
+        3. El mapa no se ha actualizado
+    validations:
+      required: false
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: "📍 Módulo"
+      options:
+        - "BookSpots"
+        - "Matcher"
+        - "Chats"
+        - "Comunidades"
+        - "Biblioteca"
+        - "Perfil"
+        - "Autenticación"
+        - "Premium / Pagos"
+        - "Diseño UX/UI"
+        - "Infraestructura"
+        - "Documentación"
+        - "➕ Otro (especificar abajo)"
+    validations:
+      required: true
+
+  - type: input
+    id: otro-modulo
+    attributes:
+      label: "➕ Otro módulo"
+      placeholder: "Ej: Notificaciones push"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: "⚠️ Prioridad"
+      options:
+        - "🔥 Crítico — Bloquea y no se puede trabajar"
+        - "🔴 Alta — Funcionalidad principal rota"
+        - "🟡 Media — Tiene solución alternativa"
+        - "🟢 Baja — Error menor / UI / Texto"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sprint
+    attributes:
+      label: "⏳ Sprint"
+      options:
+        - "DP"
+        - "Sprint 1"
+        - "Sprint 2"
+        - "Sprint 3"
+        - "PPL"
+        - "WPL"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: "📸 Capturas / info adicional (opcional)"
+      placeholder: "Arrastra capturas de pantalla o pega mensajes de error aquí"
+    validations:
+      required: false
