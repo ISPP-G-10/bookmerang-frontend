@@ -10,7 +10,7 @@ export interface ChatParticipantDto {
 
 export interface MessageDto {
   id: number;
-  chatId: string;
+  chatId: string | number;
   senderId: string;
   senderUsername: string;
   body: string;

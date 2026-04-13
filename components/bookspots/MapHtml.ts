@@ -40,6 +40,8 @@ export function getMapHtml(lat: number, lng: number): string {
             border: 1px solid rgba(0,0,0,0.06);
           }
           #radiusBadge .bdot { width: 8px; height: 8px; background: #e07a5f; border-radius: 50%; flex-shrink: 0; }
+          #radiusBadge.pick-mode { background: #3d405b; color: white; border-color: transparent; }
+          #radiusBadge.pick-mode .bdot { background: rgba(255,255,255,0.45); }
 
           /* ── filter pill + dropdown (fijo a la derecha) ── */
           #filterWrap {
@@ -89,11 +91,16 @@ export function getMapHtml(lat: number, lng: number): string {
             display: flex; align-items: center; justify-content: center; flex-shrink: 0;
             transition: background 0.12s, border-color 0.12s;
           }
-          .filter-row.checked-spot .fr-check { background: #e07a5f; border-color: #e07a5f; }
-          .filter-row.checked-drop .fr-check { background: #f97316; border-color: #f97316; }
+          .filter-row.checked-spot    .fr-check { background: #e07a5f; border-color: #e07a5f; }
+          .filter-row.checked-drop    .fr-check { background: #f97316; border-color: #f97316; }
+          .filter-row.checked-own     .fr-check { background: #4caf50; border-color: #4caf50; }
+          .filter-row.checked-pending .fr-check { background: #f59e0b; border-color: #f59e0b; }
           .filter-row .fr-check svg { display: none; }
           .filter-row.checked-spot .fr-check svg,
-          .filter-row.checked-drop .fr-check svg { display: block; }
+          .filter-row.checked-drop .fr-check svg,
+          .filter-row.checked-own  .fr-check svg,
+          .filter-row.checked-pending .fr-check svg { display: block; }
+          .filter-divider { height: 1px; background: #f0ede8; margin: 3px 4px; }
 
           #tooFarBanner {
             position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
@@ -323,13 +330,38 @@ export function getMapHtml(lat: number, lng: number): string {
                   <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg>
                 </div>
               </div>
+              <div class="filter-divider"></div>
+              <div class="filter-row checked-own" id="rowOwn" onclick="toggleFilter('own')">
+                <div class="fr-icon" style="background:#e8f5e9;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4caf50" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  </svg>
+                </div>
+                <span class="fr-label">Mis validados</span>
+                <div class="fr-check">
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg>
+                </div>
+              </div>
+              <div class="filter-row checked-pending" id="rowPending" onclick="toggleFilter('pending')">
+                <div class="fr-icon" style="background:#fffbeb;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 22h14"/><path d="M5 2h14"/>
+                    <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"/>
+                    <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
+                  </svg>
+                </div>
+                <span class="fr-label">Mis pendientes</span>
+                <div class="fr-check">
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
         <div id="tooFarBanner"><span class="bdot"></span><span>Acerca el zoom para ver BookSpots</span></div>
         <div id="pickBanner">
-          <span>Arrastra el pin o toca para ubicar</span>
           <button onclick="cancelPickMode()">Cancelar</button>
         </div>
 
@@ -433,13 +465,13 @@ export function getMapHtml(lat: number, lng: number): string {
               <span id="pendingModalAddress"></span>
             </div>
 
-            <!-- Validated box -->
+            <!-- Validated box (above directions) -->
             <div id="pendingValidatedBox">
               <div class="val-title">BookSpot validado</div>
               <div class="val-sub">Ya aparece en el mapa para la comunidad</div>
             </div>
 
-            <!-- Progress box -->
+            <!-- Progress box (above directions) -->
             <div id="pendingProgressBox" style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:16px">
               <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:#d97706;text-transform:uppercase;margin-bottom:8px">
                 Progreso de validaciones
@@ -451,7 +483,42 @@ export function getMapHtml(lat: number, lng: number): string {
               <div style="font-size:12px;color:#9e9aad;margin-top:3px" id="pendingProgressSub"></div>
             </div>
 
-            <div style="font-size:12px;color:#c9b5a3;margin-bottom:16px" id="pendingCreatedAt"></div>
+            <!-- Directions button: 1st tap expands route, 2nd tap opens Maps -->
+            <button class="btn-googlemaps" id="pendingDirectionsBtn" onclick="togglePendingRoute()">Cómo llegar</button>
+
+            <!-- Collapsible route section (hidden until 1st tap) -->
+            <div id="pendingRouteSection" style="display:none;margin-top:12px">
+              <div class="mode-selector">
+                <button class="mode-btn active" id="pendingBtnWalk" onclick="setPendingMode('walk')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="4" r="1.5"/><path d="M9 22l2-6 2.5 2.5 2-5"/>
+                    <path d="M10.5 10.5L9 22"/><path d="M13.5 10.5l2.5 4.5-3 2"/>
+                    <path d="M12 6l-1.5 4.5 3 1"/><path d="M14 6.5l1.5-1"/>
+                  </svg>
+                  A pie
+                </button>
+                <button class="mode-btn" id="pendingBtnCar" onclick="setPendingMode('car')">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 17H3v-5l2-5h14l2 5v5h-2"/>
+                    <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/>
+                    <path d="M5 12h14"/>
+                  </svg>
+                  En coche
+                </button>
+              </div>
+              <div class="modal-stats" style="margin-bottom:0">
+                <div class="stat-box">
+                  <div class="stat-value loading" id="pendingStatDist"></div>
+                  <div class="stat-label">Distancia</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-value loading" id="pendingStatTime"></div>
+                  <div class="stat-label">Tiempo aprox.</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:12px;color:#c9b5a3;margin-top:16px;margin-bottom:16px" id="pendingCreatedAt"></div>
 
             <!-- Inline delete confirmation -->
             <div id="pendingDeleteConfirm">
@@ -486,11 +553,21 @@ export function getMapHtml(lat: number, lng: number): string {
           let routeWalk = { distanceM: null, durationS: null, geometry: null };
           let isPicking = false;
           let pickedMarker = null;
+          let _prevRadiusText = '';
+          let pendingCurrentMode = 'walk';
+          let pendingRouteCar  = { distanceM: null, durationS: null, geometry: null };
+          let pendingRouteWalk = { distanceM: null, durationS: null, geometry: null };
+          let pendingRouteLine = null;
+          let pendingRouteOpen = false;
           let ownActiveIds = new Set();
+          let ownActiveMarkers = [];
           let allSpots = [];
           let filterSpot = true;
           let filterDrop = true;
+          let filterOwn = true;
+          let filterPending = true;
           let filterDropdownOpen = false;
+          let allPendingSpots = [];
 
           const BACK_BTN_THRESHOLD_M = 300;
 
@@ -527,24 +604,53 @@ export function getMapHtml(lat: number, lng: number): string {
             }
           });
           function updateFilterPill() {
-            document.getElementById('filterPill').classList.toggle('has-inactive', !filterSpot || !filterDrop);
+            var anyInactive = !filterSpot || !filterDrop || !filterOwn || !filterPending;
+            document.getElementById('filterPill').classList.toggle('has-inactive', anyInactive);
           }
           function toggleFilter(type) {
             if (type === 'spot') {
-              if (filterSpot && !filterDrop) return;
+              if (filterSpot && !filterDrop && filterOwn && filterPending) return; // última activa
               filterSpot = !filterSpot;
               document.getElementById('rowSpot').classList.toggle('checked-spot', filterSpot);
-            } else {
-              if (filterDrop && !filterSpot) return;
+              repaintSpots();
+            } else if (type === 'drop') {
+              if (filterDrop && !filterSpot && filterOwn && filterPending) return;
               filterDrop = !filterDrop;
               document.getElementById('rowDrop').classList.toggle('checked-drop', filterDrop);
+              repaintSpots();
+            } else if (type === 'own') {
+              if (filterOwn && !filterSpot && !filterDrop && filterPending) return;
+              filterOwn = !filterOwn;
+              document.getElementById('rowOwn').classList.toggle('checked-own', filterOwn);
+              repaintSpots();
+            } else if (type === 'pending') {
+              if (filterPending && !filterSpot && !filterDrop && !filterOwn) return;
+              filterPending = !filterPending;
+              document.getElementById('rowPending').classList.toggle('checked-pending', filterPending);
+              repaintPendingSpots();
+              updatePendingClusterVisibility();
             }
             updateFilterPill();
-            repaintSpots();
+          }
+
+          function repaintPendingSpots() {
+            pendingClusterGroup.clearLayers();
+            if (!filterPending || !allPendingSpots || allPendingSpots.length === 0) return;
+            allPendingSpots.forEach(function(spot) {
+              L.marker(
+                [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
+                { icon: createPendingIcon() }
+              ).on('click', function() { openPendingModal(spot); })
+              .addTo(pendingClusterGroup);
+            });
           }
 
           function repaintSpots() {
             clusterGroup.clearLayers();
+            // Re-add own validated markers si el filtro está activo
+            if (filterOwn) {
+              ownActiveMarkers.forEach(function(m) { clusterGroup.addLayer(m); });
+            }
             if (!allSpots || allSpots.length === 0) {
               document.getElementById('radiusText').textContent = 'Sin BookSpots cerca';
               return;
@@ -554,7 +660,7 @@ export function getMapHtml(lat: number, lng: number): string {
               var isBookdrop = spot.isBookdrop ?? spot.IsBookdrop ?? false;
               if (isBookdrop && !filterDrop) return false;
               if (!isBookdrop && !filterSpot) return false;
-              if (id != null && ownActiveIds.has(id)) return false;
+              if (id != null && ownActiveIds.has(id)) return false; // skip — already in ownActiveMarkers
               return true;
             });
             filtered.forEach(function(spot) {
@@ -658,56 +764,47 @@ export function getMapHtml(lat: number, lng: number): string {
           const userMarker = L.marker([${lat}, ${lng}], { icon: createUserIcon() })
             .addTo(map).on('click', openUserModal);
 
-          /* ── Active bookspots cluster ── */
+          /* ── Unified validated bookspots cluster (coral) — public + own validated ── */
+          function makeClusterIcon(bg, border, count) {
+            return L.divIcon({
+              className: '',
+              html: \`<div style="
+                width:40px;height:40px;border-radius:50%;
+                background:\${bg};border:3px solid \${border};
+                display:flex;align-items:center;justify-content:center;
+                color:white;font-weight:700;font-size:13px;
+                box-shadow:0 2px 6px rgba(0,0,0,0.2);
+              ">\${count}<\/div>\`,
+              iconSize: [40, 40], iconAnchor: [20, 20],
+            });
+          }
           const clusterGroup = L.markerClusterGroup({
             maxClusterRadius: 48, spiderfyOnMaxZoom: true,
             showCoverageOnHover: false, zoomToBoundsOnClick: true,
+            iconCreateFunction: function(cluster) {
+              return makeClusterIcon('rgba(224,122,95,0.9)', 'rgba(224,122,95,0.55)', cluster.getChildCount());
+            }
           });
           map.addLayer(clusterGroup);
 
-          /* ── Pending bookspots cluster (amber) ── */
+          /* ── Pending bookspots cluster (amber) — hidden below zoom 14 ── */
           const pendingClusterGroup = L.markerClusterGroup({
             maxClusterRadius: 48, spiderfyOnMaxZoom: true,
             showCoverageOnHover: false, zoomToBoundsOnClick: true,
             iconCreateFunction: function(cluster) {
-              var count = cluster.getChildCount();
-              return L.divIcon({
-                className: '',
-                html: \`<div style="
-                  width:40px;height:40px;border-radius:50%;
-                  background:rgba(245,158,11,0.85);
-                  border:3px solid rgba(245,158,11,0.3);
-                  display:flex;align-items:center;justify-content:center;
-                  color:white;font-weight:700;font-size:13px;
-                  box-shadow:0 2px 6px rgba(0,0,0,0.2);
-                ">\${count}<\/div>\`,
-                iconSize: [40, 40], iconAnchor: [20, 20],
-              });
+              return makeClusterIcon('rgba(245,158,11,0.9)', 'rgba(245,158,11,0.55)', cluster.getChildCount());
             }
           });
-          map.addLayer(pendingClusterGroup);
-
-          /* ── Own validated bookspots cluster (green) ── */
-          const ownActiveClusterGroup = L.markerClusterGroup({
-            maxClusterRadius: 48, spiderfyOnMaxZoom: true,
-            showCoverageOnHover: false, zoomToBoundsOnClick: true,
-            iconCreateFunction: function(cluster) {
-              var count = cluster.getChildCount();
-              return L.divIcon({
-                className: '',
-                html: \`<div style="
-                  width:40px;height:40px;border-radius:50%;
-                  background:rgba(76,175,80,0.85);
-                  border:3px solid rgba(76,175,80,0.3);
-                  display:flex;align-items:center;justify-content:center;
-                  color:white;font-weight:700;font-size:13px;
-                  box-shadow:0 2px 6px rgba(0,0,0,0.2);
-                ">\${count}<\/div>\`,
-                iconSize: [40, 40], iconAnchor: [20, 20],
-              });
+          const PENDING_MIN_ZOOM = 14;
+          function updatePendingClusterVisibility() {
+            if (filterPending && map.getZoom() >= PENDING_MIN_ZOOM) {
+              if (!map.hasLayer(pendingClusterGroup)) map.addLayer(pendingClusterGroup);
+            } else {
+              if (map.hasLayer(pendingClusterGroup)) map.removeLayer(pendingClusterGroup);
             }
-          });
-          map.addLayer(ownActiveClusterGroup);
+          }
+          map.on('zoomend', updatePendingClusterVisibility);
+          updatePendingClusterVisibility();
 
           function getDistKm(s) {
             var d = s.distanceKm !== undefined ? s.distanceKm : s.DistanceKm;
@@ -750,34 +847,27 @@ export function getMapHtml(lat: number, lng: number): string {
             repaintSpots();
           }
 
-          /* ── User pending spots — now uses pendingClusterGroup so they cluster on zoom-out ── */
+          /* ── User pending spots ── */
           function updateUserPendingSpots(spots) {
-            pendingClusterGroup.clearLayers();
-            if (!spots || spots.length === 0) return;
-            spots.forEach(function(spot) {
-              L.marker(
-                [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
-                { icon: createPendingIcon() }
-              ).on('click', function() { openPendingModal(spot); })
-              .addTo(pendingClusterGroup);
-            });
+            allPendingSpots = spots || [];
+            repaintPendingSpots();
           }
 
           function updateUserActiveSpots(spots) {
-            ownActiveClusterGroup.clearLayers();
             ownActiveIds = new Set();
+            ownActiveMarkers = [];
             if (spots && spots.length > 0) {
               spots.forEach(function(spot) {
                 var id = spot.id ?? spot.Id;
                 if (id != null) ownActiveIds.add(id);
-                L.marker(
+                var m = L.marker(
                   [spot.latitude ?? spot.Latitude, spot.longitude ?? spot.Longitude],
                   { icon: createOwnActiveIcon() }
-                ).on('click', function() { openOwnActiveModal(spot); })
-                .addTo(ownActiveClusterGroup);
+                ).on('click', function() { openOwnActiveModal(spot); });
+                ownActiveMarkers.push(m);
               });
             }
-            repaintSpots();
+            repaintSpots(); // re-adds ownActiveMarkers into clusterGroup alongside public spots
           }
 
           function openOwnActiveModal(spot) {
@@ -853,6 +943,13 @@ export function getMapHtml(lat: number, lng: number): string {
           function closePendingModal() {
             postToRN(JSON.stringify({ type: 'mapModalClose' }));
             document.getElementById('pendingModalOverlay').classList.remove('active');
+            if (pendingRouteLine) { try { map.removeLayer(pendingRouteLine); } catch(e) {} pendingRouteLine = null; }
+            // Reset acordeón de ruta
+            pendingRouteOpen = false;
+            pendingRouteCar  = { distanceM: null, durationS: null, geometry: null };
+            pendingRouteWalk = { distanceM: null, durationS: null, geometry: null };
+            document.getElementById('pendingRouteSection').style.display = 'none';
+            document.getElementById('pendingDirectionsBtn').textContent = 'Cómo llegar';
             showTopBar();
             currentPendingSpot = null;
           }
@@ -860,6 +957,12 @@ export function getMapHtml(lat: number, lng: number): string {
           /* ── Edit name ── */
           function startEditName() {
             if (!currentPendingSpot) return;
+            // Colapsar ruta si está abierta para liberar espacio
+            if (pendingRouteOpen) {
+              pendingRouteOpen = false;
+              document.getElementById('pendingRouteSection').style.display = 'none';
+              document.getElementById('pendingDirectionsBtn').textContent = 'Cómo llegar';
+            }
             document.getElementById('pendingNameInput').value = currentPendingSpot.nombre ?? currentPendingSpot.Nombre ?? '';
             document.getElementById('pendingViewMode').style.display = 'none';
             document.getElementById('pendingEditMode').style.display = 'block';
@@ -896,15 +999,29 @@ export function getMapHtml(lat: number, lng: number): string {
           }
 
           function showTooFarMessage() {
-            allSpots = [];
-            clusterGroup.clearLayers();
+            // No limpiamos clusterGroup para que Leaflet los colapse en un
+            // único núcleo visible al hacer zoom out extremo (ej. vista de España).
+            // Los datos se actualizarán correctamente cuando el usuario vuelva a acercar.
             document.getElementById('tooFarBanner').classList.add('visible');
             document.getElementById('radiusText').textContent = '';
           }
 
           /* ── Pick mode ── */
+          function _setPickBadge(active) {
+            var badge = document.getElementById('radiusBadge');
+            var text  = document.getElementById('radiusText');
+            if (active) {
+              _prevRadiusText = text.textContent;
+              text.textContent = 'Arrastra el pin o toca para ubicar';
+              badge.classList.add('pick-mode');
+            } else {
+              text.textContent = _prevRadiusText;
+              badge.classList.remove('pick-mode');
+            }
+          }
           function enablePickMode() {
             isPicking = true;
+            _setPickBadge(true);
             document.getElementById('pickBanner').classList.add('visible');
             if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} }
             pickedMarker = L.marker([userLat, userLng], {
@@ -914,6 +1031,7 @@ export function getMapHtml(lat: number, lng: number): string {
               var ll = e.target.getLatLng();
               postToRN(JSON.stringify({ type: 'pickLocation', lat: ll.lat, lng: ll.lng }));
               isPicking = false;
+              _setPickBadge(false);
               document.getElementById('pickBanner').classList.remove('visible');
             });
             map.once('click', function(e) {
@@ -923,17 +1041,20 @@ export function getMapHtml(lat: number, lng: number): string {
               pickedMarker = L.marker([lat, lng], { icon: createPickedIcon() }).addTo(map);
               postToRN(JSON.stringify({ type: 'pickLocation', lat, lng }));
               isPicking = false;
+              _setPickBadge(false);
               document.getElementById('pickBanner').classList.remove('visible');
             });
           }
           function cancelPickMode() {
             isPicking = false;
+            _setPickBadge(false);
             document.getElementById('pickBanner').classList.remove('visible');
             if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} pickedMarker = null; }
             postToRN(JSON.stringify({ type: 'pickCancelled' }));
           }
           function disablePickMode() {
             isPicking = false;
+            _setPickBadge(false);
             document.getElementById('pickBanner').classList.remove('visible');
             if (pickedMarker) { try { map.removeLayer(pickedMarker); } catch(e) {} pickedMarker = null; }
           }
@@ -1127,6 +1248,98 @@ export function getMapHtml(lat: number, lng: number): string {
               '&destination=' + spotLat + ',' + spotLng +
               '&travelmode=' + travelmode;
             postToRN(JSON.stringify({ type: 'openUrl', url: url }));
+          }
+
+          /* ── Pending / own-validated modal routing ── */
+          function renderPendingStats() {
+            var r = pendingCurrentMode === 'car' ? pendingRouteCar : pendingRouteWalk;
+            var distEl = document.getElementById('pendingStatDist');
+            var timeEl = document.getElementById('pendingStatTime');
+            if (r.distanceM === null) {
+              distEl.className = 'stat-value loading'; distEl.textContent = '';
+              timeEl.className = 'stat-value loading'; timeEl.textContent = '';
+              return;
+            }
+            distEl.className = 'stat-value'; distEl.textContent = formatDistM(r.distanceM);
+            timeEl.className = 'stat-value'; timeEl.textContent = Math.round(r.durationS / 60) + ' min';
+          }
+          function setPendingMode(mode) {
+            pendingCurrentMode = mode;
+            document.getElementById('pendingBtnWalk').classList.toggle('active', mode === 'walk');
+            document.getElementById('pendingBtnCar').classList.toggle('active', mode === 'car');
+            renderPendingStats();
+            if (pendingRouteLine) { map.removeLayer(pendingRouteLine); pendingRouteLine = null; }
+            var r = mode === 'car' ? pendingRouteCar : pendingRouteWalk;
+            if (r.geometry) {
+              pendingRouteLine = L.geoJSON(r.geometry, { style: { color: '#e07a5f', weight: 4, opacity: 0.75 } }).addTo(map);
+              map.fitBounds(pendingRouteLine.getBounds(), { padding: [50, 50] });
+            }
+          }
+          function openPendingGoogleMaps() {
+            if (!currentPendingSpot) return;
+            var spotLat = currentPendingSpot.latitude ?? currentPendingSpot.Latitude;
+            var spotLng = currentPendingSpot.longitude ?? currentPendingSpot.Longitude;
+            var travelmode = pendingCurrentMode === 'car' ? 'driving' : 'walking';
+            var url = 'https://www.google.com/maps/dir/?api=1' +
+              '&origin=' + userLat + ',' + userLng +
+              '&destination=' + spotLat + ',' + spotLng +
+              '&travelmode=' + travelmode;
+            postToRN(JSON.stringify({ type: 'openUrl', url: url }));
+          }
+          function togglePendingRoute() {
+            if (!pendingRouteOpen) {
+              // Si el modo edición está abierto, cerrarlo primero para liberar espacio
+              if (document.getElementById('pendingEditMode').style.display !== 'none') {
+                cancelEditName();
+              }
+              // Primer tap: expandir sección de ruta
+              pendingRouteOpen = true;
+              document.getElementById('pendingRouteSection').style.display = 'block';
+              document.getElementById('pendingDirectionsBtn').textContent = 'Ver ruta';
+              // Iniciar fetch de ruta solo si aún no se ha cargado
+              if (pendingRouteWalk.distanceM === null && currentPendingSpot) {
+                _initPendingRoute(currentPendingSpot);
+              }
+            } else {
+              // Segundo tap: abrir Google Maps
+              openPendingGoogleMaps();
+            }
+          }
+          function _initPendingRoute(spot) {
+            pendingCurrentMode = 'walk';
+            pendingRouteCar  = { distanceM: null, durationS: null, geometry: null };
+            pendingRouteWalk = { distanceM: null, durationS: null, geometry: null };
+            if (pendingRouteLine) { try { map.removeLayer(pendingRouteLine); } catch(e) {} pendingRouteLine = null; }
+            document.getElementById('pendingBtnWalk').classList.add('active');
+            document.getElementById('pendingBtnCar').classList.remove('active');
+            renderPendingStats();
+            var spotLat = spot.latitude ?? spot.Latitude;
+            var spotLng = spot.longitude ?? spot.Longitude;
+            var coords = \`\${userLng},\${userLat};\${spotLng},\${spotLat}\`;
+            fetchRoute('foot', coords).then(function(result) {
+              if (result) { pendingRouteWalk = result; }
+              else {
+                var dKm = map.distance([userLat, userLng], [spotLat, spotLng]) / 1000;
+                pendingRouteWalk.distanceM = dKm * 1000 * 1.3;
+                pendingRouteWalk.durationS = pendingRouteWalk.distanceM / 83 * 60;
+              }
+              if (pendingCurrentMode === 'walk') {
+                renderPendingStats();
+                if (pendingRouteWalk.geometry) {
+                  if (pendingRouteLine) map.removeLayer(pendingRouteLine);
+                  pendingRouteLine = L.geoJSON(pendingRouteWalk.geometry, { style: { color: '#e07a5f', weight: 4, opacity: 0.75 } }).addTo(map);
+                }
+              }
+            });
+            fetchRoute('driving', coords).then(function(result) {
+              if (result) { pendingRouteCar = result; }
+              else {
+                var dKm = map.distance([userLat, userLng], [spotLat, spotLng]) / 1000;
+                pendingRouteCar.distanceM = dKm * 1000;
+                pendingRouteCar.durationS = (dKm * 1000) / 667;
+              }
+              if (pendingCurrentMode === 'car') renderPendingStats();
+            });
           }
 
           function updateUserPosition(lat, lng) {

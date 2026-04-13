@@ -166,7 +166,7 @@ export default function ChatListScreen() {
 
       const data = await getMyChats();
 
-      const exchangeResults = await Promise.all(data.map(c => getExchangeByChatIdWithMatch(c.id)));
+      const exchangeResults = await Promise.all(data.map((c) => getExchangeByChatIdWithMatch(c.id)));
       setExchanges(exchangeResults.filter((e): e is ExchangeWithMatchDto => e !== null));
 
       // Si aún no conocemos el userId del backend, resolverlo desde los chats
@@ -213,7 +213,7 @@ export default function ChatListScreen() {
 
     // filtrar por pestaña
     const byTab = bySearch.filter((chat) => {
-      const currentExchange = exchanges.find((e) => e.chatId === chat.id);
+      const currentExchange = exchanges.find((e) => String(e.chatId) === String(chat.id));
       return exchangeMatchesTab(currentExchange, activeTab);
     });
 
