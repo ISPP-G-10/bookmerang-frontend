@@ -227,6 +227,21 @@ const rankBookspotsByFairDistance = (
 
 const formatDistanceKm = (distanceKm: number) => `${distanceKm.toFixed(1)} km`;
 
+const mergeExchangePreservingMatch = (
+  previous: ExchangeWithMatchDto,
+  updated: ExchangeWithMatchDto,
+): ExchangeWithMatchDto => ({
+  ...previous,
+  ...updated,
+  // Algunos endpoints pueden devolver campos de match a null.
+  // Conservamos los previos para no romper sugerencias de BookSpot/BookDrop.
+  matchId: updated.matchId ?? previous.matchId,
+  user1Id: updated.user1Id ?? previous.user1Id,
+  user2Id: updated.user2Id ?? previous.user2Id,
+  book1Id: updated.book1Id ?? previous.book1Id,
+  book2Id: updated.book2Id ?? previous.book2Id,
+});
+
 export default function ChatDetailScreen() {
   const { id, draft } = useLocalSearchParams<{ id: string; draft?: string }>();
   const chatId = id ?? "";
@@ -1512,10 +1527,7 @@ export default function ChatDetailScreen() {
       const updated = await acceptExchange(exchange.exchangeId);
       setExchange((prev) =>
         prev
-          ? {
-              ...prev, // mantiene user1Id, user2Id, book1Id, book2Id...
-              ...updated, // pisa status, updatedAt, etc. con lo que venga del backend
-            }
+          ? mergeExchangePreservingMatch(prev, updated)
           : updated,
       );
     } catch (err) {
@@ -1550,7 +1562,7 @@ export default function ChatDetailScreen() {
       }
 
       const updated = await rejectExchange(exchange.exchangeId);
-      setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
+      setExchange((prev) => (prev ? mergeExchangePreservingMatch(prev, updated) : updated));
 
       // Tras desestimar, volvemos al listado de chats.
       router.replace("/(tabs)/chat");
@@ -1956,7 +1968,9 @@ export default function ChatDetailScreen() {
       setError(null);
 
       const updatedExchange = await reportExchange(exchange.exchangeId);
-      setExchange((prev) => (prev ? { ...prev, ...updatedExchange } : updatedExchange));
+      setExchange((prev) =>
+        prev ? mergeExchangePreservingMatch(prev, updatedExchange) : updatedExchange,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : "No se pudo reportar el intercambio.";
       setError(message);
@@ -2105,6 +2119,15 @@ export default function ChatDetailScreen() {
             <FontAwesome name="exclamation-circle" size={18} color="#fff" />
             <Text style={styles.finalizationBannerTextIncident}>
               Incidente reportado
+            </Text>
+          </View>
+        )}
+
+        {exchange?.status === "REJECTED" && (
+          <View style={styles.finalizationBannerRejected}>
+            <FontAwesome name="times-circle" size={18} color="#fff" />
+            <Text style={styles.finalizationBannerTextRejected}>
+              Intercambio desestimado
             </Text>
           </View>
         )}
@@ -3564,7 +3587,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 
-  // ── Banner de finalización (COMPLETED/INCIDENT) ─────────────────
+  // ── Banner de finalización (COMPLETED/INCIDENT/REJECTED) ───────
   finalizationBannerSuccess: {
     flexDirection: "row",
     alignItems: "center",
@@ -3606,6 +3629,29 @@ const styles = StyleSheet.create({
     borderBottomColor: "#991B1B",
   },
   finalizationBannerTextIncident: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerRejected: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#94A3B8",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#64748B",
+    borderBottomWidth: 3,
+    borderBottomColor: "#64748B",
+  },
+  finalizationBannerTextRejected: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",

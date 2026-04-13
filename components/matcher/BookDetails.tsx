@@ -68,7 +68,6 @@ export function BookDetailsScreen({
 
   const handleShowNextPhoto = () => {
     if (photoUrls.length <= 1) return;
-    console.log("idiomas del libro:" + book.languages)
     setCurrentPhotoIndex((previousIndex) =>
       previousIndex === photoUrls.length - 1 ? 0 : previousIndex + 1,
     );
@@ -323,7 +322,7 @@ export function BookDetailsScreen({
                         { color: textPrimary },
                       ])}
                     >
-                      {book.numPaginas} aprox.
+                      {book.numPaginas != null ? `${book.numPaginas} aprox.` : 'No especificado'}
                     </Text>
                   </View>
 
@@ -344,7 +343,11 @@ export function BookDetailsScreen({
                         { color: textPrimary },
                       ])}
                     >
-                      {book.cover === 'HARDCOVER' ? 'Tapa dura' : 'Tapa blanda'}
+                      {book.cover === 'HARDCOVER'
+                        ? 'Tapa dura'
+                        : book.cover === 'PAPERBACK'
+                          ? 'Tapa blanda'
+                          : 'No especificado'}
                     </Text>
                   </View>
                 </View>
@@ -451,7 +454,7 @@ export function BookDetailsScreen({
                       marginTop: 4,
                     }}
                   >
-                    {book.numPaginas} aprox.
+                    {book.numPaginas != null ? `${book.numPaginas} aprox.` : 'No especificado'}
                   </Text>
                 </View>
 
@@ -485,7 +488,11 @@ export function BookDetailsScreen({
                       marginTop: 4,
                     }}
                   >
-                    {book.cover === 'HARDCOVER' ? 'Tapa dura' : 'Tapa blanda'}
+                    {book.cover === 'HARDCOVER'
+                      ? 'Tapa dura'
+                      : book.cover === 'PAPERBACK'
+                        ? 'Tapa blanda'
+                        : 'No especificado'}
                   </Text>
                 </View>
               </View>

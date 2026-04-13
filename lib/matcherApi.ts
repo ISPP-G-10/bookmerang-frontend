@@ -51,6 +51,17 @@ export interface MatchCreatedDto {
 // ──────────────────────────────────────────────
 
 function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
+  const seenGenres = new Set<string>();
+  const normalizedGenres = (dto.genres ?? [])
+    .map((raw) => (typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : ''))
+    .filter((name) => {
+      if (!name) return false;
+      const key = name.toLocaleLowerCase();
+      if (seenGenres.has(key)) return false;
+      seenGenres.add(key);
+      return true;
+    });
+
   return {
     book: {
       id: dto.id,
@@ -66,7 +77,7 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
       status: 'PUBLISHED',
       createdAt: '',
       updatedAt: '',
-      genres: dto.genres.map((name, i) => ({ id: i, name })),
+      genres: normalizedGenres.map((name, i) => ({ id: dto.id * 1000 + i, name })),
       languages: (dto.languages ?? []).map((language, i) => ({
         id: i,
         language,

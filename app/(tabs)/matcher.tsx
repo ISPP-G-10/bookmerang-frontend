@@ -45,6 +45,9 @@ export default function MatcherScreen() {
       setCards((prev) => (append ? [...prev, ...result.cards] : result.cards));
       setHasMore(result.hasMore);
       setPage(pageNum);
+      if (result.cards.length > 0) {
+        setAllSwiped(false);
+      }
       if (!append) {
         setAllSwiped(false);
         setUndoStackCount(0);
@@ -289,7 +292,7 @@ export default function MatcherScreen() {
     );
   }
 
-  if (cards.length === 0 || (allSwiped && !canUndo)) {
+  if (cards.length === 0 || allSwiped) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" />

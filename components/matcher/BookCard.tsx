@@ -24,27 +24,26 @@ const pickVisibleGenres = (
   genres: Array<{ id: number; name: string }>,
   compact: boolean,
 ) => {
-  // Menos badges visibles para mantener la tarjeta compacta.
-  // Si no caben, el resto se resume con +N.
-  const maxSlots = compact ? 2 : 4;
-  const charBudget = compact ? 18 : 26;
-
-  const visible: Array<{ id: number; name: string }> = [];
-  let used = 0;
-
+  // Normalizamos y eliminamos duplicados para que las etiquetas sean consistentes.
+  const unique: Array<{ id: number; name: string }> = [];
+  const seen = new Set<string>();
   for (const genre of genres) {
-    if (visible.length >= maxSlots) break;
+    const name = normalizeText(genre.name);
+    if (name.length === 0) continue;
 
-    const cost = normalizeText(genre.name).length + 2;
-    if (visible.length > 0 && used + cost > charBudget) break;
+    const key = name.toLocaleLowerCase();
+    if (seen.has(key)) continue;
 
-    visible.push(genre);
-    used += cost;
+    seen.add(key);
+    unique.push({ id: genre.id, name });
   }
+
+  const maxSlots = compact ? 2 : 3;
+  const visible = unique.slice(0, maxSlots);
 
   return {
     visibleGenres: visible,
-    hiddenGenresCount: Math.max(0, genres.length - visible.length),
+    hiddenGenresCount: Math.max(0, unique.length - visible.length),
   };
 };
 
@@ -201,6 +200,7 @@ export default function BookCard({ card, onTap }: BookCardProps) {
               action="muted"
               variant="solid"
               className="rounded-full bg-[#f2cc8f] border-0 px-2.5 py-1"
+              style={{ maxWidth: isCompact ? 92 : 124 }}
             >
               <BadgeText
                 className="text-[#3e2723] text-[10px] normal-case font-medium"

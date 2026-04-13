@@ -1,10 +1,10 @@
 import { apiRequest } from "./api";
-import { getEmailValidationError, normalizeEmail } from "./emailValidation";
 import {
   clearStoredAuthSession,
   setStoredAuthSession,
   updateStoredAuthUser,
 } from "./authSession";
+import { getEmailValidationError, normalizeEmail } from "./emailValidation";
 
 async function readApiError(response: Response, fallback: string): Promise<string> {
   const raw = await response.text();
@@ -56,6 +56,12 @@ export interface RegisterBookdropProfileData {
   AddressText: string;
   Latitud: number;
   Longitud: number;
+  PaymentSessionId?: string;
+}
+
+export interface BookdropCheckoutOptions {
+  successUrl?: string;
+  cancelUrl?: string;
 }
 
 export interface UserPreferencesData {
@@ -146,6 +152,34 @@ export const authService = {
     });
 
     return data.user;
+  },
+
+  async createBookdropCheckoutSession(
+    email: string,
+    options?: BookdropCheckoutOptions,
+  ): Promise<string> {
+    const response = await apiRequest("/Auth/register/business/checkout", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        successUrl: options?.successUrl,
+        cancelUrl: options?.cancelUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al iniciar el pago de BookDrop"));
+    }
+
+    const data = await response.json();
+    const checkoutUrl =
+      typeof data?.checkoutUrl === "string" ? data.checkoutUrl.trim() : "";
+
+    if (!checkoutUrl) {
+      throw new Error("No se recibio URL de pago para BookDrop.");
+    }
+
+    return checkoutUrl;
   },
 
   async registerBookdropBackendProfile(bookdropProfileData: RegisterBookdropProfileData) {
