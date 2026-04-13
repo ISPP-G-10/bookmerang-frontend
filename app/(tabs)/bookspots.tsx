@@ -24,6 +24,7 @@ import {
 } from "@/lib/bookspotApi";
 
 import { useFocusEffect } from "expo-router";
+import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -56,6 +57,7 @@ export default function BookSpotsScreen() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [locationUpdating, setLocationUpdating] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -82,6 +84,39 @@ export default function BookSpotsScreen() {
   );
   const validationFetchedRef = useRef(false);
 
+  const fetchStoredLocation = useCallback(async () => {
+    const storedUserId = await getStoredUserId();
+    const backendUserId = await fetchMyBackendUserId();
+    const userId = backendUserId ?? storedUserId;
+
+    if (!userId) {
+      setPermissionDenied(true);
+      setLoading(false);
+      return null;
+    }
+
+    // Tras resets de BD puede quedar un id antiguo en storage.
+    if (backendUserId && backendUserId !== storedUserId) {
+      await updateStoredAuthUser({ id: backendUserId });
+    }
+
+    const preferences = await authService.getPreferences(userId);
+    const lat = preferences?.location?.latitude;
+    const lng = preferences?.location?.longitude;
+
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      setPermissionDenied(true);
+      setLoading(false);
+      return null;
+    }
+
+    return {
+      userId,
+      preferences,
+      coords: { latitude: lat, longitude: lng },
+    };
+  }, []);
+
   // ── Ubicación ─────────────────
   // Se ejecuta al montar Y cada vez que la pantalla recupera el foco
   // (ej. el usuario vuelve desde Perfil tras actualizar su ubicación).
@@ -90,46 +125,20 @@ export default function BookSpotsScreen() {
       let cancelled = false;
       (async () => {
         try {
-          const storedUserId = await getStoredUserId();
-          const backendUserId = await fetchMyBackendUserId();
-          const userId = backendUserId ?? storedUserId;
-
-          if (!userId) {
-            if (!cancelled) {
-              setPermissionDenied(true);
-              setLoading(false);
-            }
-            return;
-          }
-
-          // Tras resets de BD puede quedar un id antiguo en storage.
-          if (backendUserId && backendUserId !== storedUserId) {
-            await updateStoredAuthUser({ id: backendUserId });
-          }
-
-          const preferences = await authService.getPreferences(userId);
-          const lat = preferences?.location?.latitude;
-          const lng = preferences?.location?.longitude;
-
-          if (typeof lat !== "number" || typeof lng !== "number") {
-            if (!cancelled) {
-              setPermissionDenied(true);
-              setLoading(false);
-            }
-            return;
-          }
-
-          const coords = { latitude: lat, longitude: lng };
+          const locationData = await fetchStoredLocation();
+          if (!locationData) return;
+          const coords = locationData.coords;
 
           if (!cancelled) {
             // Solo actualiza si la ubicación cambió para evitar rerenders
             if (
-              locationRef.current?.latitude !== lat ||
-              locationRef.current?.longitude !== lng
+              locationRef.current?.latitude !== coords.latitude ||
+              locationRef.current?.longitude !== coords.longitude
             ) {
               locationRef.current = coords;
               setLocation(coords);
             }
+            setPermissionDenied(false);
             setLoading(false);
           }
         } catch {
@@ -140,7 +149,7 @@ export default function BookSpotsScreen() {
       return () => {
         cancelled = true;
       };
-    }, []),
+    }, [fetchStoredLocation]),
   );
 
   // ── Validacion ─────────────────
@@ -215,6 +224,44 @@ export default function BookSpotsScreen() {
       console.warn("[BookSpots] pending/active error:", e?.message ?? e);
     }
   }, [sendToMap]);
+
+  const handleRefreshLocation = useCallback(async () => {
+    setLocationUpdating(true);
+    try {
+      const locationData = await fetchStoredLocation();
+      if (!locationData) return;
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({});
+      const lat = currentLocation.coords.latitude;
+      const lng = currentLocation.coords.longitude;
+
+      const currentPreferences = locationData.preferences;
+      await authService.updatePreferences(locationData.userId, {
+        latitude: lat,
+        longitude: lng,
+        radioKm: currentPreferences?.radioKm ?? DEFAULT_RADIUS_KM,
+        extension: currentPreferences?.extension ?? "MEDIUM",
+        genreIds: currentPreferences?.genreIds ?? [],
+      });
+
+      const updatedCoords = { latitude: lat, longitude: lng };
+      locationRef.current = updatedCoords;
+      setLocation(updatedCoords);
+      setPermissionDenied(false);
+      sendToMap(`moveToUserLocation(${lat}, ${lng})`);
+      fetchNearby(lat, lng, DEFAULT_RADIUS_KM);
+      fetchUserPending();
+    } catch (error) {
+      console.warn("[BookSpots] Could not refresh location", error);
+    } finally {
+      setLocationUpdating(false);
+    }
+  }, [fetchNearby, fetchStoredLocation, fetchUserPending, sendToMap]);
 
   const handleWebViewLoad = useCallback(() => {
     const c = locationRef.current;
@@ -488,6 +535,40 @@ export default function BookSpotsScreen() {
     </Pressable>
   );
 
+  const RefreshLocationButton = (
+    <Pressable
+      onPress={handleRefreshLocation}
+      disabled={locationUpdating}
+      style={({ pressed }) => ({
+        position: "absolute",
+        top: 14,
+        left: 14,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "#ffffff",
+        alignItems: "center",
+        justifyContent: "center",
+        elevation: 4,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.14,
+        shadowRadius: 6,
+        borderWidth: 1,
+        borderColor: "rgba(0,0,0,0.06)",
+        opacity: locationUpdating ? 0.8 : pressed ? 0.85 : 1,
+        transform: [{ scale: pressed ? 0.95 : 1 }],
+        zIndex: 10,
+      })}
+    >
+      {locationUpdating ? (
+        <ActivityIndicator size={14} color="#e07a5f" />
+      ) : (
+        <FontAwesome name="refresh" size={16} color="#e07a5f" />
+      )}
+    </Pressable>
+  );
+
   // PARA DESARROLLAR USANDO EXTENSIÓN DE CHROME, NO BORRAR
   if (Platform.OS === "web") {
     return (
@@ -500,6 +581,7 @@ export default function BookSpotsScreen() {
             onLoad={handleIframeLoad}
             style={{ width: "100%", height: "100%", border: "none" }}
           />
+          {RefreshLocationButton}
           {LocationButton}
           {AddButton}
         </View>
@@ -565,6 +647,7 @@ export default function BookSpotsScreen() {
           onLoad={handleWebViewLoad}
           onMessage={handleNativeMessage}
         />
+        {RefreshLocationButton}
         {LocationButton}
         {AddButton}
       </View>
