@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -131,6 +131,7 @@ export default function ChatListScreen() {
   const [activeTab, setActiveTab] = useState<string>('Nuevos matches');
   const [search, setSearch] = useState('');
   const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([])
+  const hasLoadedOnce = useRef(false);
 
   // Determina a qué pestaña pertenece un exchange según su estado.
   const exchangeMatchesTab = (
@@ -161,7 +162,7 @@ export default function ChatListScreen() {
 
   const fetchChats = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedOnce.current) setLoading(true);
       setError(null);
 
       const data = await getMyChats();
@@ -186,6 +187,7 @@ export default function ChatListScreen() {
 
       setAllChats(sorted);
       setChats(sorted);
+      hasLoadedOnce.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar chats");
     } finally {

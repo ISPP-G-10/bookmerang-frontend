@@ -1,10 +1,8 @@
-import { useColorScheme } from "@/components/useColorScheme";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import {
-  DarkTheme,
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
@@ -114,8 +112,6 @@ function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
   const copilotTooltipStyle = {
     backgroundColor: 'transparent',
     paddingTop: 0,
@@ -138,13 +134,11 @@ function RootLayoutNav() {
             tooltipStyle={copilotTooltipStyle}
           >
             <SubscriptionProvider>
-              <ThemeProvider
-                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-              >
+              <ThemeProvider value={DefaultTheme}>
                 <AuthGate>
                   <Stack>
                     <Stack.Screen name="index" options={{ headerShown: false }} />
-                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: '#fdfbf7' } }} />
                     <Stack.Screen name="login" options={{ headerShown: false }} />
                     <Stack.Screen name="modal" options={{ presentation: "modal" }} />
                     <Stack.Screen name="register" options={{ headerShown: false }} />
