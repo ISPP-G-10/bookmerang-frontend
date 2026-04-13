@@ -31,6 +31,7 @@ import { getMyLibrary, BookListItem } from '@/lib/books';
 import { useAuth } from '@/contexts/AuthContext';
 import { CommunityMeetupDto } from '@/types/community';
 import { ConfirmModal } from '@/components/ConfirmationModal';
+import FrameOverlay from '@/components/FrameOverlay';
 import { getFrameById, getNameColorById } from '@/lib/rewardsSystem';
 
 type Props = {
@@ -681,19 +682,7 @@ export default function CommunityMeetupTab({
                     </Text>
                   </View>
                   {frame && frameColor && (
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        top: -(bw + 2),
-                        left: -(bw + 2),
-                        width: 42 + (bw + 2) * 2,
-                        height: 42 + (bw + 2) * 2,
-                        borderRadius: (42 + (bw + 2) * 2) / 2,
-                        borderWidth: bw,
-                        borderColor: frameColor,
-                      }}
-                    />
+                    <FrameOverlay size={42} bw={bw} gap={2} color={frameColor} animated={frame.animated} />
                   )}
                 </View>
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, Text, View, ViewStyle } from 'react-native';
+import FrameOverlay from '@/components/FrameOverlay';
 import { getFrameById, getNameColorById } from '@/lib/rewardsSystem';
 
 interface ChatAvatarProps {
@@ -29,9 +30,7 @@ export default function ChatAvatar({
 
   const frameColor = frame?.animationColors?.[0] ?? frame?.borderColor ?? null;
   const bw = frame?.borderWidth ?? 0;
-  // Pequeño hueco entre la foto y el borde del marco
   const gap = bw > 0 ? 2 : 0;
-  const offset = bw + gap;
 
   const placeholderBg = nameColor?.color ?? '#e4715f';
   const initial = username?.charAt(0)?.toUpperCase() ?? '?';
@@ -63,20 +62,13 @@ export default function ChatAvatar({
         </View>
       )}
 
-      {/* Marco superpuesto: position absolute, no afecta al layout */}
       {frame && frameColor && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: -offset,
-            left: -offset,
-            width: size + offset * 2,
-            height: size + offset * 2,
-            borderRadius: (size + offset * 2) / 2,
-            borderWidth: bw,
-            borderColor: frameColor,
-          }}
+        <FrameOverlay
+          size={size}
+          bw={bw}
+          gap={gap}
+          color={frameColor}
+          animated={frame.animated}
         />
       )}
     </View>

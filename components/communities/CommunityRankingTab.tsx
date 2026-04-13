@@ -1,6 +1,7 @@
 import { HStack } from "@/components/ui/hstack";
 import { Text } from "@/components/ui/text";
 import { VStack } from "@/components/ui/vstack";
+import FrameOverlay from "@/components/FrameOverlay";
 import { useAuth } from "@/contexts/AuthContext";
 import { getCommunityRanking } from "@/lib/inkdropsApi";
 import { getFrameById, getNameColorById } from "@/lib/rewardsSystem";
@@ -65,19 +66,7 @@ function LeaderCard({
           <Ionicons name="trophy" size={20} color="#ffffff" />
         </View>
         {frame && frameColor && (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: -(bw + 2),
-              left: -(bw + 2),
-              width: 44 + (bw + 2) * 2,
-              height: 44 + (bw + 2) * 2,
-              borderRadius: (44 + (bw + 2) * 2) / 2,
-              borderWidth: bw,
-              borderColor: frameColor,
-            }}
-          />
+          <FrameOverlay size={44} bw={bw} gap={2} color={frameColor} animated={frame.animated} />
         )}
       </View>
 
@@ -148,19 +137,7 @@ function RankingRow({
           </Text>
         </View>
         {frame && frameColor && (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              top: -(bw + 2),
-              left: -(bw + 2),
-              width: 44 + (bw + 2) * 2,
-              height: 44 + (bw + 2) * 2,
-              borderRadius: (44 + (bw + 2) * 2) / 2,
-              borderWidth: bw,
-              borderColor: frameColor,
-            }}
-          />
+          <FrameOverlay size={44} bw={bw} gap={2} color={frameColor} animated={frame.animated} />
         )}
       </View>
 

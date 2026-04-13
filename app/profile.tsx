@@ -673,16 +673,24 @@ export default function ProfileScreen() {
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <FontAwesome name="arrow-up" size={16} color="#e07a5f" />
+              <FontAwesome
+                name={userLevel >= 50 ? "star" : "arrow-up"}
+                size={16}
+                color="#e07a5f"
+              />
               <Text
                 style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}
               >
-                Progreso a Nivel {userLevel + 1}
+                {userLevel >= 50
+                  ? "¡Has alcanzado el máximo nivel!"
+                  : `Progreso a Nivel ${userLevel + 1}`}
               </Text>
             </View>
-            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
-              {profile?.inksToNextLevel ?? 114} InkDrops
-            </Text>
+            {userLevel < 50 && (
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
+                {profile?.inksToNextLevel ?? 114} InkDrops
+              </Text>
+            )}
           </View>
           <View
             style={{
@@ -693,7 +701,7 @@ export default function ProfileScreen() {
             }}
           >
             <AnimatedProgressBar
-              progress={Math.min(progressPercent, 1)}
+              progress={userLevel >= 50 ? 1 : Math.min(progressPercent, 1)}
               fillColor={tierColor}
               backgroundColor="transparent"
               height={10}
@@ -710,9 +718,11 @@ export default function ProfileScreen() {
             <Text style={{ fontSize: 10, fontWeight: "700", color: "#8B7355" }}>
               Nivel {userLevel} {tier?.name ?? ""}
             </Text>
-            <Text style={{ fontSize: 10, fontWeight: "700", color: tierColor }}>
-              Nivel {userLevel + 1} {tier?.name ?? ""}
-            </Text>
+            {userLevel < 50 && (
+              <Text style={{ fontSize: 10, fontWeight: "700", color: tierColor }}>
+                Nivel {userLevel + 1} {tier?.name ?? ""}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -799,7 +809,6 @@ export default function ProfileScreen() {
                 flexDirection: "row",
                 flexWrap: "wrap",
                 gap: 10,
-                justifyContent: "space-between",
               }}
             >
               {unlockedRewards.map((reward, idx) => {
@@ -821,9 +830,7 @@ export default function ProfileScreen() {
                         padding: 12,
                         borderWidth: 1.5,
                         borderColor: dotColor,
-                        flex: 1,
-                        minWidth: 95,
-                        maxWidth: "31%",
+                        width: (width - 60) / 3,
                         alignItems: "center",
                         gap: 4,
                       }}
@@ -892,7 +899,6 @@ export default function ProfileScreen() {
                     flexDirection: "row",
                     flexWrap: "wrap",
                     gap: 10,
-                    justifyContent: "space-between",
                   }}
                 >
                   {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
@@ -911,9 +917,7 @@ export default function ProfileScreen() {
                               backgroundColor: "#F3E9E0",
                               borderRadius: 14,
                               padding: 12,
-                              flex: 1,
-                              minWidth: 95,
-                              maxWidth: "31%",
+                              width: (width - 60) / 3,
                               alignItems: "center",
                               gap: 4,
                               opacity: 0.6,
