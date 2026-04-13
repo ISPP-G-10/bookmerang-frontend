@@ -1146,7 +1146,7 @@ export default function SettingsScreen() {
   const [languageOpen, setLanguageOpen] = React.useState(false);
   const [profile, setProfile] = React.useState<any>(null);
   const [currentEmail, setCurrentEmail] = React.useState("");
-  const [pushNotif, setPushNotif] = React.useState(true);
+
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
@@ -1744,17 +1744,6 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {sectionLabel("Notificaciones")}
-        <View style={card}>
-          <SettingsRow
-            icon="bell"
-            label="Notificaciones push"
-            subtitle="Recibe alertas en tu dispositivo"
-            right={
-              <CustomSwitch value={pushNotif} onValueChange={setPushNotif} />
-            }
-          />
-        </View>
 
         {sectionLabel("Soporte")}
         <View style={card}>
