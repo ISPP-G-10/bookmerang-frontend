@@ -206,25 +206,6 @@ export default function MatcherScreen() {
     setSelectedCard(null);
   };
 
-  if (matchInfo) {
-    return (
-      <MatchOverlay
-        data={matchInfo}
-        onClose={() => {
-          setMatchInfo(null);
-          setMatchResult(null);
-        }}
-        onChat={() => {
-          setMatchInfo(null);
-          if (matchResult?.chatId) {
-            router.push(`/chat/${matchResult.chatId}?draft=${encodeURIComponent('Hola, me ha interesado tu libro')}` as any);
-          }
-          setMatchResult(null);
-        }}
-      />
-    );
-  }
-
   if (loading) {
     return (
       <View style={styles.container}>
@@ -343,6 +324,23 @@ export default function MatcherScreen() {
           }}>
             <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>{swipeError}</Text>
           </View>
+        )}
+
+        {matchInfo && (
+          <MatchOverlay
+            data={matchInfo}
+            onClose={() => {
+              setMatchInfo(null);
+              setMatchResult(null);
+            }}
+            onChat={() => {
+              setMatchInfo(null);
+              if (matchResult?.chatId) {
+                router.push(`/chat/${matchResult.chatId}?draft=${encodeURIComponent('Hola, me ha interesado tu libro')}` as any);
+              }
+              setMatchResult(null);
+            }}
+          />
         )}
       </View>
     </View>
