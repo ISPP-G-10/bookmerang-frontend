@@ -5,13 +5,14 @@ import {
   FlatList,
   TextInput,
   Pressable,
-  Image,
   ActivityIndicator,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
 } from 'react-native';
+import ChatAvatar from '@/components/ChatAvatar';
+import { getNameColorById } from '@/lib/rewardsSystem';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -290,18 +291,13 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
           {/* Avatar for other users' messages */}
           {showSenderName && (
             <View style={styles.messageAvatarContainer}>
-              {sender?.profilePhoto ? (
-                <Image
-                  source={{ uri: sender.profilePhoto }}
-                  style={styles.messageAvatar}
-                />
-              ) : (
-                <View style={styles.messageAvatarPlaceholder}>
-                  <Text style={styles.messageAvatarText}>
-                    {sender?.username?.charAt(0)?.toUpperCase() ?? '?'}
-                  </Text>
-                </View>
-              )}
+              <ChatAvatar
+                profilePhoto={sender?.profilePhoto}
+                username={sender?.username}
+                size={30}
+                activeFrameId={item.senderActiveFrameId}
+                activeColorId={item.senderActiveColorId}
+              />
             </View>
           )}
 
@@ -312,7 +308,14 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
             ]}
           >
             {showSenderName && (
-              <Text style={styles.senderName}>
+              <Text
+                style={[
+                  styles.senderName,
+                  item.senderActiveColorId
+                    ? { color: getNameColorById(item.senderActiveColorId)?.color ?? '#e4715f' }
+                    : undefined,
+                ]}
+              >
                 {sender?.username ?? 'Usuario'}
               </Text>
             )}
@@ -594,24 +597,6 @@ const styles = StyleSheet.create({
     marginRight: 8,
     justifyContent: 'flex-end',
     backgroundColor: 'transparent',
-  },
-  messageAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-  },
-  messageAvatarPlaceholder: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e4715f',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  messageAvatarText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
   },
 
   // Bubble

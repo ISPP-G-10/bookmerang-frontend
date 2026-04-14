@@ -45,4 +45,3 @@ export interface ExchangeMeetingDto {
   pin: string | null;
   bookDropStatus: BookdropExchangeStatus | null;
 }
-

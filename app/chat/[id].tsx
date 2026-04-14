@@ -1,6 +1,12 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +23,7 @@ import {
 import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 
+import ChatAvatar from "@/components/ChatAvatar";
 import { ConfirmModal } from "@/components/ConfirmationModal";
 import { Text, View } from "@/components/Themed";
 import { Spinner } from "@/components/ui/spinner";
@@ -45,13 +52,18 @@ import {
   reportExchange,
 } from "@/lib/exchangeApi";
 import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
+import { getNameColorById } from "@/lib/rewardsSystem";
 import {
   ChatDto,
   ChatParticipantDto,
   MessageDto,
   TypingUserDto,
 } from "@/types/chat";
-import { ExchangeMeetingDto, ExchangeMode, ExchangeWithMatchDto } from "@/types/exchange";
+import {
+  ExchangeMeetingDto,
+  ExchangeMode,
+  ExchangeWithMatchDto,
+} from "@/types/exchange";
 
 function formatMessageTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -256,7 +268,9 @@ export default function ChatDetailScreen() {
     if (!hasHandledError.current) {
       hasHandledError.current = true;
       if (Platform.OS === "web") {
-        window.alert("Acceso denegado: No tienes permiso para acceder a este chat.");
+        window.alert(
+          "Acceso denegado: No tienes permiso para acceder a este chat.",
+        );
         router.replace("/(tabs)/chat");
       } else {
         Alert.alert(
@@ -279,7 +293,8 @@ export default function ChatDetailScreen() {
   const isTypingRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [exchange, setExchange] = useState<ExchangeWithMatchDto | null>(null);
-  const [exchangeMeeting, setExchangeMeeting] = useState<ExchangeMeetingDto | null>(null);
+  const [exchangeMeeting, setExchangeMeeting] =
+    useState<ExchangeMeetingDto | null>(null);
   const [myBook, setMyBook] = useState<BookDetail | null>(null);
   const [otherBook, setOtherBook] = useState<BookDetail | null>(null);
   const [otherUsername, setOtherUsername] = useState<string>("");
@@ -292,7 +307,8 @@ export default function ChatDetailScreen() {
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
-  const [meetingCompletionSubmitting, setMeetingCompletionSubmitting] = useState(false);
+  const [meetingCompletionSubmitting, setMeetingCompletionSubmitting] =
+    useState(false);
   const [isCounterProposalMode, setIsCounterProposalMode] = useState(false);
   const [meetingType, setMeetingType] = useState<MeetingType>("ARBITRARY");
   const [meetingDate, setMeetingDate] = useState("");
@@ -301,24 +317,44 @@ export default function ChatDetailScreen() {
   const [meetingTimeError, setMeetingTimeError] = useState<string | null>(null);
   const [meetingFormError, setMeetingFormError] = useState<string | null>(null);
   const [meetingLocation, setMeetingLocation] = useState("");
-  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
-  const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
-  const [locationSuggestionFeedback, setLocationSuggestionFeedback] = useState<string | null>(null);
-  const [selectedLocationSuggestion, setSelectedLocationSuggestion] = useState<LocationSuggestion | null>(null);
+  const [locationSuggestions, setLocationSuggestions] = useState<
+    LocationSuggestion[]
+  >([]);
+  const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] =
+    useState(false);
+  const [locationSuggestionFeedback, setLocationSuggestionFeedback] = useState<
+    string | null
+  >(null);
+  const [selectedLocationSuggestion, setSelectedLocationSuggestion] =
+    useState<LocationSuggestion | null>(null);
   const [rankedBookspots, setRankedBookspots] = useState<RankedBookspot[]>([]);
-  const [recommendedBookspots, setRecommendedBookspots] = useState<RankedBookspot[]>([]);
-  const [selectedBookspot, setSelectedBookspot] = useState<RankedBookspot | null>(null);
+  const [recommendedBookspots, setRecommendedBookspots] = useState<
+    RankedBookspot[]
+  >([]);
+  const [selectedBookspot, setSelectedBookspot] =
+    useState<RankedBookspot | null>(null);
   const [bookspotSearchQuery, setBookspotSearchQuery] = useState("");
   const [isLoadingBookspots, setIsLoadingBookspots] = useState(false);
-  const [bookspotSuggestionFeedback, setBookspotSuggestionFeedback] = useState<string | null>(null);
+  const [bookspotSuggestionFeedback, setBookspotSuggestionFeedback] = useState<
+    string | null
+  >(null);
   const [rankedBookdrops, setRankedBookdrops] = useState<RankedBookspot[]>([]);
-  const [recommendedBookdrops, setRecommendedBookdrops] = useState<RankedBookspot[]>([]);
-  const [selectedBookdrop, setSelectedBookdrop] = useState<RankedBookspot | null>(null);
+  const [recommendedBookdrops, setRecommendedBookdrops] = useState<
+    RankedBookspot[]
+  >([]);
+  const [selectedBookdrop, setSelectedBookdrop] =
+    useState<RankedBookspot | null>(null);
   const [bookdropSearchQuery, setBookdropSearchQuery] = useState("");
   const [isLoadingBookdrops, setIsLoadingBookdrops] = useState(false);
-  const [bookdropSuggestionFeedback, setBookdropSuggestionFeedback] = useState<string | null>(null);
-  const [bookspotsById, setBookspotsById] = useState<Record<number, BookspotDTO>>({});
-  const [customLocationAddressByKey, setCustomLocationAddressByKey] = useState<Record<string, string>>({});
+  const [bookdropSuggestionFeedback, setBookdropSuggestionFeedback] = useState<
+    string | null
+  >(null);
+  const [bookspotsById, setBookspotsById] = useState<
+    Record<number, BookspotDTO>
+  >({});
+  const [customLocationAddressByKey, setCustomLocationAddressByKey] = useState<
+    Record<string, string>
+  >({});
   const locationRequestSeqRef = useRef(0);
   const locationCacheRef = useRef<Record<string, LocationSuggestion[]>>({});
   const [isDatePickerVisible, setDatePickerVisible] = useState(false);
@@ -328,7 +364,7 @@ export default function ChatDetailScreen() {
   const [webDateCursor, setWebDateCursor] = useState(new Date());
   const [webHourDraft, setWebHourDraft] = useState(new Date().getHours());
   const [webMinuteDraft, setWebMinuteDraft] = useState(
-    Math.ceil(new Date().getMinutes() / 5) * 5 % 60,
+    (Math.ceil(new Date().getMinutes() / 5) * 5) % 60,
   );
   const draftPrefilledRef = useRef(false);
 
@@ -368,7 +404,9 @@ export default function ChatDetailScreen() {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const parseMeetingTime = (value: string): { hour: number; minute: number } | null => {
+  const parseMeetingTime = (
+    value: string,
+  ): { hour: number; minute: number } | null => {
     const match = value.match(/^(\d{2}):(\d{2})$/);
     if (!match) return null;
     const hour = Number(match[1]);
@@ -420,7 +458,8 @@ export default function ChatDetailScreen() {
         date: d,
         inCurrentMonth: false,
         isToday: d.getTime() === todayStart.getTime(),
-        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        isSelected:
+          !!selectedDate && d.toDateString() === selectedDate.toDateString(),
         disabled: d < todayStart,
       });
     }
@@ -431,7 +470,8 @@ export default function ChatDetailScreen() {
         date: d,
         inCurrentMonth: true,
         isToday: d.getTime() === todayStart.getTime(),
-        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        isSelected:
+          !!selectedDate && d.toDateString() === selectedDate.toDateString(),
         disabled: d < todayStart,
       });
     }
@@ -443,7 +483,8 @@ export default function ChatDetailScreen() {
         date: d,
         inCurrentMonth: false,
         isToday: d.getTime() === todayStart.getTime(),
-        isSelected: !!selectedDate && d.toDateString() === selectedDate.toDateString(),
+        isSelected:
+          !!selectedDate && d.toDateString() === selectedDate.toDateString(),
         disabled: d < todayStart,
       });
     }
@@ -651,10 +692,9 @@ export default function ChatDetailScreen() {
 
     const payload = {
       exchangeId: exchange.exchangeId,
-      exchangeMode:
-        (meetingType === "ARBITRARY"
-          ? "CUSTOM"
-          : meetingType) as ExchangeMode,
+      exchangeMode: (meetingType === "ARBITRARY"
+        ? "CUSTOM"
+        : meetingType) as ExchangeMode,
       bookspotId:
         meetingType === "BOOKSPOT"
           ? (selectedBookspot?.id ?? null)
@@ -683,7 +723,10 @@ export default function ChatDetailScreen() {
       setExchangeMeeting(savedMeeting);
 
       closeMeetingForm();
-      Alert.alert("Propuesta enviada", "Tu propuesta de quedada se ha enviado correctamente.");
+      Alert.alert(
+        "Propuesta enviada",
+        "Tu propuesta de quedada se ha enviado correctamente.",
+      );
     } catch (err) {
       const message =
         err instanceof Error
@@ -735,7 +778,11 @@ export default function ChatDetailScreen() {
     if (locationCacheRef.current[normalizedQuery]) {
       const cached = locationCacheRef.current[normalizedQuery];
       setLocationSuggestions(cached);
-      setLocationSuggestionFeedback(cached.length === 0 ? "No se encontraron ubicaciones para ese texto." : null);
+      setLocationSuggestionFeedback(
+        cached.length === 0
+          ? "No se encontraron ubicaciones para ese texto."
+          : null,
+      );
       setLoadingLocationSuggestions(false);
       return;
     }
@@ -752,10 +799,16 @@ export default function ChatDetailScreen() {
       locationCacheRef.current[normalizedQuery] = mapped;
 
       setLocationSuggestions(mapped);
-      setLocationSuggestionFeedback(mapped.length === 0 ? "No se encontraron ubicaciones para ese texto." : null);
+      setLocationSuggestionFeedback(
+        mapped.length === 0
+          ? "No se encontraron ubicaciones para ese texto."
+          : null,
+      );
     } catch {
       if (requestSeq !== locationRequestSeqRef.current) return;
-      setLocationSuggestionFeedback("No se pudieron cargar sugerencias. Revisa conexión e inténtalo de nuevo.");
+      setLocationSuggestionFeedback(
+        "No se pudieron cargar sugerencias. Revisa conexión e inténtalo de nuevo.",
+      );
     } finally {
       if (requestSeq === locationRequestSeqRef.current) {
         setLoadingLocationSuggestions(false);
@@ -803,7 +856,9 @@ export default function ChatDetailScreen() {
     }
 
     if (!exchange) {
-      setBookspotSuggestionFeedback("No se pudo obtener el intercambio para sugerir BookSpots.");
+      setBookspotSuggestionFeedback(
+        "No se pudo obtener el intercambio para sugerir BookSpots.",
+      );
       return;
     }
 
@@ -815,7 +870,9 @@ export default function ChatDetailScreen() {
         setBookspotSuggestionFeedback(null);
 
         if (!exchange.user1Id || !exchange.user2Id) {
-          setBookspotSuggestionFeedback('No se pudieron cargar los datos de usuario');
+          setBookspotSuggestionFeedback(
+            "No se pudieron cargar los datos de usuario",
+          );
           return;
         }
 
@@ -848,19 +905,24 @@ export default function ChatDetailScreen() {
         setRecommendedBookspots(ranked.slice(0, 5));
 
         if (ranked.length === 0) {
-          setBookspotSuggestionFeedback("No hay BookSpots activos disponibles en este momento.");
+          setBookspotSuggestionFeedback(
+            "No hay BookSpots activos disponibles en este momento.",
+          );
           return;
         }
 
         if (selectedBookspot) {
-          const refreshedSelection = ranked.find((spot) => spot.id === selectedBookspot.id) ?? null;
+          const refreshedSelection =
+            ranked.find((spot) => spot.id === selectedBookspot.id) ?? null;
           setSelectedBookspot(refreshedSelection);
         }
       } catch {
         if (cancelled) return;
         setRankedBookspots([]);
         setRecommendedBookspots([]);
-        setBookspotSuggestionFeedback("No se pudieron cargar los BookSpots. Intentalo de nuevo.");
+        setBookspotSuggestionFeedback(
+          "No se pudieron cargar los BookSpots. Intentalo de nuevo.",
+        );
       } finally {
         if (!cancelled) {
           setIsLoadingBookspots(false);
@@ -883,7 +945,9 @@ export default function ChatDetailScreen() {
     }
 
     if (!exchange) {
-      setBookdropSuggestionFeedback("No se pudo obtener el intercambio para sugerir BookDrops.");
+      setBookdropSuggestionFeedback(
+        "No se pudo obtener el intercambio para sugerir BookDrops.",
+      );
       return;
     }
 
@@ -895,7 +959,9 @@ export default function ChatDetailScreen() {
         setBookdropSuggestionFeedback(null);
 
         if (!exchange.user1Id || !exchange.user2Id) {
-          setBookdropSuggestionFeedback('No se pudieron cargar los datos de usuario');
+          setBookdropSuggestionFeedback(
+            "No se pudieron cargar los datos de usuario",
+          );
           return;
         }
 
@@ -929,19 +995,24 @@ export default function ChatDetailScreen() {
         setRecommendedBookdrops(ranked.slice(0, 5));
 
         if (ranked.length === 0) {
-          setBookdropSuggestionFeedback("No hay BookDrops activos disponibles en este momento.");
+          setBookdropSuggestionFeedback(
+            "No hay BookDrops activos disponibles en este momento.",
+          );
           return;
         }
 
         if (selectedBookdrop) {
-          const refreshedSelection = ranked.find((drop) => drop.id === selectedBookdrop.id) ?? null;
+          const refreshedSelection =
+            ranked.find((drop) => drop.id === selectedBookdrop.id) ?? null;
           setSelectedBookdrop(refreshedSelection);
         }
       } catch {
         if (cancelled) return;
         setRankedBookdrops([]);
         setRecommendedBookdrops([]);
-        setBookdropSuggestionFeedback("No se pudieron cargar los BookDrops. Intentalo de nuevo.");
+        setBookdropSuggestionFeedback(
+          "No se pudieron cargar los BookDrops. Intentalo de nuevo.",
+        );
       } finally {
         if (!cancelled) {
           setIsLoadingBookdrops(false);
@@ -1006,7 +1077,10 @@ export default function ChatDetailScreen() {
   };
 
   const moveCalendarMonth = (delta: number) => {
-    setWebDateCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+    setWebDateCursor(
+      (current) =>
+        new Date(current.getFullYear(), current.getMonth() + delta, 1),
+    );
   };
 
   const pickCalendarDate = (date: Date, disabled: boolean) => {
@@ -1069,7 +1143,9 @@ export default function ChatDetailScreen() {
       setExchange(exchangeData);
 
       if (exchangeData) {
-        const meetingData = await getMeetingByExchangeId(exchangeData.exchangeId);
+        const meetingData = await getMeetingByExchangeId(
+          exchangeData.exchangeId,
+        );
         setExchangeMeeting(meetingData);
       } else {
         setExchangeMeeting(null);
@@ -1242,7 +1318,7 @@ export default function ChatDetailScreen() {
         const otherBookId = isUser1 ? exchange.book2Id : exchange.book1Id;
 
         if (!myBookId || !otherBookId) {
-          console.warn('Book IDs are missing from exchange');
+          console.warn("Book IDs are missing from exchange");
           return;
         }
 
@@ -1300,7 +1376,11 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (!exchangeMeeting || exchangeMeeting.exchangeMode !== "CUSTOM") return;
-    if (!exchangeMeeting.customLocation || exchangeMeeting.customLocation.length < 2) return;
+    if (
+      !exchangeMeeting.customLocation ||
+      exchangeMeeting.customLocation.length < 2
+    )
+      return;
 
     const [lon, lat] = exchangeMeeting.customLocation;
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
@@ -1358,8 +1438,8 @@ export default function ChatDetailScreen() {
 
   // Título del header
   let headerTitle: string;
-  if (chat.type === 'COMMUNITY') {
-    headerTitle = chat.name ?? 'Comunidad';
+  if (chat.type === "COMMUNITY") {
+    headerTitle = chat.name ?? "Comunidad";
   } else {
     const other = chat.participants.find((p) => p.userId !== currentUserId);
     headerTitle = other?.username ?? "Chat";
@@ -1496,18 +1576,13 @@ export default function ChatDetailScreen() {
           {/* Avatar solo para mensajes de otros en chats de comunidad */}
           {showSenderName && (
             <View style={styles.messageAvatarContainer}>
-              {sender?.profilePhoto ? (
-                <Image
-                  source={{ uri: sender.profilePhoto }}
-                  style={styles.messageAvatar}
-                />
-              ) : (
-                <View style={styles.messageAvatarPlaceholder}>
-                  <Text style={styles.messageAvatarText}>
-                    {sender?.username?.charAt(0) ?? "?"}
-                  </Text>
-                </View>
-              )}
+              <ChatAvatar
+                profilePhoto={sender?.profilePhoto}
+                username={sender?.username}
+                size={30}
+                activeFrameId={item.senderActiveFrameId}
+                activeColorId={item.senderActiveColorId}
+              />
             </View>
           )}
 
@@ -1518,7 +1593,18 @@ export default function ChatDetailScreen() {
             ]}
           >
             {showSenderName && (
-              <Text style={styles.senderName}>
+              <Text
+                style={[
+                  styles.senderName,
+                  item.senderActiveColorId
+                    ? {
+                        color:
+                          getNameColorById(item.senderActiveColorId)?.color ??
+                          "#e4715f",
+                      }
+                    : undefined,
+                ]}
+              >
                 {sender?.username ?? "Usuario"}
               </Text>
             )}
@@ -1671,9 +1757,7 @@ export default function ChatDetailScreen() {
     exchange.status !== "REJECTED" &&
     exchange.status !== "INCIDENT" &&
     exchange.status !== "COMPLETED";
-  const canProposeMeeting =
-    exchange?.status === "ACCEPTED" &&
-    !exchangeMeeting;
+  const canProposeMeeting = exchange?.status === "ACCEPTED" && !exchangeMeeting;
   const hasMeetingProposal = exchangeMeeting?.meetingStatus === "PROPOSAL";
   const hasMeetingAccepted = exchangeMeeting?.meetingStatus === "ACCEPTED";
   const bookdropPin =
@@ -1701,7 +1785,9 @@ export default function ChatDetailScreen() {
     exchangeMeeting.exchangeMode === "BOOKDROP" &&
     exchange?.status === "ACCEPTED";
   const isCurrentUserMeetingProposer =
-    !!exchangeMeeting && !!backendUserId && exchangeMeeting.proposerId === backendUserId;
+    !!exchangeMeeting &&
+    !!backendUserId &&
+    exchangeMeeting.proposerId === backendUserId;
   const hasCurrentUserMarkedExchangeCompleted =
     !!exchangeMeeting &&
     (isCurrentUserMeetingProposer
@@ -1723,7 +1809,8 @@ export default function ChatDetailScreen() {
         (meeting.bookspotId ? `#${meeting.bookspotId}` : "sin identificar");
       return {
         title: `BookSpot · ${spotName}`,
-        subtitle: selectedBookspot?.addressText ?? "Punto de encuentro en BookSpot",
+        subtitle:
+          selectedBookspot?.addressText ?? "Punto de encuentro en BookSpot",
       };
     }
 
@@ -1733,14 +1820,17 @@ export default function ChatDetailScreen() {
         (meeting.bookspotId ? `#${meeting.bookspotId}` : "sin identificar");
       return {
         title: `BookDrop · ${dropName}`,
-        subtitle: selectedBookspot?.addressText ?? "Punto de entrega en BookDrop",
+        subtitle:
+          selectedBookspot?.addressText ?? "Punto de entrega en BookDrop",
       };
     }
 
     if (meeting.customLocation && meeting.customLocation.length >= 2) {
       const [lon, lat] = meeting.customLocation;
       const locationKey = getCustomLocationKey(meeting.customLocation);
-      const resolvedAddress = locationKey ? customLocationAddressByKey[locationKey] : null;
+      const resolvedAddress = locationKey
+        ? customLocationAddressByKey[locationKey]
+        : null;
 
       if (resolvedAddress) {
         return {
@@ -1767,10 +1857,13 @@ export default function ChatDetailScreen() {
     try {
       setMeetingSubmitting(true);
       setError(null);
-      const accepted = await acceptExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      const accepted = await acceptExchangeMeeting(
+        exchangeMeeting.exchangeMeetingId,
+      );
       setExchangeMeeting(accepted);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo aceptar la propuesta.";
+      const message =
+        err instanceof Error ? err.message : "No se pudo aceptar la propuesta.";
       setError(message);
     } finally {
       setMeetingSubmitting(false);
@@ -1793,14 +1886,18 @@ export default function ChatDetailScreen() {
   const getSelectedCustomLocationSuggestion = (
     meeting: ExchangeMeetingDto,
   ): LocationSuggestion | null => {
-    if (!meeting.customLocation || meeting.customLocation.length < 2) return null;
+    if (!meeting.customLocation || meeting.customLocation.length < 2)
+      return null;
 
     const [lon, lat] = meeting.customLocation;
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
 
     const locationKey = getCustomLocationKey(meeting.customLocation);
-    const resolvedAddress = locationKey ? customLocationAddressByKey[locationKey] : null;
-    const label = resolvedAddress ?? `Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`;
+    const resolvedAddress = locationKey
+      ? customLocationAddressByKey[locationKey]
+      : null;
+    const label =
+      resolvedAddress ?? `Lat ${lat.toFixed(4)} · Lon ${lon.toFixed(4)}`;
 
     return {
       id: locationKey ?? `${lon.toFixed(6)},${lat.toFixed(6)}`,
@@ -1871,7 +1968,8 @@ export default function ChatDetailScreen() {
       setSelectedBookspot(null);
       setSelectedBookdrop(null);
 
-      const selectedSuggestion = getSelectedCustomLocationSuggestion(exchangeMeeting);
+      const selectedSuggestion =
+        getSelectedCustomLocationSuggestion(exchangeMeeting);
       if (selectedSuggestion) {
         setMeetingLocation(selectedSuggestion.label);
         setSelectedLocationSuggestion(selectedSuggestion);
@@ -1894,10 +1992,15 @@ export default function ChatDetailScreen() {
       setMeetingCompletionSubmitting(true);
       setError(null);
 
-      const updatedMeeting = await completeExchangeMeeting(exchangeMeeting.exchangeMeetingId);
+      const updatedMeeting = await completeExchangeMeeting(
+        exchangeMeeting.exchangeMeetingId,
+      );
       setExchangeMeeting(updatedMeeting);
 
-      if (updatedMeeting.markAsCompletedByUser1 && updatedMeeting.markAsCompletedByUser2) {
+      if (
+        updatedMeeting.markAsCompletedByUser1 &&
+        updatedMeeting.markAsCompletedByUser2
+      ) {
         setExchange((prev) =>
           prev
             ? {
@@ -1911,7 +2014,9 @@ export default function ChatDetailScreen() {
 
       // Sync after completion to avoid stale UI when backend flags are updated.
       try {
-        const refreshedMeeting = await getMeetingByExchangeId(updatedMeeting.exchangeId);
+        const refreshedMeeting = await getMeetingByExchangeId(
+          updatedMeeting.exchangeId,
+        );
         if (refreshedMeeting) {
           setExchangeMeeting(refreshedMeeting);
         }
@@ -1921,7 +2026,8 @@ export default function ChatDetailScreen() {
 
       if (exchange?.exchangeId) {
         try {
-          const updatedExchange = await getExchangeByChatIdWithMatch(exchangeChatId);
+          const updatedExchange =
+            await getExchangeByChatIdWithMatch(exchangeChatId);
           if (updatedExchange) {
             setExchange(updatedExchange);
           }
@@ -1934,7 +2040,9 @@ export default function ChatDetailScreen() {
       // Try to recover from source of truth before surfacing an error banner.
       let recovered = false;
       try {
-        const recoveredMeeting = await getMeetingByExchangeId(exchangeMeeting.exchangeId);
+        const recoveredMeeting = await getMeetingByExchangeId(
+          exchangeMeeting.exchangeId,
+        );
         if (recoveredMeeting) {
           setExchangeMeeting(recoveredMeeting);
           recovered = true;
@@ -1979,9 +2087,14 @@ export default function ChatDetailScreen() {
       setError(null);
 
       const updatedExchange = await reportExchange(exchange.exchangeId);
-      setExchange((prev) => (prev ? { ...prev, ...updatedExchange } : updatedExchange));
+      setExchange((prev) =>
+        prev ? { ...prev, ...updatedExchange } : updatedExchange,
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "No se pudo reportar el intercambio.";
+      const message =
+        err instanceof Error
+          ? err.message
+          : "No se pudo reportar el intercambio.";
       setError(message);
     } finally {
       setMeetingCompletionSubmitting(false);
@@ -2378,11 +2491,16 @@ export default function ChatDetailScreen() {
                       <View style={styles.meetingPinBox}>
                         <View style={styles.meetingPinHeader}>
                           <FontAwesome name="key" size={16} color="#9A683A" />
-                          <Text style={styles.meetingPinTitle}>PIN del BookDrop</Text>
+                          <Text style={styles.meetingPinTitle}>
+                            PIN del BookDrop
+                          </Text>
                         </View>
-                        <Text style={styles.meetingPinValue}>{bookdropPin}</Text>
+                        <Text style={styles.meetingPinValue}>
+                          {bookdropPin}
+                        </Text>
                         <Text style={styles.meetingPinDescription}>
-                          Indica este PIN en el BookDrop para que puedan gestionar el intercambio.
+                          Indica este PIN en el BookDrop para que puedan
+                          gestionar el intercambio.
                         </Text>
                       </View>
                     ) : null}
@@ -2392,26 +2510,31 @@ export default function ChatDetailScreen() {
                         <Pressable
                           style={({ pressed }) => [
                             styles.meetingProposalAcceptButton,
-                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                            (pressed || meetingSubmitting) &&
+                              styles.meetingProposalActionPressed,
                           ]}
                           onPress={openAcceptMeetingConfirm}
                           disabled={meetingSubmitting}
                         >
                           <FontAwesome name="check" size={16} color="#fff" />
-                          <Text style={styles.meetingProposalAcceptText}>Aceptar</Text>
+                          <Text style={styles.meetingProposalAcceptText}>
+                            Aceptar
+                          </Text>
                         </Pressable>
 
                         <Pressable
                           style={({ pressed }) => [
                             styles.meetingProposalCounterButton,
-                            (pressed || meetingSubmitting) && styles.meetingProposalActionPressed,
+                            (pressed || meetingSubmitting) &&
+                              styles.meetingProposalActionPressed,
                           ]}
                           onPress={handleCounterProposeMeeting}
                           disabled={meetingSubmitting}
                         >
-                          <Text style={styles.meetingProposalCounterText}>Contraproponer</Text>
+                          <Text style={styles.meetingProposalCounterText}>
+                            Contraproponer
+                          </Text>
                         </Pressable>
-
                       </View>
                     )}
                   </View>
@@ -2421,8 +2544,14 @@ export default function ChatDetailScreen() {
                   <View style={styles.meetingCompletionWrapper}>
                     <View style={styles.meetingCompletionCard}>
                       <View style={styles.meetingCompletionHeader}>
-                        <FontAwesome name="check-circle-o" size={20} color="#16A34A" />
-                        <Text style={styles.meetingCompletionTitle}>Encuentro programado</Text>
+                        <FontAwesome
+                          name="check-circle-o"
+                          size={20}
+                          color="#16A34A"
+                        />
+                        <Text style={styles.meetingCompletionTitle}>
+                          Encuentro programado
+                        </Text>
                       </View>
 
                       <Text style={styles.meetingCompletionDescription}>
@@ -2437,28 +2566,42 @@ export default function ChatDetailScreen() {
                         <Pressable
                           style={({ pressed }) => [
                             styles.meetingCompletionAcceptButton,
-                            (pressed || meetingCompletionSubmitting || hasCurrentUserMarkedExchangeCompleted) &&
+                            (pressed ||
+                              meetingCompletionSubmitting ||
+                              hasCurrentUserMarkedExchangeCompleted) &&
                               styles.meetingProposalActionPressed,
                           ]}
                           onPress={handleCompleteExchangeAfterMeeting}
-                          disabled={meetingCompletionSubmitting || hasCurrentUserMarkedExchangeCompleted}
+                          disabled={
+                            meetingCompletionSubmitting ||
+                            hasCurrentUserMarkedExchangeCompleted
+                          }
                         >
-                          <FontAwesome name="check-circle" size={16} color="#fff" />
+                          <FontAwesome
+                            name="check-circle"
+                            size={16}
+                            color="#fff"
+                          />
                           <Text style={styles.meetingCompletionAcceptText}>
-                            {hasCurrentUserMarkedExchangeCompleted ? "Confirmado" : "Completar"}
+                            {hasCurrentUserMarkedExchangeCompleted
+                              ? "Confirmado"
+                              : "Completar"}
                           </Text>
                         </Pressable>
 
                         <Pressable
                           style={({ pressed }) => [
                             styles.meetingCompletionReportButton,
-                            (pressed || meetingCompletionSubmitting) && styles.meetingProposalActionPressed,
+                            (pressed || meetingCompletionSubmitting) &&
+                              styles.meetingProposalActionPressed,
                           ]}
                           onPress={handleReportCompletedExchange}
                           disabled={meetingCompletionSubmitting}
                         >
                           <FontAwesome name="warning" size={16} color="#fff" />
-                          <Text style={styles.meetingCompletionReportText}>Reportar</Text>
+                          <Text style={styles.meetingCompletionReportText}>
+                            Reportar
+                          </Text>
                         </Pressable>
                       </View>
                     </View>
@@ -2469,13 +2612,20 @@ export default function ChatDetailScreen() {
                   <View style={styles.meetingCompletionWrapper}>
                     <View style={styles.meetingBookdropInfoCard}>
                       <View style={styles.meetingCompletionHeader}>
-                        <FontAwesome name="building-o" size={20} color="#9A683A" />
-                        <Text style={styles.meetingCompletionTitle}>Gestionado por BookDrop</Text>
+                        <FontAwesome
+                          name="building-o"
+                          size={20}
+                          color="#9A683A"
+                        />
+                        <Text style={styles.meetingCompletionTitle}>
+                          Gestionado por BookDrop
+                        </Text>
                       </View>
 
                       <Text style={styles.meetingCompletionDescription}>
-                        Este intercambio se valida directamente en el establecimiento. Aqui no se
-                        puede completar ni reportar manualmente.
+                        Este intercambio se valida directamente en el
+                        establecimiento. Aqui no se puede completar ni reportar
+                        manualmente.
                       </Text>
                     </View>
                   </View>
@@ -2672,12 +2822,17 @@ export default function ChatDetailScreen() {
                         style={[
                           styles.meetingInput,
                           styles.meetingInputTrigger,
-                          webDatePanelVisible && styles.meetingInputTriggerActive,
+                          webDatePanelVisible &&
+                            styles.meetingInputTriggerActive,
                         ]}
                         onPress={openDateSelector}
                       >
                         <View style={styles.meetingTriggerLeft}>
-                          <FontAwesome name="calendar" size={14} color="#e4715f" />
+                          <FontAwesome
+                            name="calendar"
+                            size={14}
+                            color="#e4715f"
+                          />
                           <Text
                             style={
                               meetingDate
@@ -2689,7 +2844,9 @@ export default function ChatDetailScreen() {
                           </Text>
                         </View>
                         <FontAwesome
-                          name={webDatePanelVisible ? "chevron-up" : "chevron-down"}
+                          name={
+                            webDatePanelVisible ? "chevron-up" : "chevron-down"
+                          }
                           size={12}
                           color="#6B7280"
                         />
@@ -2702,16 +2859,25 @@ export default function ChatDetailScreen() {
                               style={styles.webPanelArrowBtn}
                               onPress={() => moveCalendarMonth(-1)}
                             >
-                              <FontAwesome name="chevron-left" size={12} color="#4B5563" />
+                              <FontAwesome
+                                name="chevron-left"
+                                size={12}
+                                color="#4B5563"
+                              />
                             </Pressable>
                             <Text style={styles.webPanelTitle}>
-                              {MONTHS_ES[webDateCursor.getMonth()]} {webDateCursor.getFullYear()}
+                              {MONTHS_ES[webDateCursor.getMonth()]}{" "}
+                              {webDateCursor.getFullYear()}
                             </Text>
                             <Pressable
                               style={styles.webPanelArrowBtn}
                               onPress={() => moveCalendarMonth(1)}
                             >
-                              <FontAwesome name="chevron-right" size={12} color="#4B5563" />
+                              <FontAwesome
+                                name="chevron-right"
+                                size={12}
+                                color="#4B5563"
+                              />
                             </Pressable>
                           </View>
 
@@ -2730,16 +2896,22 @@ export default function ChatDetailScreen() {
                                 disabled={cell.disabled}
                                 style={[
                                   styles.webCalendarDay,
-                                  cell.isSelected && styles.webCalendarDaySelected,
+                                  cell.isSelected &&
+                                    styles.webCalendarDaySelected,
                                 ]}
-                                onPress={() => pickCalendarDate(cell.date, cell.disabled)}
+                                onPress={() =>
+                                  pickCalendarDate(cell.date, cell.disabled)
+                                }
                               >
                                 <Text
                                   style={[
                                     styles.webCalendarDayText,
-                                    !cell.inCurrentMonth && styles.webCalendarDayTextMuted,
-                                    cell.disabled && styles.webCalendarDayTextDisabled,
-                                    cell.isSelected && styles.webCalendarDayTextSelected,
+                                    !cell.inCurrentMonth &&
+                                      styles.webCalendarDayTextMuted,
+                                    cell.disabled &&
+                                      styles.webCalendarDayTextDisabled,
+                                    cell.isSelected &&
+                                      styles.webCalendarDayTextSelected,
                                   ]}
                                 >
                                   {cell.date.getDate()}
@@ -2751,7 +2923,10 @@ export default function ChatDetailScreen() {
                       )}
                     </>
                   ) : (
-                    <Pressable style={styles.meetingInput} onPress={openDateSelector}>
+                    <Pressable
+                      style={styles.meetingInput}
+                      onPress={openDateSelector}
+                    >
                       <Text style={styles.meetingInputPlaceholder}>
                         {meetingDate || "dd/mm/aaaa"}
                       </Text>
@@ -2771,12 +2946,17 @@ export default function ChatDetailScreen() {
                         style={[
                           styles.meetingInput,
                           styles.meetingInputTrigger,
-                          webTimePanelVisible && styles.meetingInputTriggerActive,
+                          webTimePanelVisible &&
+                            styles.meetingInputTriggerActive,
                         ]}
                         onPress={openTimeSelector}
                       >
                         <View style={styles.meetingTriggerLeft}>
-                          <FontAwesome name="clock-o" size={14} color="#e4715f" />
+                          <FontAwesome
+                            name="clock-o"
+                            size={14}
+                            color="#e4715f"
+                          />
                           <Text
                             style={
                               meetingTime
@@ -2788,7 +2968,9 @@ export default function ChatDetailScreen() {
                           </Text>
                         </View>
                         <FontAwesome
-                          name={webTimePanelVisible ? "chevron-up" : "chevron-down"}
+                          name={
+                            webTimePanelVisible ? "chevron-up" : "chevron-down"
+                          }
                           size={12}
                           color="#6B7280"
                         />
@@ -2796,36 +2978,59 @@ export default function ChatDetailScreen() {
 
                       {webTimePanelVisible && (
                         <View style={styles.webPanelCard}>
-                          <Text style={styles.webPanelTitle}>Selecciona la hora</Text>
+                          <Text style={styles.webPanelTitle}>
+                            Selecciona la hora
+                          </Text>
                           <View style={styles.webTimeColumns}>
                             <View style={styles.webTimeColumn}>
-                              <Text style={styles.webTimeColumnLabel}>Hora</Text>
-                              <ScrollView style={styles.webTimeScroll} showsVerticalScrollIndicator={false}>
+                              <Text style={styles.webTimeColumnLabel}>
+                                Hora
+                              </Text>
+                              <ScrollView
+                                style={styles.webTimeScroll}
+                                showsVerticalScrollIndicator={false}
+                              >
                                 {Array.from({ length: 24 }, (_, hour) => (
                                   <Pressable
                                     key={`hour-${hour}`}
                                     disabled={isWebTimeOptionDisabled(hour, 59)}
                                     style={[
                                       styles.webTimeOption,
-                                      webHourDraft === hour && styles.webTimeOptionSelected,
-                                      isWebTimeOptionDisabled(hour, 59) && styles.webTimeOptionDisabled,
+                                      webHourDraft === hour &&
+                                        styles.webTimeOptionSelected,
+                                      isWebTimeOptionDisabled(hour, 59) &&
+                                        styles.webTimeOptionDisabled,
                                     ]}
                                     onPress={() => {
-                                      if (isWebTimeOptionDisabled(hour, 59)) return;
+                                      if (isWebTimeOptionDisabled(hour, 59))
+                                        return;
                                       setWebHourDraft(hour);
-                                      if (isWebTimeOptionDisabled(hour, webMinuteDraft)) {
-                                        const firstValidMinute = Array.from({ length: 60 }, (_, m) => m).find(
-                                          (m) => !isWebTimeOptionDisabled(hour, m),
+                                      if (
+                                        isWebTimeOptionDisabled(
+                                          hour,
+                                          webMinuteDraft,
+                                        )
+                                      ) {
+                                        const firstValidMinute = Array.from(
+                                          { length: 60 },
+                                          (_, m) => m,
+                                        ).find(
+                                          (m) =>
+                                            !isWebTimeOptionDisabled(hour, m),
                                         );
-                                        setWebMinuteDraft(firstValidMinute ?? webMinuteDraft);
+                                        setWebMinuteDraft(
+                                          firstValidMinute ?? webMinuteDraft,
+                                        );
                                       }
                                     }}
                                   >
                                     <Text
                                       style={[
                                         styles.webTimeOptionText,
-                                        webHourDraft === hour && styles.webTimeOptionTextSelected,
-                                        isWebTimeOptionDisabled(hour, 59) && styles.webTimeOptionTextDisabled,
+                                        webHourDraft === hour &&
+                                          styles.webTimeOptionTextSelected,
+                                        isWebTimeOptionDisabled(hour, 59) &&
+                                          styles.webTimeOptionTextDisabled,
                                       ]}
                                     >
                                       {pad2(hour)}
@@ -2835,24 +3040,43 @@ export default function ChatDetailScreen() {
                               </ScrollView>
                             </View>
                             <View style={styles.webTimeColumn}>
-                              <Text style={styles.webTimeColumnLabel}>Minuto</Text>
-                              <ScrollView style={styles.webTimeScroll} showsVerticalScrollIndicator={false}>
-                                {Array.from({ length: 60 }, (_, minute) => minute).map((minute) => (
+                              <Text style={styles.webTimeColumnLabel}>
+                                Minuto
+                              </Text>
+                              <ScrollView
+                                style={styles.webTimeScroll}
+                                showsVerticalScrollIndicator={false}
+                              >
+                                {Array.from(
+                                  { length: 60 },
+                                  (_, minute) => minute,
+                                ).map((minute) => (
                                   <Pressable
                                     key={`minute-${minute}`}
-                                    disabled={isWebTimeOptionDisabled(webHourDraft, minute)}
+                                    disabled={isWebTimeOptionDisabled(
+                                      webHourDraft,
+                                      minute,
+                                    )}
                                     style={[
                                       styles.webTimeOption,
-                                      webMinuteDraft === minute && styles.webTimeOptionSelected,
-                                      isWebTimeOptionDisabled(webHourDraft, minute) && styles.webTimeOptionDisabled,
+                                      webMinuteDraft === minute &&
+                                        styles.webTimeOptionSelected,
+                                      isWebTimeOptionDisabled(
+                                        webHourDraft,
+                                        minute,
+                                      ) && styles.webTimeOptionDisabled,
                                     ]}
                                     onPress={() => setWebMinuteDraft(minute)}
                                   >
                                     <Text
                                       style={[
                                         styles.webTimeOptionText,
-                                        webMinuteDraft === minute && styles.webTimeOptionTextSelected,
-                                        isWebTimeOptionDisabled(webHourDraft, minute) && styles.webTimeOptionTextDisabled,
+                                        webMinuteDraft === minute &&
+                                          styles.webTimeOptionTextSelected,
+                                        isWebTimeOptionDisabled(
+                                          webHourDraft,
+                                          minute,
+                                        ) && styles.webTimeOptionTextDisabled,
                                       ]}
                                     >
                                       {pad2(minute)}
@@ -2864,18 +3088,30 @@ export default function ChatDetailScreen() {
                           </View>
 
                           <View style={styles.webPanelActions}>
-                            <Pressable onPress={() => setWebTimePanelVisible(false)}>
-                              <Text style={styles.webPanelCancelText}>Cancelar</Text>
+                            <Pressable
+                              onPress={() => setWebTimePanelVisible(false)}
+                            >
+                              <Text style={styles.webPanelCancelText}>
+                                Cancelar
+                              </Text>
                             </Pressable>
-                            <Pressable style={styles.webPanelApplyBtn} onPress={applyWebTimeSelection}>
-                              <Text style={styles.webPanelApplyText}>Aplicar</Text>
+                            <Pressable
+                              style={styles.webPanelApplyBtn}
+                              onPress={applyWebTimeSelection}
+                            >
+                              <Text style={styles.webPanelApplyText}>
+                                Aplicar
+                              </Text>
                             </Pressable>
                           </View>
                         </View>
                       )}
                     </>
                   ) : (
-                    <Pressable style={styles.meetingInput} onPress={openTimeSelector}>
+                    <Pressable
+                      style={styles.meetingInput}
+                      onPress={openTimeSelector}
+                    >
                       <Text style={styles.meetingInputPlaceholder}>
                         {meetingTime || "--:--"}
                       </Text>
@@ -2886,12 +3122,14 @@ export default function ChatDetailScreen() {
                   )}
                   {getSameDayMinTimeLabel() && (
                     <Text style={styles.meetingInfoText}>
-                      Para hoy, la hora minima disponible es {getSameDayMinTimeLabel()} (5 min desde ahora).
+                      Para hoy, la hora minima disponible es{" "}
+                      {getSameDayMinTimeLabel()} (5 min desde ahora).
                     </Text>
                   )}
                   {!!meetingDate && !hasAvailableMinutesToday() && (
                     <Text style={styles.locationSuggestionFeedbackText}>
-                      Para hoy ya no quedan horas disponibles. Elige una fecha posterior.
+                      Para hoy ya no quedan horas disponibles. Elige una fecha
+                      posterior.
                     </Text>
                   )}
                 </View>
@@ -2913,27 +3151,33 @@ export default function ChatDetailScreen() {
                           <ActivityIndicator size="small" color="#e4715f" />
                         </View>
                       )}
-                      {!selectedLocationSuggestion && locationSuggestions.length > 0 && (
-                        <View style={styles.locationSuggestionsList}>
-                          {locationSuggestions.map((suggestion) => (
-                            <Pressable
-                              key={suggestion.id}
-                              style={styles.locationSuggestionItem}
-                              onPress={() => handleSelectLocationSuggestion(suggestion)}
-                            >
-                              <FontAwesome
-                                name="map-marker"
-                                size={14}
-                                color="#e4715f"
-                                style={styles.locationSuggestionIcon}
-                              />
-                              <Text style={styles.locationSuggestionText} numberOfLines={2}>
-                                {suggestion.label}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      )}
+                      {!selectedLocationSuggestion &&
+                        locationSuggestions.length > 0 && (
+                          <View style={styles.locationSuggestionsList}>
+                            {locationSuggestions.map((suggestion) => (
+                              <Pressable
+                                key={suggestion.id}
+                                style={styles.locationSuggestionItem}
+                                onPress={() =>
+                                  handleSelectLocationSuggestion(suggestion)
+                                }
+                              >
+                                <FontAwesome
+                                  name="map-marker"
+                                  size={14}
+                                  color="#e4715f"
+                                  style={styles.locationSuggestionIcon}
+                                />
+                                <Text
+                                  style={styles.locationSuggestionText}
+                                  numberOfLines={2}
+                                >
+                                  {suggestion.label}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
                     </View>
                     {locationSuggestionFeedback && (
                       <Text style={styles.locationSuggestionFeedbackText}>
@@ -2941,29 +3185,36 @@ export default function ChatDetailScreen() {
                       </Text>
                     )}
                     <Text style={styles.meetingInfoText}>
-                      Escribe al menos 3 caracteres y selecciona una sugerencia válida.
+                      Escribe al menos 3 caracteres y selecciona una sugerencia
+                      válida.
                     </Text>
                   </View>
                 )}
 
                 {meetingType === "BOOKSPOT" && (
                   <View style={{ marginTop: 12 }}>
-                    <Text style={styles.meetingSectionLabel}>BookSpots recomendados</Text>
+                    <Text style={styles.meetingSectionLabel}>
+                      BookSpots recomendados
+                    </Text>
                     <Text style={styles.meetingInfoText}>
-                      Se muestran los 5 que minimizan la distancia para ambos, priorizando equilibrio.
+                      Se muestran los 5 que minimizan la distancia para ambos,
+                      priorizando equilibrio.
                     </Text>
 
                     {isLoadingBookspots && (
                       <View style={styles.bookspotLoadingRow}>
                         <ActivityIndicator size="small" color="#e4715f" />
-                        <Text style={styles.bookspotLoadingText}>Calculando sugerencias...</Text>
+                        <Text style={styles.bookspotLoadingText}>
+                          Calculando sugerencias...
+                        </Text>
                       </View>
                     )}
 
                     {!isLoadingBookspots && recommendedBookspots.length > 0 && (
                       <View style={styles.bookspotRecommendedList}>
                         {recommendedBookspots.map((spot) => {
-                          const distanceInfo = currentDistanceInfoForBookspot(spot);
+                          const distanceInfo =
+                            currentDistanceInfoForBookspot(spot);
                           const isSelected = selectedBookspot?.id === spot.id;
 
                           return (
@@ -2978,20 +3229,28 @@ export default function ChatDetailScreen() {
                               <Text
                                 style={[
                                   styles.bookspotItemTitle,
-                                  isSelected && styles.bookspotItemTitleSelected,
+                                  isSelected &&
+                                    styles.bookspotItemTitleSelected,
                                 ]}
                                 numberOfLines={1}
                               >
                                 {spot.nombre}
                               </Text>
-                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                              <Text
+                                style={styles.bookspotItemAddress}
+                                numberOfLines={2}
+                              >
                                 {spot.addressText}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                                Tu distancia:{" "}
+                                {formatDistanceKm(distanceInfo.myDistanceKm)} ·
+                                Otra persona:{" "}
+                                {formatDistanceKm(distanceInfo.otherDistanceKm)}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Diferencia: {formatDistanceKm(spot.fairnessGapKm)}
+                                Diferencia:{" "}
+                                {formatDistanceKm(spot.fairnessGapKm)}
                               </Text>
                             </Pressable>
                           );
@@ -2999,7 +3258,11 @@ export default function ChatDetailScreen() {
                       </View>
                     )}
 
-                    <Text style={[styles.meetingSectionLabel, { marginTop: 10 }]}>Buscar otro BookSpot</Text>
+                    <Text
+                      style={[styles.meetingSectionLabel, { marginTop: 10 }]}
+                    >
+                      Buscar otro BookSpot
+                    </Text>
                     <TextInput
                       style={styles.locationInput}
                       value={bookspotSearchQuery}
@@ -3008,14 +3271,18 @@ export default function ChatDetailScreen() {
                       placeholderTextColor="#9CA3AF"
                     />
 
-                    {bookspotSearchQuery.trim().length > 0 && bookspotSearchQuery.trim().length < 2 && (
-                      <Text style={styles.meetingInfoText}>Escribe al menos 2 caracteres para buscar.</Text>
-                    )}
+                    {bookspotSearchQuery.trim().length > 0 &&
+                      bookspotSearchQuery.trim().length < 2 && (
+                        <Text style={styles.meetingInfoText}>
+                          Escribe al menos 2 caracteres para buscar.
+                        </Text>
+                      )}
 
                     {filteredBookspotSearchResults.length > 0 && (
                       <View style={styles.bookspotSearchResultsList}>
                         {filteredBookspotSearchResults.map((spot) => {
-                          const distanceInfo = currentDistanceInfoForBookspot(spot);
+                          const distanceInfo =
+                            currentDistanceInfoForBookspot(spot);
                           const isSelected = selectedBookspot?.id === spot.id;
 
                           return (
@@ -3023,24 +3290,32 @@ export default function ChatDetailScreen() {
                               key={`search-bookspot-${spot.id}`}
                               style={[
                                 styles.bookspotSearchResultItem,
-                                isSelected && styles.bookspotSearchResultItemSelected,
+                                isSelected &&
+                                  styles.bookspotSearchResultItemSelected,
                               ]}
                               onPress={() => handleSelectBookspot(spot)}
                             >
                               <Text
                                 style={[
                                   styles.bookspotSearchResultTitle,
-                                  isSelected && styles.bookspotSearchResultTitleSelected,
+                                  isSelected &&
+                                    styles.bookspotSearchResultTitleSelected,
                                 ]}
                                 numberOfLines={1}
                               >
                                 {spot.nombre}
                               </Text>
-                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                              <Text
+                                style={styles.bookspotItemAddress}
+                                numberOfLines={2}
+                              >
                                 {spot.addressText}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                                Tu distancia:{" "}
+                                {formatDistanceKm(distanceInfo.myDistanceKm)} ·
+                                Otra persona:{" "}
+                                {formatDistanceKm(distanceInfo.otherDistanceKm)}
                               </Text>
                             </Pressable>
                           );
@@ -3072,23 +3347,30 @@ export default function ChatDetailScreen() {
 
                 {meetingType === "BOOKDROP" && (
                   <View style={{ marginTop: 12 }}>
-                    <Text style={styles.meetingSectionLabel}>BookDrops recomendados</Text>
+                    <Text style={styles.meetingSectionLabel}>
+                      BookDrops recomendados
+                    </Text>
                     <Text style={styles.meetingInfoText}>
-                      Se muestran los 5 que minimizan la distancia para ambos y, despues, priorizan equilibrio.
+                      Se muestran los 5 que minimizan la distancia para ambos y,
+                      despues, priorizan equilibrio.
                     </Text>
 
                     {isLoadingBookdrops && (
                       <View style={styles.bookspotLoadingRow}>
                         <ActivityIndicator size="small" color="#e4715f" />
-                        <Text style={styles.bookspotLoadingText}>Buscando BookDrops cercanos...</Text>
+                        <Text style={styles.bookspotLoadingText}>
+                          Buscando BookDrops cercanos...
+                        </Text>
                       </View>
                     )}
 
                     {!isLoadingBookdrops && recommendedBookdrops.length > 0 && (
                       <View style={styles.bookspotRecommendedList}>
                         {recommendedBookdrops.map((bookdrop) => {
-                          const distanceInfo = currentDistanceInfoForBookspot(bookdrop);
-                          const isSelected = selectedBookdrop?.id === bookdrop.id;
+                          const distanceInfo =
+                            currentDistanceInfoForBookspot(bookdrop);
+                          const isSelected =
+                            selectedBookdrop?.id === bookdrop.id;
 
                           return (
                             <Pressable
@@ -3102,20 +3384,28 @@ export default function ChatDetailScreen() {
                               <Text
                                 style={[
                                   styles.bookspotItemTitle,
-                                  isSelected && styles.bookspotItemTitleSelected,
+                                  isSelected &&
+                                    styles.bookspotItemTitleSelected,
                                 ]}
                                 numberOfLines={1}
                               >
                                 {bookdrop.nombre}
                               </Text>
-                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                              <Text
+                                style={styles.bookspotItemAddress}
+                                numberOfLines={2}
+                              >
                                 {bookdrop.addressText}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                                Tu distancia:{" "}
+                                {formatDistanceKm(distanceInfo.myDistanceKm)} ·
+                                Otra persona:{" "}
+                                {formatDistanceKm(distanceInfo.otherDistanceKm)}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Diferencia: {formatDistanceKm(bookdrop.fairnessGapKm)}
+                                Diferencia:{" "}
+                                {formatDistanceKm(bookdrop.fairnessGapKm)}
                               </Text>
                             </Pressable>
                           );
@@ -3123,7 +3413,11 @@ export default function ChatDetailScreen() {
                       </View>
                     )}
 
-                    <Text style={[styles.meetingSectionLabel, { marginTop: 10 }]}>Buscar otro BookDrop</Text>
+                    <Text
+                      style={[styles.meetingSectionLabel, { marginTop: 10 }]}
+                    >
+                      Buscar otro BookDrop
+                    </Text>
                     <TextInput
                       style={styles.locationInput}
                       value={bookdropSearchQuery}
@@ -3132,39 +3426,52 @@ export default function ChatDetailScreen() {
                       placeholderTextColor="#9CA3AF"
                     />
 
-                    {bookdropSearchQuery.trim().length > 0 && bookdropSearchQuery.trim().length < 2 && (
-                      <Text style={styles.meetingInfoText}>Escribe al menos 2 caracteres para buscar.</Text>
-                    )}
+                    {bookdropSearchQuery.trim().length > 0 &&
+                      bookdropSearchQuery.trim().length < 2 && (
+                        <Text style={styles.meetingInfoText}>
+                          Escribe al menos 2 caracteres para buscar.
+                        </Text>
+                      )}
 
                     {filteredBookdropSearchResults.length > 0 && (
                       <View style={styles.bookspotSearchResultsList}>
                         {filteredBookdropSearchResults.map((bookdrop) => {
-                          const distanceInfo = currentDistanceInfoForBookspot(bookdrop);
-                          const isSelected = selectedBookdrop?.id === bookdrop.id;
+                          const distanceInfo =
+                            currentDistanceInfoForBookspot(bookdrop);
+                          const isSelected =
+                            selectedBookdrop?.id === bookdrop.id;
 
                           return (
                             <Pressable
                               key={`search-bookdrop-${bookdrop.id}`}
                               style={[
                                 styles.bookspotSearchResultItem,
-                                isSelected && styles.bookspotSearchResultItemSelected,
+                                isSelected &&
+                                  styles.bookspotSearchResultItemSelected,
                               ]}
                               onPress={() => handleSelectBookdrop(bookdrop)}
                             >
                               <Text
                                 style={[
                                   styles.bookspotSearchResultTitle,
-                                  isSelected && styles.bookspotSearchResultTitleSelected,
+                                  isSelected &&
+                                    styles.bookspotSearchResultTitleSelected,
                                 ]}
                                 numberOfLines={1}
                               >
                                 {bookdrop.nombre}
                               </Text>
-                              <Text style={styles.bookspotItemAddress} numberOfLines={2}>
+                              <Text
+                                style={styles.bookspotItemAddress}
+                                numberOfLines={2}
+                              >
                                 {bookdrop.addressText}
                               </Text>
                               <Text style={styles.bookspotItemMeta}>
-                                Tu distancia: {formatDistanceKm(distanceInfo.myDistanceKm)} · Otra persona: {formatDistanceKm(distanceInfo.otherDistanceKm)}
+                                Tu distancia:{" "}
+                                {formatDistanceKm(distanceInfo.myDistanceKm)} ·
+                                Otra persona:{" "}
+                                {formatDistanceKm(distanceInfo.otherDistanceKm)}
                               </Text>
                             </Pressable>
                           );
@@ -3194,7 +3501,8 @@ export default function ChatDetailScreen() {
 
                     {!isLoadingBookdrops && rankedBookdrops.length > 0 && (
                       <Text style={styles.meetingInfoText}>
-                        Si no quieres un punto de entrega, cambia el tipo de encuentro a Ubicacion arbitraria o BookSpot.
+                        Si no quieres un punto de entrega, cambia el tipo de
+                        encuentro a Ubicacion arbitraria o BookSpot.
                       </Text>
                     )}
                   </View>

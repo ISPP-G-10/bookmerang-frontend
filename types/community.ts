@@ -50,6 +50,8 @@ export interface CommunityMeetupAttendeeDto {
   username: string;
   selectedBookId: number;
   selectedBookTitle: string;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface CommunityMeetupDto {
@@ -96,6 +98,8 @@ export interface CommunityRankingEntryDto {
   inkdropsThisMonth: number;
   exchangesCount?: number;
   streakDays?: number;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface CommunityRankingDto {
