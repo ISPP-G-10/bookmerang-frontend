@@ -1,70 +1,91 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { authService } from '@/lib/authService';
 
 interface TutorialContextType {
   tutorialCompleted: boolean;
   tutorialLoading: boolean;
+  tutorialReplayRequested: boolean;
   completeTutorial: () => Promise<void>;
-  resetTutorial: () => Promise<void>;
+  requestTutorialReplay: () => void;
 }
 
 const TutorialContext = createContext<TutorialContextType>({
   tutorialCompleted: false,
   tutorialLoading: true,
+  tutorialReplayRequested: false,
   completeTutorial: async () => {},
-  resetTutorial: async () => {},
+  requestTutorialReplay: () => {},
 });
 
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const { currentUserId, loading: authLoading } = useAuth();
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
   const [tutorialLoading, setTutorialLoading] = useState(true);
-
-  const getTutorialKey = useCallback(() => {
-    if (currentUserId) {
-      return `bookmerang_tutorial_completed_${currentUserId}`;
-    }
-    return 'bookmerang_tutorial_completed';
-  }, [currentUserId]);
+  const [tutorialReplayRequested, setTutorialReplayRequested] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
 
-    const key = getTutorialKey();
-    setTutorialLoading(true);
-    AsyncStorage.getItem(key).then((value) => {
-      setTutorialCompleted(value === 'true');
+    if (!currentUserId) {
+      setTutorialCompleted(false);
+      setTutorialReplayRequested(false);
       setTutorialLoading(false);
-    });
-  }, [authLoading, getTutorialKey]);
+      return;
+    }
+
+    let cancelled = false;
+    setTutorialLoading(true);
+    authService.getTutorialStatus(currentUserId)
+      .then((status) => {
+        if (cancelled) return;
+        setTutorialCompleted(status.tutorialCompleted === true);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error('Failed to load tutorial completion status:', e);
+        setTutorialCompleted(true);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setTutorialLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, currentUserId]);
 
   const completeTutorial = useCallback(async () => {
-    const key = getTutorialKey();
-    try {
-      await AsyncStorage.setItem(key, 'true');
-      setTutorialCompleted(true);
-    } catch (e) {
-      console.error('Failed to set tutorial completion flag:', e);
-    }
-  }, [getTutorialKey]);
+    setTutorialReplayRequested(false);
+    if (!currentUserId) return;
 
-  const resetTutorial = useCallback(async () => {
-    const key = getTutorialKey();
     try {
-      await AsyncStorage.removeItem(key);
-      setTutorialCompleted(false);
+      const status = await authService.updateTutorialStatus(currentUserId, true);
+      setTutorialCompleted(status.tutorialCompleted === true);
     } catch (e) {
-      console.error('Failed to remove tutorial completion flag:', e);
+      console.error('Failed to persist tutorial completion flag:', e);
+      setTutorialCompleted(true);
     }
-  }, [getTutorialKey]);
+  }, [currentUserId]);
+
+  const requestTutorialReplay = useCallback(() => {
+    setTutorialReplayRequested(true);
+  }, []);
 
   return (
-    <TutorialContext.Provider value={{ tutorialCompleted, tutorialLoading, completeTutorial, resetTutorial }}>
+    <TutorialContext.Provider
+      value={{
+        tutorialCompleted,
+        tutorialLoading,
+        tutorialReplayRequested,
+        completeTutorial,
+        requestTutorialReplay,
+      }}
+    >
       {children}
     </TutorialContext.Provider>
   );
 }
 
 export const useTutorial = () => useContext(TutorialContext);
-

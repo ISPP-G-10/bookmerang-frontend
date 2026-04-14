@@ -80,6 +80,10 @@ export interface UserPreferencesResponse {
   };
 }
 
+export interface TutorialStatusResponse {
+  tutorialCompleted: boolean;
+}
+
 export const authService = {
   async signIn(email: string, password: string) {
     const normalizedEmail = normalizeEmail(email);
@@ -262,6 +266,32 @@ export const authService = {
 
     if (!response.ok) {
       throw new Error(await readApiError(response, "Error al obtener preferencias"));
+    }
+
+    return response.json();
+  },
+
+  async getTutorialStatus(userId: string): Promise<TutorialStatusResponse> {
+    const response = await apiRequest(`/users/${userId}/preferences/tutorial`);
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al obtener el estado del tutorial"));
+    }
+
+    return response.json();
+  },
+
+  async updateTutorialStatus(
+    userId: string,
+    tutorialCompleted: boolean,
+  ): Promise<TutorialStatusResponse> {
+    const response = await apiRequest(`/users/${userId}/preferences/tutorial`, {
+      method: "PUT",
+      body: JSON.stringify({ tutorialCompleted }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al actualizar el estado del tutorial"));
     }
 
     return response.json();
