@@ -1132,6 +1132,29 @@ export default function ChatDetailScreen() {
     }
   }, [chatId, backendUserId, currentUserId, router]);
 
+  // Polling del estado del intercambio y del meeting para reflejar acciones
+  // del otro usuario (aceptaciones, propuestas de quedada, etc.) sin necesidad
+  // de refresh manual.
+  const refreshExchange = useCallback(async () => {
+    if (!chatId || chat?.type === "COMMUNITY") return;
+
+    try {
+      const exchangeData = await getExchangeByChatIdWithMatch(exchangeChatId);
+      if (!exchangeData) return;
+
+      setExchange((prev) =>
+        prev ? { ...prev, ...exchangeData } : exchangeData,
+      );
+
+      const meetingData = await getMeetingByExchangeId(exchangeData.exchangeId);
+      setExchangeMeeting((prev) =>
+        meetingData ? (prev ? { ...prev, ...meetingData } : meetingData) : null,
+      );
+    } catch {
+      // Silenciar errores de polling de intercambio
+    }
+  }, [chatId, exchangeChatId, chat?.type]);
+
   useEffect(() => {
     loadData();
     refreshTyping();
@@ -1141,9 +1164,10 @@ export default function ChatDetailScreen() {
     const interval = setInterval(() => {
       refreshMessages();
       refreshTyping();
+      refreshExchange();
     }, 3000);
     return () => clearInterval(interval);
-  }, [refreshMessages, refreshTyping]);
+  }, [refreshMessages, refreshTyping, refreshExchange]);
 
   useEffect(() => {
     if (!chatId) return;
