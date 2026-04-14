@@ -42,7 +42,6 @@ import {
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
   rejectExchange,
-  rejectExchangeMeeting,
   reportExchange,
 } from "@/lib/exchangeApi";
 import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
@@ -289,7 +288,7 @@ export default function ChatDetailScreen() {
     (() => Promise<void>) | null
   >(null);
   const [confirmMode, setConfirmMode] = useState<
-    "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject" | null
+    "accept" | "reject" | "meeting-accept" | null
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
@@ -298,6 +297,9 @@ export default function ChatDetailScreen() {
   const [meetingType, setMeetingType] = useState<MeetingType>("ARBITRARY");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
+  const [meetingDateError, setMeetingDateError] = useState<string | null>(null);
+  const [meetingTimeError, setMeetingTimeError] = useState<string | null>(null);
+  const [meetingFormError, setMeetingFormError] = useState<string | null>(null);
   const [meetingLocation, setMeetingLocation] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
@@ -348,11 +350,13 @@ export default function ChatDetailScreen() {
 
   const handleDateConfirm = (value: Date) => {
     setMeetingDate(formatMeetingDate(value));
+    setMeetingDateError(null);
     setDatePickerVisible(false);
   };
 
   const handleTimeConfirm = (value: Date) => {
     setMeetingTime(formatMeetingTime(value));
+    setMeetingTimeError(null);
     setTimePickerVisible(false);
   };
 
@@ -468,6 +472,9 @@ export default function ChatDetailScreen() {
   const getTodayMinAllowedDateTime = () => {
     const min = new Date();
     min.setMinutes(min.getMinutes() + MIN_MEETING_LEAD_MINUTES);
+    if (min.getSeconds() > 0 || min.getMilliseconds() > 0) {
+      min.setMinutes(min.getMinutes() + 1);
+    }
     min.setSeconds(0, 0);
     return min;
   };
@@ -520,26 +527,28 @@ export default function ChatDetailScreen() {
   };
 
   const validateMeetingDateTime = () => {
-    const scheduledAt = buildMeetingDateTime();
-    if (!scheduledAt) {
-      setError("Debes indicar fecha y hora válidas para el encuentro.");
-      return false;
+    const parsedDate = parseMeetingDate(meetingDate);
+    const parsedTime = parseMeetingTime(meetingTime);
+
+    const dateError = parsedDate ? null : "Indica una fecha válida.";
+    let timeError = parsedTime ? null : "Indica una hora válida.";
+
+    if (parsedDate && parsedTime) {
+      const scheduledAt = buildMeetingDateTime();
+      const now = new Date();
+      const minToday = getTodayMinAllowedDateTime();
+
+      if (scheduledAt && isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
+        timeError = "Para hoy, la hora debe ser al menos 5 minutos posterior a la actual.";
+      } else if (scheduledAt && scheduledAt <= now) {
+        timeError = "La fecha y hora del encuentro debe ser posterior a la actual.";
+      }
     }
 
-    const now = new Date();
-    const minToday = getTodayMinAllowedDateTime();
+    setMeetingDateError(dateError);
+    setMeetingTimeError(timeError);
 
-    if (isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
-      setError("Si propones para hoy, la hora debe ser al menos 5 minutos posterior a la actual.");
-      return false;
-    }
-
-    if (scheduledAt <= now) {
-      setError("La fecha y hora del encuentro debe ser posterior a la actual.");
-      return false;
-    }
-
-    return true;
+    return !dateError && !timeError;
   };
 
   const openDateSelector = () => {
@@ -559,7 +568,7 @@ export default function ChatDetailScreen() {
     const now = new Date();
 
     if (selectedDate && isSameCalendarDay(selectedDate, now) && !hasAvailableMinutesToday()) {
-      setError("Para hoy ya no quedan horas disponibles. Elige una fecha posterior.");
+      setMeetingTimeError("Para hoy ya no quedan horas disponibles. Elige una fecha posterior.");
       setWebTimePanelVisible(false);
       setTimePickerVisible(false);
       return;
@@ -602,41 +611,43 @@ export default function ChatDetailScreen() {
   const closeMeetingForm = () => {
     setMeetingFormVisible(false);
     setIsCounterProposalMode(false);
+    setMeetingDateError(null);
+    setMeetingTimeError(null);
+    setMeetingFormError(null);
   };
 
   const submitMeetingProposal = async () => {
+    setMeetingFormError(null);
     if (!validateMeetingDateTime()) return;
     if (!exchange) {
-      setError("No se pudo identificar el intercambio para crear la propuesta.");
+      setMeetingFormError("No se pudo identificar el intercambio para crear la propuesta.");
       return;
     }
     if (meetingSubmitting) return;
 
     if (meetingType === "ARBITRARY" && !meetingLocation.trim()) {
-      setError("Debes indicar una ubicación para el encuentro.");
+      setMeetingFormError("Debes indicar una ubicación para el encuentro.");
       return;
     }
 
     if (meetingType === "ARBITRARY" && !selectedLocationSuggestion) {
-      setError("Selecciona una ubicación válida desde las sugerencias.");
+      setMeetingFormError("Selecciona una ubicación válida desde las sugerencias.");
       return;
     }
 
     if (meetingType === "BOOKSPOT" && !selectedBookspot) {
-      setError("Selecciona un BookSpot recomendado o busca uno manualmente.");
+      setMeetingFormError("Selecciona un BookSpot recomendado o busca uno manualmente.");
       return;
     }
 
     if (meetingType === "BOOKDROP" && !selectedBookdrop) {
-      setError("Selecciona uno de los BookDrops recomendados.");
+      setMeetingFormError("Selecciona uno de los BookDrops recomendados.");
       return;
     }
 
+    // validateMeetingDateTime ya garantiza que scheduledAt es válido.
     const scheduledAt = buildMeetingDateTime();
-    if (!scheduledAt) {
-      setError("Debes indicar fecha y hora válidas para el encuentro.");
-      return;
-    }
+    if (!scheduledAt) return;
 
     const payload = {
       exchangeId: exchange.exchangeId,
@@ -660,6 +671,7 @@ export default function ChatDetailScreen() {
     try {
       setMeetingSubmitting(true);
       setError(null);
+      setMeetingFormError(null);
 
       const savedMeeting =
         isCounterProposalMode && exchangeMeeting
@@ -677,7 +689,7 @@ export default function ChatDetailScreen() {
         err instanceof Error
           ? err.message
           : "No se pudo guardar la propuesta de quedada.";
-      setError(message);
+      setMeetingFormError(message);
     } finally {
       setMeetingSubmitting(false);
     }
@@ -1002,17 +1014,19 @@ export default function ChatDetailScreen() {
     setMeetingDate(formatMeetingDate(date));
     setWebDateCursor(new Date(date.getFullYear(), date.getMonth(), 1));
     setWebDatePanelVisible(false);
+    setMeetingDateError(null);
     setError(null);
   };
 
   const applyWebTimeSelection = () => {
     if (isWebTimeOptionDisabled(webHourDraft, webMinuteDraft)) {
-      setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
+      setMeetingTimeError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
       return;
     }
 
     setMeetingTime(`${pad2(webHourDraft)}:${pad2(webMinuteDraft)}`);
     setWebTimePanelVisible(false);
+    setMeetingTimeError(null);
     setError(null);
   };
 
@@ -1132,6 +1146,31 @@ export default function ChatDetailScreen() {
     }
   }, [chatId, backendUserId, currentUserId, router]);
 
+  // Polling del estado del intercambio y del meeting para reflejar acciones
+  // del otro usuario (aceptaciones, propuestas de quedada, etc.) sin necesidad
+  // de refresh manual. Se pausa mientras el modal de proponer encuentro está
+  // abierto para evitar re-renders que parpadean el formulario; al cerrarlo,
+  // el siguiente tick reconcilia.
+  const refreshExchange = useCallback(async () => {
+    if (!chatId || chat?.type === "COMMUNITY" || meetingFormVisible) return;
+
+    try {
+      const exchangeData = await getExchangeByChatIdWithMatch(exchangeChatId);
+      if (!exchangeData) return;
+
+      setExchange((prev) =>
+        prev ? { ...prev, ...exchangeData } : exchangeData,
+      );
+
+      const meetingData = await getMeetingByExchangeId(exchangeData.exchangeId);
+      setExchangeMeeting((prev) =>
+        meetingData ? (prev ? { ...prev, ...meetingData } : meetingData) : null,
+      );
+    } catch {
+      // Silenciar errores de polling de intercambio
+    }
+  }, [chatId, exchangeChatId, chat?.type, meetingFormVisible]);
+
   useEffect(() => {
     loadData();
     refreshTyping();
@@ -1141,9 +1180,10 @@ export default function ChatDetailScreen() {
     const interval = setInterval(() => {
       refreshMessages();
       refreshTyping();
+      refreshExchange();
     }, 3000);
     return () => clearInterval(interval);
-  }, [refreshMessages, refreshTyping]);
+  }, [refreshMessages, refreshTyping, refreshExchange]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -1532,27 +1572,15 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const executeRejectExchange = async (cleanupMeetingFirst: boolean) => {
+  // Solo se puede desestimar durante la negociación, y en esos estados nunca
+  // existe meeting (se crea únicamente cuando exchange.status === ACCEPTED).
+  const handleRejectExchange = async () => {
     if (!exchange?.exchangeId) return;
     setError(null);
 
     try {
-      if (
-        cleanupMeetingFirst &&
-        exchangeMeeting &&
-        (exchangeMeeting.meetingStatus === "PROPOSAL" ||
-          exchangeMeeting.meetingStatus === "ACCEPTED")
-      ) {
-        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-        setExchangeMeeting((prev) =>
-          prev ? { ...prev, meetingStatus: "REFUSED" } : null,
-        );
-      }
-
       const updated = await rejectExchange(exchange.exchangeId);
       setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
-
-      // Tras desestimar, volvemos al listado de chats.
       router.replace("/(tabs)/chat");
     } catch (err) {
       if (
@@ -1569,16 +1597,6 @@ export default function ChatDetailScreen() {
           : "Error al desestimar el intercambio";
       setError(msg);
     }
-  };
-
-  // Desestima el intercambio sin tocar propuestas.
-  const handleRejectExchange = async () => {
-    await executeRejectExchange(false);
-  };
-
-  // Desestima el intercambio eliminando antes la propuesta/quedada activa.
-  const handleRejectExchangeWithMeetingCleanup = async () => {
-    await executeRejectExchange(true);
   };
 
   const getAcceptButtonState = () => {
@@ -1644,8 +1662,12 @@ export default function ChatDetailScreen() {
   };
 
   const acceptBtn = getAcceptButtonState();
+  // Aceptar/Desestimar solo tiene sentido durante la negociación. En cuanto
+  // el exchange alcanza ACCEPTED (ambos aceptaron) el backend ya no permite
+  // rechazar, así que ocultamos los botones y dejamos paso a "Proponer encuentro".
   const showExchangeActions =
     !!exchange &&
+    exchange.status !== "ACCEPTED" &&
     exchange.status !== "REJECTED" &&
     exchange.status !== "INCIDENT" &&
     exchange.status !== "COMPLETED";
@@ -1860,6 +1882,7 @@ export default function ChatDetailScreen() {
     }
 
     setIsCounterProposalMode(true);
+    setMeetingFormError(null);
     setMeetingFormVisible(true);
   };
 
@@ -1967,7 +1990,7 @@ export default function ChatDetailScreen() {
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject",
+    mode: "accept" | "reject" | "meeting-accept",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -1979,13 +2002,7 @@ export default function ChatDetailScreen() {
   };
 
   const openRejectConfirm = () => {
-    const shouldCleanupMeetingFirst = hasMeetingProposal || hasMeetingAccepted;
-    openConfirm(
-      shouldCleanupMeetingFirst
-        ? handleRejectExchangeWithMeetingCleanup
-        : handleRejectExchange,
-      shouldCleanupMeetingFirst ? "reject-with-meeting-cleanup" : "reject",
-    );
+    openConfirm(handleRejectExchange, "reject");
   };
 
   const openAcceptMeetingConfirm = () => {
@@ -2009,28 +2026,12 @@ export default function ChatDetailScreen() {
           confirmLabel: "Desestimar",
           confirmColor: "danger" as const,
         };
-      case "reject-with-meeting-cleanup":
-        return {
-          title: "Desestimar intercambio",
-          message:
-            "Hay una propuesta o quedada activa. Si continuas, primero se eliminara esa propuesta y despues se desestimara el intercambio.",
-          confirmLabel: "Eliminar y desestimar",
-          confirmColor: "danger" as const,
-        };
       case "meeting-accept":
         return {
           title: "Confirmar quedada",
           message: "¿Quieres aceptar esta propuesta de quedada?",
           confirmLabel: "Aceptar quedada",
           confirmColor: "primary" as const,
-        };
-      case "meeting-reject":
-        return {
-          title: "Desestimar quedada",
-          message:
-            "¿Seguro que quieres desestimar esta propuesta de quedada? Podrás enviar una nueva propuesta después.",
-          confirmLabel: "Desestimar",
-          confirmColor: "danger" as const,
         };
       default:
         return {
@@ -2109,14 +2110,31 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        {exchange?.status === "REJECTED" && (
-          <View style={styles.finalizationBannerRejected}>
-            <FontAwesome name="ban" size={18} color="#fff" />
-            <Text style={styles.finalizationBannerTextRejected}>
-              Intercambio desestimado
-            </Text>
-          </View>
-        )}
+        {/* Banner de rechazo por cascada: el libro ya fue intercambiado en otro
+            match. Detectable porque tras los cambios del backend el rechazo
+            manual solo ocurre en estados sin meeting, por lo que un meeting
+            REFUSED junto a un exchange REJECTED solo puede venir de la
+            invalidación colateral. */}
+        {exchange?.status === "REJECTED" &&
+          exchangeMeeting?.meetingStatus === "REFUSED" && (
+            <View style={styles.finalizationBannerCollateral}>
+              <FontAwesome name="info-circle" size={18} color="#fff" />
+              <Text style={styles.finalizationBannerTextCollateral}>
+                Uno de los libros ya ha sido intercambiado
+              </Text>
+            </View>
+          )}
+
+        {/* Banner de rechazo genérico */}
+        {exchange?.status === "REJECTED" &&
+          exchangeMeeting?.meetingStatus !== "REFUSED" && (
+            <View style={styles.finalizationBannerRejected}>
+              <FontAwesome name="ban" size={18} color="#fff" />
+              <Text style={styles.finalizationBannerTextRejected}>
+                Intercambio rechazado
+              </Text>
+            </View>
+          )}
 
         {/* Banner de intercambio */}
         {exchange && myBook && otherBook && (
@@ -2269,6 +2287,7 @@ export default function ChatDetailScreen() {
               onPress={() => {
                 setIsCounterProposalMode(false);
                 setMeetingType("ARBITRARY");
+                setMeetingFormError(null);
                 setMeetingFormVisible(true);
               }}
             >
@@ -2738,6 +2757,9 @@ export default function ChatDetailScreen() {
                       </Text>
                     </Pressable>
                   )}
+                  {meetingDateError && (
+                    <Text style={styles.meetingFieldError}>{meetingDateError}</Text>
+                  )}
                 </View>
 
                 {/* Hora */}
@@ -2858,6 +2880,9 @@ export default function ChatDetailScreen() {
                         {meetingTime || "--:--"}
                       </Text>
                     </Pressable>
+                  )}
+                  {meetingTimeError && (
+                    <Text style={styles.meetingFieldError}>{meetingTimeError}</Text>
                   )}
                   {getSameDayMinTimeLabel() && (
                     <Text style={styles.meetingInfoText}>
@@ -3175,6 +3200,12 @@ export default function ChatDetailScreen() {
                   </View>
                 )}
 
+                {meetingFormError && (
+                  <Text style={[styles.meetingFieldError, styles.meetingFormErrorBanner]}>
+                    {meetingFormError}
+                  </Text>
+                )}
+
                 {/* Botón Enviar propuesta */}
                 <Pressable
                   style={({ pressed }) => [
@@ -3229,7 +3260,7 @@ export default function ChatDetailScreen() {
               );
 
               if (candidate < getTodayMinAllowedDateTime()) {
-                setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
+                setMeetingTimeError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
                 setTimePickerVisible(false);
                 return;
               }
@@ -3629,15 +3660,38 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 4,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: "#9CA3AF",
+    paddingVertical: 12,
+    backgroundColor: "#6B7280",
+    borderRadius: 8,
     borderTopWidth: 3,
-    borderTopColor: "#6B7280",
+    borderTopColor: "#374151",
     borderBottomWidth: 3,
-    borderBottomColor: "#6B7280",
+    borderBottomColor: "#374151",
   },
   finalizationBannerTextRejected: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerCollateral: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#F59E0B",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#B45309",
+    borderBottomWidth: 3,
+    borderBottomColor: "#B45309",
+  },
+  finalizationBannerTextCollateral: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",
@@ -4102,6 +4156,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9CA3AF",
     backgroundColor: "transparent",
+  },
+  meetingFieldError: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#DC2626",
+    backgroundColor: "transparent",
+  },
+  meetingFormErrorBanner: {
+    marginTop: 16,
+    fontSize: 13,
+    textAlign: "center",
   },
   meetingPlaceholder: {
     fontSize: 13,
