@@ -1142,9 +1142,11 @@ export default function ChatDetailScreen() {
 
   // Polling del estado del intercambio y del meeting para reflejar acciones
   // del otro usuario (aceptaciones, propuestas de quedada, etc.) sin necesidad
-  // de refresh manual.
+  // de refresh manual. Se pausa mientras el modal de proponer encuentro está
+  // abierto para evitar re-renders que parpadean el formulario; al cerrarlo,
+  // el siguiente tick reconcilia.
   const refreshExchange = useCallback(async () => {
-    if (!chatId || chat?.type === "COMMUNITY") return;
+    if (!chatId || chat?.type === "COMMUNITY" || meetingFormVisible) return;
 
     try {
       const exchangeData = await getExchangeByChatIdWithMatch(exchangeChatId);
@@ -1161,7 +1163,7 @@ export default function ChatDetailScreen() {
     } catch {
       // Silenciar errores de polling de intercambio
     }
-  }, [chatId, exchangeChatId, chat?.type]);
+  }, [chatId, exchangeChatId, chat?.type, meetingFormVisible]);
 
   useEffect(() => {
     loadData();
