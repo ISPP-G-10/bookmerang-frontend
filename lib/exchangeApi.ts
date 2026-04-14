@@ -246,12 +246,6 @@ export async function acceptExchangeMeeting(meetingId: number): Promise<Exchange
   return normalizeMeeting(await res.json());
 }
 
-export async function rejectExchangeMeeting(_meetingId: number): Promise<void> {
-  throw new Error(
-    "rejectExchangeMeeting no está soportado por ExchangeMeetingController. Ese controlador no expone DELETE /api/exchangemeeting/{meetingId}.",
-  );
-}
-
 export async function completeExchangeMeeting(meetingId: number): Promise<ExchangeMeetingDto> {
   const res = await apiRequest(`/ExchangeMeeting/${meetingId}/complete`, {
     method: "PUT",

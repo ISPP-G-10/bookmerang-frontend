@@ -42,7 +42,6 @@ import {
   getExchangeByChatIdWithMatch,
   getMeetingByExchangeId,
   rejectExchange,
-  rejectExchangeMeeting,
   reportExchange,
 } from "@/lib/exchangeApi";
 import { reverseGeocode, searchGeocodingSuggestions } from "@/lib/geocodingApi";
@@ -289,7 +288,7 @@ export default function ChatDetailScreen() {
     (() => Promise<void>) | null
   >(null);
   const [confirmMode, setConfirmMode] = useState<
-    "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject" | null
+    "accept" | "reject" | "meeting-accept" | null
   >(null);
   const [meetingFormVisible, setMeetingFormVisible] = useState(false);
   const [meetingSubmitting, setMeetingSubmitting] = useState(false);
@@ -300,6 +299,7 @@ export default function ChatDetailScreen() {
   const [meetingTime, setMeetingTime] = useState("");
   const [meetingDateError, setMeetingDateError] = useState<string | null>(null);
   const [meetingTimeError, setMeetingTimeError] = useState<string | null>(null);
+  const [meetingFormError, setMeetingFormError] = useState<string | null>(null);
   const [meetingLocation, setMeetingLocation] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
@@ -472,6 +472,9 @@ export default function ChatDetailScreen() {
   const getTodayMinAllowedDateTime = () => {
     const min = new Date();
     min.setMinutes(min.getMinutes() + MIN_MEETING_LEAD_MINUTES);
+    if (min.getSeconds() > 0 || min.getMilliseconds() > 0) {
+      min.setMinutes(min.getMinutes() + 1);
+    }
     min.setSeconds(0, 0);
     return min;
   };
@@ -565,7 +568,7 @@ export default function ChatDetailScreen() {
     const now = new Date();
 
     if (selectedDate && isSameCalendarDay(selectedDate, now) && !hasAvailableMinutesToday()) {
-      setError("Para hoy ya no quedan horas disponibles. Elige una fecha posterior.");
+      setMeetingTimeError("Para hoy ya no quedan horas disponibles. Elige una fecha posterior.");
       setWebTimePanelVisible(false);
       setTimePickerVisible(false);
       return;
@@ -610,33 +613,35 @@ export default function ChatDetailScreen() {
     setIsCounterProposalMode(false);
     setMeetingDateError(null);
     setMeetingTimeError(null);
+    setMeetingFormError(null);
   };
 
   const submitMeetingProposal = async () => {
+    setMeetingFormError(null);
     if (!validateMeetingDateTime()) return;
     if (!exchange) {
-      setError("No se pudo identificar el intercambio para crear la propuesta.");
+      setMeetingFormError("No se pudo identificar el intercambio para crear la propuesta.");
       return;
     }
     if (meetingSubmitting) return;
 
     if (meetingType === "ARBITRARY" && !meetingLocation.trim()) {
-      setError("Debes indicar una ubicación para el encuentro.");
+      setMeetingFormError("Debes indicar una ubicación para el encuentro.");
       return;
     }
 
     if (meetingType === "ARBITRARY" && !selectedLocationSuggestion) {
-      setError("Selecciona una ubicación válida desde las sugerencias.");
+      setMeetingFormError("Selecciona una ubicación válida desde las sugerencias.");
       return;
     }
 
     if (meetingType === "BOOKSPOT" && !selectedBookspot) {
-      setError("Selecciona un BookSpot recomendado o busca uno manualmente.");
+      setMeetingFormError("Selecciona un BookSpot recomendado o busca uno manualmente.");
       return;
     }
 
     if (meetingType === "BOOKDROP" && !selectedBookdrop) {
-      setError("Selecciona uno de los BookDrops recomendados.");
+      setMeetingFormError("Selecciona uno de los BookDrops recomendados.");
       return;
     }
 
@@ -666,6 +671,7 @@ export default function ChatDetailScreen() {
     try {
       setMeetingSubmitting(true);
       setError(null);
+      setMeetingFormError(null);
 
       const savedMeeting =
         isCounterProposalMode && exchangeMeeting
@@ -683,7 +689,7 @@ export default function ChatDetailScreen() {
         err instanceof Error
           ? err.message
           : "No se pudo guardar la propuesta de quedada.";
-      setError(message);
+      setMeetingFormError(message);
     } finally {
       setMeetingSubmitting(false);
     }
@@ -1566,27 +1572,15 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const executeRejectExchange = async (cleanupMeetingFirst: boolean) => {
+  // Solo se puede desestimar durante la negociación, y en esos estados nunca
+  // existe meeting (se crea únicamente cuando exchange.status === ACCEPTED).
+  const handleRejectExchange = async () => {
     if (!exchange?.exchangeId) return;
     setError(null);
 
     try {
-      if (
-        cleanupMeetingFirst &&
-        exchangeMeeting &&
-        (exchangeMeeting.meetingStatus === "PROPOSAL" ||
-          exchangeMeeting.meetingStatus === "ACCEPTED")
-      ) {
-        await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-        setExchangeMeeting((prev) =>
-          prev ? { ...prev, meetingStatus: "REFUSED" } : null,
-        );
-      }
-
       const updated = await rejectExchange(exchange.exchangeId);
       setExchange((prev) => (prev ? { ...prev, ...updated } : updated));
-
-      // Tras desestimar, volvemos al listado de chats.
       router.replace("/(tabs)/chat");
     } catch (err) {
       if (
@@ -1603,16 +1597,6 @@ export default function ChatDetailScreen() {
           : "Error al desestimar el intercambio";
       setError(msg);
     }
-  };
-
-  // Desestima el intercambio sin tocar propuestas.
-  const handleRejectExchange = async () => {
-    await executeRejectExchange(false);
-  };
-
-  // Desestima el intercambio eliminando antes la propuesta/quedada activa.
-  const handleRejectExchangeWithMeetingCleanup = async () => {
-    await executeRejectExchange(true);
   };
 
   const getAcceptButtonState = () => {
@@ -1678,8 +1662,12 @@ export default function ChatDetailScreen() {
   };
 
   const acceptBtn = getAcceptButtonState();
+  // Aceptar/Desestimar solo tiene sentido durante la negociación. En cuanto
+  // el exchange alcanza ACCEPTED (ambos aceptaron) el backend ya no permite
+  // rechazar, así que ocultamos los botones y dejamos paso a "Proponer encuentro".
   const showExchangeActions =
     !!exchange &&
+    exchange.status !== "ACCEPTED" &&
     exchange.status !== "REJECTED" &&
     exchange.status !== "INCIDENT" &&
     exchange.status !== "COMPLETED";
@@ -1894,6 +1882,7 @@ export default function ChatDetailScreen() {
     }
 
     setIsCounterProposalMode(true);
+    setMeetingFormError(null);
     setMeetingFormVisible(true);
   };
 
@@ -2001,7 +1990,7 @@ export default function ChatDetailScreen() {
 
   const openConfirm = (
     action: () => Promise<void>,
-    mode: "accept" | "reject" | "reject-with-meeting-cleanup" | "meeting-accept" | "meeting-reject",
+    mode: "accept" | "reject" | "meeting-accept",
   ) => {
     setPendingAction(() => action);
     setConfirmVisible(true);
@@ -2013,13 +2002,7 @@ export default function ChatDetailScreen() {
   };
 
   const openRejectConfirm = () => {
-    const shouldCleanupMeetingFirst = hasMeetingProposal || hasMeetingAccepted;
-    openConfirm(
-      shouldCleanupMeetingFirst
-        ? handleRejectExchangeWithMeetingCleanup
-        : handleRejectExchange,
-      shouldCleanupMeetingFirst ? "reject-with-meeting-cleanup" : "reject",
-    );
+    openConfirm(handleRejectExchange, "reject");
   };
 
   const openAcceptMeetingConfirm = () => {
@@ -2043,28 +2026,12 @@ export default function ChatDetailScreen() {
           confirmLabel: "Desestimar",
           confirmColor: "danger" as const,
         };
-      case "reject-with-meeting-cleanup":
-        return {
-          title: "Desestimar intercambio",
-          message:
-            "Hay una propuesta o quedada activa. Si continuas, primero se eliminara esa propuesta y despues se desestimara el intercambio.",
-          confirmLabel: "Eliminar y desestimar",
-          confirmColor: "danger" as const,
-        };
       case "meeting-accept":
         return {
           title: "Confirmar quedada",
           message: "¿Quieres aceptar esta propuesta de quedada?",
           confirmLabel: "Aceptar quedada",
           confirmColor: "primary" as const,
-        };
-      case "meeting-reject":
-        return {
-          title: "Desestimar quedada",
-          message:
-            "¿Seguro que quieres desestimar esta propuesta de quedada? Podrás enviar una nueva propuesta después.",
-          confirmLabel: "Desestimar",
-          confirmColor: "danger" as const,
         };
       default:
         return {
@@ -2142,6 +2109,32 @@ export default function ChatDetailScreen() {
             </Text>
           </View>
         )}
+
+        {/* Banner de rechazo por cascada: el libro ya fue intercambiado en otro
+            match. Detectable porque tras los cambios del backend el rechazo
+            manual solo ocurre en estados sin meeting, por lo que un meeting
+            REFUSED junto a un exchange REJECTED solo puede venir de la
+            invalidación colateral. */}
+        {exchange?.status === "REJECTED" &&
+          exchangeMeeting?.meetingStatus === "REFUSED" && (
+            <View style={styles.finalizationBannerCollateral}>
+              <FontAwesome name="info-circle" size={18} color="#fff" />
+              <Text style={styles.finalizationBannerTextCollateral}>
+                Uno de los libros ya ha sido intercambiado
+              </Text>
+            </View>
+          )}
+
+        {/* Banner de rechazo genérico */}
+        {exchange?.status === "REJECTED" &&
+          exchangeMeeting?.meetingStatus !== "REFUSED" && (
+            <View style={styles.finalizationBannerRejected}>
+              <FontAwesome name="ban" size={18} color="#fff" />
+              <Text style={styles.finalizationBannerTextRejected}>
+                Intercambio rechazado
+              </Text>
+            </View>
+          )}
 
         {/* Banner de intercambio */}
         {exchange && myBook && otherBook && (
@@ -2294,6 +2287,7 @@ export default function ChatDetailScreen() {
               onPress={() => {
                 setIsCounterProposalMode(false);
                 setMeetingType("ARBITRARY");
+                setMeetingFormError(null);
                 setMeetingFormVisible(true);
               }}
             >
@@ -3206,6 +3200,12 @@ export default function ChatDetailScreen() {
                   </View>
                 )}
 
+                {meetingFormError && (
+                  <Text style={[styles.meetingFieldError, styles.meetingFormErrorBanner]}>
+                    {meetingFormError}
+                  </Text>
+                )}
+
                 {/* Botón Enviar propuesta */}
                 <Pressable
                   style={({ pressed }) => [
@@ -3260,7 +3260,7 @@ export default function ChatDetailScreen() {
               );
 
               if (candidate < getTodayMinAllowedDateTime()) {
-                setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
+                setMeetingTimeError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
                 setTimePickerVisible(false);
                 return;
               }
@@ -3646,6 +3646,52 @@ const styles = StyleSheet.create({
     borderBottomColor: "#991B1B",
   },
   finalizationBannerTextIncident: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerRejected: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#6B7280",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#374151",
+    borderBottomWidth: 3,
+    borderBottomColor: "#374151",
+  },
+  finalizationBannerTextRejected: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerCollateral: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: "#F59E0B",
+    borderRadius: 8,
+    borderTopWidth: 3,
+    borderTopColor: "#B45309",
+    borderBottomWidth: 3,
+    borderBottomColor: "#B45309",
+  },
+  finalizationBannerTextCollateral: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",
@@ -4116,6 +4162,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#DC2626",
     backgroundColor: "transparent",
+  },
+  meetingFormErrorBanner: {
+    marginTop: 16,
+    fontSize: 13,
+    textAlign: "center",
   },
   meetingPlaceholder: {
     fontSize: 13,
