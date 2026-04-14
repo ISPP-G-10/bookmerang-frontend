@@ -8,7 +8,6 @@ interface ButtonsConfig {
   bottomPercent: number;       
   dislikeButtonPercent: number; 
   likeButtonPercent: number;    
-  undoButtonPercent: number;   
   buttonGapPercent: number;    
   iconSizeRatio: number;   
 }
@@ -30,7 +29,6 @@ export const MATCHER_LAYOUT: MatcherLayoutConfig = {
     bottomPercent: 0.02,          // 2% desde el bottom
     dislikeButtonPercent: 0.16,   // 16% del ancho de pantalla
     likeButtonPercent: 0.18,      // 18% del ancho de pantalla
-    undoButtonPercent: 0.10,      // 10% del ancho de pantalla
     buttonGapPercent: 0.10,       // 10% del ancho entre botones
     iconSizeRatio: 0.5,           // iconos al 50% del tamaño del botón
   },
