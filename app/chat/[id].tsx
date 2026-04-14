@@ -298,6 +298,8 @@ export default function ChatDetailScreen() {
   const [meetingType, setMeetingType] = useState<MeetingType>("ARBITRARY");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingTime, setMeetingTime] = useState("");
+  const [meetingDateError, setMeetingDateError] = useState<string | null>(null);
+  const [meetingTimeError, setMeetingTimeError] = useState<string | null>(null);
   const [meetingLocation, setMeetingLocation] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
   const [isLoadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
@@ -348,11 +350,13 @@ export default function ChatDetailScreen() {
 
   const handleDateConfirm = (value: Date) => {
     setMeetingDate(formatMeetingDate(value));
+    setMeetingDateError(null);
     setDatePickerVisible(false);
   };
 
   const handleTimeConfirm = (value: Date) => {
     setMeetingTime(formatMeetingTime(value));
+    setMeetingTimeError(null);
     setTimePickerVisible(false);
   };
 
@@ -520,26 +524,28 @@ export default function ChatDetailScreen() {
   };
 
   const validateMeetingDateTime = () => {
-    const scheduledAt = buildMeetingDateTime();
-    if (!scheduledAt) {
-      setError("Debes indicar fecha y hora válidas para el encuentro.");
-      return false;
+    const parsedDate = parseMeetingDate(meetingDate);
+    const parsedTime = parseMeetingTime(meetingTime);
+
+    const dateError = parsedDate ? null : "Indica una fecha válida.";
+    let timeError = parsedTime ? null : "Indica una hora válida.";
+
+    if (parsedDate && parsedTime) {
+      const scheduledAt = buildMeetingDateTime();
+      const now = new Date();
+      const minToday = getTodayMinAllowedDateTime();
+
+      if (scheduledAt && isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
+        timeError = "Para hoy, la hora debe ser al menos 5 minutos posterior a la actual.";
+      } else if (scheduledAt && scheduledAt <= now) {
+        timeError = "La fecha y hora del encuentro debe ser posterior a la actual.";
+      }
     }
 
-    const now = new Date();
-    const minToday = getTodayMinAllowedDateTime();
+    setMeetingDateError(dateError);
+    setMeetingTimeError(timeError);
 
-    if (isSameCalendarDay(scheduledAt, now) && scheduledAt < minToday) {
-      setError("Si propones para hoy, la hora debe ser al menos 5 minutos posterior a la actual.");
-      return false;
-    }
-
-    if (scheduledAt <= now) {
-      setError("La fecha y hora del encuentro debe ser posterior a la actual.");
-      return false;
-    }
-
-    return true;
+    return !dateError && !timeError;
   };
 
   const openDateSelector = () => {
@@ -602,6 +608,8 @@ export default function ChatDetailScreen() {
   const closeMeetingForm = () => {
     setMeetingFormVisible(false);
     setIsCounterProposalMode(false);
+    setMeetingDateError(null);
+    setMeetingTimeError(null);
   };
 
   const submitMeetingProposal = async () => {
@@ -632,11 +640,9 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    // validateMeetingDateTime ya garantiza que scheduledAt es válido.
     const scheduledAt = buildMeetingDateTime();
-    if (!scheduledAt) {
-      setError("Debes indicar fecha y hora válidas para el encuentro.");
-      return;
-    }
+    if (!scheduledAt) return;
 
     const payload = {
       exchangeId: exchange.exchangeId,
@@ -1002,17 +1008,19 @@ export default function ChatDetailScreen() {
     setMeetingDate(formatMeetingDate(date));
     setWebDateCursor(new Date(date.getFullYear(), date.getMonth(), 1));
     setWebDatePanelVisible(false);
+    setMeetingDateError(null);
     setError(null);
   };
 
   const applyWebTimeSelection = () => {
     if (isWebTimeOptionDisabled(webHourDraft, webMinuteDraft)) {
-      setError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
+      setMeetingTimeError("Para hoy, elige una hora al menos 5 minutos posterior a la actual.");
       return;
     }
 
     setMeetingTime(`${pad2(webHourDraft)}:${pad2(webMinuteDraft)}`);
     setWebTimePanelVisible(false);
+    setMeetingTimeError(null);
     setError(null);
   };
 
@@ -2753,6 +2761,9 @@ export default function ChatDetailScreen() {
                       </Text>
                     </Pressable>
                   )}
+                  {meetingDateError && (
+                    <Text style={styles.meetingFieldError}>{meetingDateError}</Text>
+                  )}
                 </View>
 
                 {/* Hora */}
@@ -2873,6 +2884,9 @@ export default function ChatDetailScreen() {
                         {meetingTime || "--:--"}
                       </Text>
                     </Pressable>
+                  )}
+                  {meetingTimeError && (
+                    <Text style={styles.meetingFieldError}>{meetingTimeError}</Text>
                   )}
                   {getSameDayMinTimeLabel() && (
                     <Text style={styles.meetingInfoText}>
@@ -4093,6 +4107,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     color: "#9CA3AF",
+    backgroundColor: "transparent",
+  },
+  meetingFieldError: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#DC2626",
     backgroundColor: "transparent",
   },
   meetingPlaceholder: {
