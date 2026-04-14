@@ -2109,6 +2109,15 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
+        {exchange?.status === "REJECTED" && (
+          <View style={styles.finalizationBannerRejected}>
+            <FontAwesome name="ban" size={18} color="#fff" />
+            <Text style={styles.finalizationBannerTextRejected}>
+              Intercambio desestimado
+            </Text>
+          </View>
+        )}
+
         {/* Banner de intercambio */}
         {exchange && myBook && otherBook && (
           <View style={styles.exchangeBanner}>
@@ -3606,6 +3615,29 @@ const styles = StyleSheet.create({
     borderBottomColor: "#991B1B",
   },
   finalizationBannerTextIncident: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  finalizationBannerRejected: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginHorizontal: 14,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: "#9CA3AF",
+    borderTopWidth: 3,
+    borderTopColor: "#6B7280",
+    borderBottomWidth: 3,
+    borderBottomColor: "#6B7280",
+  },
+  finalizationBannerTextRejected: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",

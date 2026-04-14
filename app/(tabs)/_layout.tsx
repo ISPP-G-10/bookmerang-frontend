@@ -132,7 +132,7 @@ export default function TabLayout() {
                 text={JSON.stringify({
                   icon: '💘',
                   title: 'Matcher',
-                  body: 'Desliza a la derecha ❤️ si un libro te interesa, o a la izquierda ✗ para pasar. Si a la otra persona también le interesa el tuyo, ¡es un match! Puedes deshacer el último swipe con el botón de flecha.',
+                  body: 'Desliza a la derecha ❤️ si un libro te interesa, o a la izquierda ✗ para pasar. Si a la otra persona también le interesa el tuyo, ¡es un match!',
                 })}
                 order={2}
                 name="matcher-tab"
