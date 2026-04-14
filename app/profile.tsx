@@ -1,31 +1,42 @@
+import AnimatedNameDisplay from "@/components/animations/AnimatedNameDisplay";
+import AnimatedProgressBar from "@/components/animations/AnimatedProgressBar";
+import AnimatedReward from "@/components/animations/AnimatedReward";
+import AnimatedStatBox from "@/components/animations/AnimatedStatBox";
+import AvatarWithFrame from "@/components/AvatarWithFrame";
 import Header from "@/components/Header";
 import InkdropsHistoryModal from "@/components/InkdropsHistoryModal";
 import PreferencesModal from "@/components/PreferencesModal";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  DEFAULT_NAME_COLOR,
+  getActiveBadgeEmoji,
+  getNameColorById,
+  getUnlockedRewards,
+  getUserTier,
+} from "@/lib/rewardsSystem";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import { getStoredAuthSession } from "../lib/authSession";
 import {
-    getMyLibrary,
-    toConditionLabel,
-    type BookListItem,
+  getMyLibrary,
+  toConditionLabel,
+  type BookListItem,
 } from "../lib/books";
 
 const mapProfileBooksToLibraryItems = (books: any[]): BookListItem[] => {
   if (!Array.isArray(books)) return [];
-
   return books
     .filter((book) => {
       const status = book?.status ?? book?.bookStatus ?? book?.estado;
@@ -59,8 +70,8 @@ export default function ProfileScreen() {
   const [libraryError, setLibraryError] = useState("");
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
 
-  // Calcular números de columnas basado en ancho de pantalla
   const numColumns = width >= 768 ? 4 : 2;
   const bookWidth = (width - 40 - (numColumns - 1) * 12) / numColumns;
 
@@ -101,8 +112,6 @@ export default function ProfileScreen() {
       const lat = location.coords.latitude;
       const lon = location.coords.longitude;
       setUserLocation({ latitude: lat, longitude: lon });
-
-      // Update backend
       const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
       if (userId) {
         await apiRequest(`/users/${userId}/preferences`, {
@@ -122,7 +131,6 @@ export default function ProfileScreen() {
           }),
         });
       }
-
       const label = await reverseGeocode(lat, lon);
       if (label) setLocationLabel(label);
     } catch {
@@ -164,18 +172,12 @@ export default function ProfileScreen() {
     try {
       const books = await getMyLibrary();
       setLibraryBooks(books);
-    } catch (error: any) {
+    } catch {
       const fallbackBooks = mapProfileBooksToLibraryItems(
         profileData?.books ?? profile?.books,
       );
-
-      if (fallbackBooks.length > 0) {
-        setLibraryBooks(fallbackBooks);
-        setLibraryError("");
-      } else {
-        setLibraryBooks([]);
-        setLibraryError("");
-      }
+      setLibraryBooks(fallbackBooks.length > 0 ? fallbackBooks : []);
+      setLibraryError("");
     } finally {
       setLibraryLoading(false);
     }
@@ -184,7 +186,6 @@ export default function ProfileScreen() {
   const handleOpenLibraryBook = useCallback(
     async (bookId: number) => {
       if (!Number.isFinite(bookId) || bookId <= 0) return;
-
       router.push(`/books/${bookId}` as any);
     },
     [router],
@@ -197,13 +198,11 @@ export default function ProfileScreen() {
       router.replace("/login" as any);
       return null;
     }
-
     try {
       const res = await apiRequest("/Auth/perfil", { method: "GET" });
       if (res.ok) {
         const json = await res.json();
         setProfile(json);
-
         const maybeLat =
           json.latitud ??
           json.Latitud ??
@@ -219,22 +218,18 @@ export default function ProfileScreen() {
           json.lon ??
           json.Lon ??
           json.Long;
-
         const parsedLat =
           typeof maybeLat === "string" ? Number(maybeLat) : maybeLat;
         const parsedLon =
           typeof maybeLon === "string" ? Number(maybeLon) : maybeLon;
-
         if (parsedLat && parsedLon && !isNaN(parsedLat) && !isNaN(parsedLon)) {
           setUserLocation({ latitude: parsedLat, longitude: parsedLon });
           reverseGeocodeAndSet(parsedLat, parsedLon);
         } else if (json.location) {
           setLocationLabel(json.location);
         }
-
         return json;
       }
-
       const u = session?.user;
       setProfile({
         email: u?.email,
@@ -259,14 +254,10 @@ export default function ProfileScreen() {
     (async () => {
       setLoading(true);
       const currentSession = await getStoredAuthSession();
-      const currentUser = currentSession?.user;
-      if (!currentUser) {
+      if (!currentSession?.user) {
         setLoading(false);
         return router.replace("/login" as any);
       }
-
-      // 1️⃣ Cargar géneros PRIMERO
-      let loadedGenres: any[] = [];
       try {
         const genreRes = await fetch(
           `${process.env.EXPO_PUBLIC_API_URL}/genres`,
@@ -274,22 +265,14 @@ export default function ProfileScreen() {
         );
         if (genreRes.ok) {
           const genres = await genreRes.json();
-          if (Array.isArray(genres)) {
-            loadedGenres = genres;
-            setAvailableGenres(genres);
-          }
+          if (Array.isArray(genres)) setAvailableGenres(genres);
         }
       } catch (err) {
         console.error("Error fetching genres:", err);
       }
-
       const profileData = await loadProfileData();
-
-      if (profileData) {
-        await loadLibrary(profileData);
-      } else {
-        await loadLibrary();
-      }
+      if (profileData) await loadLibrary(profileData);
+      else await loadLibrary();
       setLoading(false);
     })();
   }, []);
@@ -334,10 +317,10 @@ export default function ProfileScreen() {
       }
       let extension = "MEDIUM";
       if (newPreferences.bookLength.length > 0) {
-        const lengths = newPreferences.bookLength;
-        if (lengths.includes("0-200")) extension = "SHORT";
-        else if (lengths.includes("200-400")) extension = "MEDIUM";
-        else if (lengths.includes("400+")) extension = "LONG";
+        if (newPreferences.bookLength.includes("0-200")) extension = "SHORT";
+        else if (newPreferences.bookLength.includes("200-400"))
+          extension = "MEDIUM";
+        else if (newPreferences.bookLength.includes("400+")) extension = "LONG";
       }
       const res = await apiRequest(`/users/${userId}/preferences`, {
         method: "PUT",
@@ -369,23 +352,18 @@ export default function ProfileScreen() {
     setPreferencesOpen(true);
     setPreferencesLoading(true);
     setPreferencesError("");
-
     try {
       const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
       if (!userId) return;
-
       const prefsRes = await apiRequest(`/users/${userId}/preferences`, {
         method: "GET",
       });
-
       if (prefsRes.ok) {
         const prefs = await prefsRes.json();
-
         const bookLengths: string[] = [];
         if (prefs.extension === "SHORT") bookLengths.push("0-200");
         else if (prefs.extension === "MEDIUM") bookLengths.push("200-400");
         else if (prefs.extension === "LONG") bookLengths.push("400+");
-
         const genreNames: string[] = [];
         if (
           prefs.genreIds &&
@@ -397,7 +375,6 @@ export default function ProfileScreen() {
             if (genre) genreNames.push(genre.name);
           });
         }
-
         setPreferences({
           distanceKm: prefs.radioKm || 10,
           genres: genreNames,
@@ -405,7 +382,6 @@ export default function ProfileScreen() {
         });
       }
     } catch {
-      // Keep defaults if preferences are not available yet.
     } finally {
       setPreferencesLoading(false);
     }
@@ -426,7 +402,18 @@ export default function ProfileScreen() {
     );
   }
 
+  // ── Datos de recompensas derivados del nivel ──
+  const userLevel = profile?.level ?? 1;
+  const tier = getUserTier(userLevel);
+  const badgeEmoji = getActiveBadgeEmoji(userLevel);
+  const nameColor = profile?.activeColorId
+    ? (getNameColorById(profile.activeColorId)?.color ?? DEFAULT_NAME_COLOR)
+    : DEFAULT_NAME_COLOR;
+  const unlockedRewards = getUnlockedRewards(userLevel);
   const progressPercent = profile?.progress ?? 0.45;
+
+  // Colores del tier para la barra de progreso
+  const tierColor = tier?.color ?? "#e07a5f";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fdfbf7" }}>
@@ -455,7 +442,6 @@ export default function ProfileScreen() {
             <Text style={{ fontSize: 20, fontWeight: "900", color: "#3e2723" }}>
               Mi Perfil
             </Text>
-            {/* Engranaje → navega a /settings */}
             <TouchableOpacity
               onPress={() => router.push("/settings" as any)}
               style={{
@@ -471,54 +457,25 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <View
-            style={{
-              width: 112,
-              height: 112,
-              borderRadius: 56,
-              backgroundColor: "#ffffff",
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-              borderWidth: 4,
-              borderColor: "#ffffff",
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 5,
-            }}
-          >
-            {profile?.avatar || profile?.profilePhoto ? (
-              <Image
-                source={{ uri: profile?.avatar ?? profile?.profilePhoto }}
-                style={{ width: 112, height: 112 }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 112,
-                  height: 112,
-                  backgroundColor: "#e07a5f",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ fontSize: 48 }}>👤</Text>
-              </View>
-            )}
-          </View>
+          {/* Avatar con marco */}
+          <AvatarWithFrame
+            avatarUri={profile?.avatar}
+            profilePhoto={profile?.profilePhoto}
+            size={112}
+            activeFrameId={profile?.activeFrameId ?? null}
+          />
 
-          <Text
+          {/* Nombre con color activo y shine opcional para tier alto */}
+          <AnimatedNameDisplay
+            name={profile?.name ?? "—"}
+            color={nameColor}
+            isHighTier={userLevel >= 20}
+            size={24}
+            weight="900"
             style={{
-              fontSize: 24,
-              fontWeight: "900",
               marginTop: 16,
-              color: "#3e2723",
             }}
-          >
-            {profile?.name ?? "—"}
-          </Text>
+          />
           <Text
             style={{
               marginTop: 4,
@@ -529,6 +486,8 @@ export default function ProfileScreen() {
           >
             {profile?.username ? `@${profile.username}` : "—"}
           </Text>
+
+          {/* Ubicación */}
           <View
             style={{
               flexDirection: "row",
@@ -565,59 +524,18 @@ export default function ProfileScreen() {
             marginBottom: 12,
           }}
         >
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "#ffffff",
-              borderRadius: 16,
-              padding: 16,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#F3E9E0",
-            }}
-          >
+          {/* Nivel + badge */}
+          <AnimatedStatBox index={0} delay={200} style={{ flex: 1 }}>
             <View
               style={{
-                flexDirection: "row",
+                backgroundColor: "#ffffff",
+                borderRadius: 16,
+                padding: 16,
                 alignItems: "center",
-                gap: 6,
-                marginBottom: 4,
+                borderWidth: 1,
+                borderColor: "#F3E9E0",
               }}
             >
-              <FontAwesome name="trophy" size={20} color="#CD7F32" />
-              <Text
-                style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
-              >
-                {profile?.level ?? 6}
-              </Text>
-            </View>
-            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
-              Nivel
-            </Text>
-            <Text
-              style={{
-                fontSize: 10,
-                fontWeight: "900",
-                color: "#CD7F32",
-                marginTop: 4,
-              }}
-            >
-              {profile?.tier ?? "BRONCE"}
-            </Text>
-          </View>
-
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: "#ffffff",
-              borderRadius: 16,
-              padding: 16,
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: "#F3E9E0",
-            }}
-          >
-            <View style={{ width: "100%", alignItems: "center" }}>
               <View
                 style={{
                   flexDirection: "row",
@@ -626,49 +544,96 @@ export default function ProfileScreen() {
                   marginBottom: 4,
                 }}
               >
-                <FontAwesome name="tint" size={20} color="#e07a5f" />
+                {/* Badge dinámico según nivel — sustituye al trofeo fijo */}
+                <Text style={{ fontSize: 20 }}>{badgeEmoji}</Text>
                 <Text
                   style={{ fontSize: 26, fontWeight: "900", color: "#3e2723" }}
                 >
-                  {profile?.monthlyInkDrops ?? 250}
+                  {userLevel}
                 </Text>
               </View>
               <Text
                 style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}
               >
-                InkDrops
+                Nivel
               </Text>
               <Text
                 style={{
                   fontSize: 10,
-                  fontWeight: "700",
-                  color: "#8B7355",
-                  marginTop: 2,
+                  fontWeight: "900",
+                  color: tierColor,
+                  marginTop: 4,
                 }}
               >
-                MENSUALES
-              </Text>
-              <Text
-                style={{
-                  fontSize: 9,
-                  fontWeight: "700",
-                  color: "#e07a5f",
-                  marginTop: 2,
-                }}
-              >
-                Reinicia en {profile?.daysUntilReset ?? 12} días
+                {tier?.name.toUpperCase() ?? profile?.tier ?? "—"}
               </Text>
             </View>
-          </View>
+          </AnimatedStatBox>
+
+          {/* InkDrops */}
+          <AnimatedStatBox index={1} delay={200} style={{ flex: 1 }}>
+            <View
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: 16,
+                padding: 16,
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: "#F3E9E0",
+              }}
+            >
+              <View style={{ width: "100%", alignItems: "center" }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    marginBottom: 4,
+                  }}
+                >
+                  <FontAwesome name="tint" size={20} color="#e07a5f" />
+                  <Text
+                    style={{
+                      fontSize: 26,
+                      fontWeight: "900",
+                      color: "#3e2723",
+                    }}
+                  >
+                    {profile?.monthlyInkDrops ?? 250}
+                  </Text>
+                </View>
+                <Text
+                  style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}
+                >
+                  InkDrops
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 10,
+                    fontWeight: "700",
+                    color: "#8B7355",
+                    marginTop: 2,
+                  }}
+                >
+                  MENSUALES
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 9,
+                    fontWeight: "700",
+                    color: "#e07a5f",
+                    marginTop: 2,
+                  }}
+                >
+                  Reinicia en {profile?.daysUntilReset ?? 12} días
+                </Text>
+              </View>
+            </View>
+          </AnimatedStatBox>
         </View>
 
-        {/* ── Botón Consulta Histórial ── */}
-        <View
-          style={{
-            marginHorizontal: 20,
-            marginBottom: 12,
-          }}
-        >
+        {/* ── Botón Historial ── */}
+        <View style={{ marginHorizontal: 20, marginBottom: 12 }}>
           <TouchableOpacity
             onPress={() => setInkdropsModalVisible(true)}
             style={{
@@ -708,16 +673,24 @@ export default function ProfileScreen() {
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <FontAwesome name="arrow-up" size={16} color="#e07a5f" />
+              <FontAwesome
+                name={userLevel >= 50 ? "star" : "arrow-up"}
+                size={16}
+                color="#e07a5f"
+              />
               <Text
                 style={{ fontSize: 14, fontWeight: "900", color: "#3e2723" }}
               >
-                Progreso a Nivel {(profile?.level ?? 6) + 1}
+                {userLevel >= 50
+                  ? "¡Has alcanzado el máximo nivel!"
+                  : `Progreso a Nivel ${userLevel + 1}`}
               </Text>
             </View>
-            <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
-              {profile?.inksToNextLevel ?? 114} InkDrops
-            </Text>
+            {userLevel < 50 && (
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#8B7355" }}>
+                {profile?.inksToNextLevel ?? 114} InkDrops
+              </Text>
+            )}
           </View>
           <View
             style={{
@@ -727,13 +700,12 @@ export default function ProfileScreen() {
               overflow: "hidden",
             }}
           >
-            <View
-              style={{
-                width: `${Math.min(100, Math.round(progressPercent * 100))}%`,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: "#e07a5f",
-              }}
+            <AnimatedProgressBar
+              progress={userLevel >= 50 ? 1 : Math.min(progressPercent, 1)}
+              fillColor={tierColor}
+              backgroundColor="transparent"
+              height={10}
+              borderRadius={5}
             />
           </View>
           <View
@@ -744,11 +716,13 @@ export default function ProfileScreen() {
             }}
           >
             <Text style={{ fontSize: 10, fontWeight: "700", color: "#8B7355" }}>
-              Nivel {profile?.level ?? 6} {profile?.tier ?? "Bronce"}
+              Nivel {userLevel} {tier?.name ?? ""}
             </Text>
-            <Text style={{ fontSize: 10, fontWeight: "700", color: "#CD7F32" }}>
-              Nivel {(profile?.level ?? 6) + 1} {profile?.tier ?? "Bronce"}
-            </Text>
+            {userLevel < 50 && (
+              <Text style={{ fontSize: 10, fontWeight: "700", color: tierColor }}>
+                Nivel {userLevel + 1} {tier?.name ?? ""}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -799,6 +773,184 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── Inventario de recompensas ── */}
+        <TouchableOpacity
+          style={{
+            marginHorizontal: 20,
+            marginBottom: 12,
+            borderWidth: 2,
+            borderColor: tierColor,
+            borderRadius: 999,
+            padding: 16,
+            alignItems: "center",
+            backgroundColor: "#ffffff",
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 8,
+          }}
+          onPress={() => setInventoryOpen(!inventoryOpen)}
+        >
+          <Text style={{ fontSize: 18 }}>{badgeEmoji}</Text>
+          <Text style={{ color: tierColor, fontWeight: "900", fontSize: 15 }}>
+            Mis recompensas ({unlockedRewards.length})
+          </Text>
+          <FontAwesome
+            name={inventoryOpen ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={tierColor}
+          />
+        </TouchableOpacity>
+
+        {inventoryOpen && (
+          <View style={{ marginHorizontal: 20, marginBottom: 16 }}>
+            {/* Unlocked - Grid flexible con cartas de tamaño consistente */}
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 10,
+              }}
+            >
+              {unlockedRewards.map((reward, idx) => {
+                const dotColor =
+                  reward.type === "frame"
+                    ? ((reward.animated
+                        ? reward.animationColors?.[0]
+                        : reward.borderColor) ?? tierColor)
+                    : reward.type === "nameColor"
+                      ? reward.color
+                      : tierColor;
+
+                return (
+                  <AnimatedReward key={reward.id} delay={idx * 35} fast={true}>
+                    <View
+                      style={{
+                        backgroundColor: "#ffffff",
+                        borderRadius: 14,
+                        padding: 12,
+                        borderWidth: 1.5,
+                        borderColor: dotColor,
+                        width: (width - 60) / 3,
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {reward.type === "badge" && (
+                        <Text style={{ fontSize: 22 }}>{reward.emoji}</Text>
+                      )}
+                      {reward.type === "frame" && (
+                        <View
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            borderWidth: 4,
+                            borderColor: dotColor,
+                            backgroundColor: "#fdfbf7",
+                          }}
+                        />
+                      )}
+                      {reward.type === "nameColor" && (
+                        <View
+                          style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 14,
+                            backgroundColor: dotColor,
+                          }}
+                        />
+                      )}
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "700",
+                          color: "#3e2723",
+                          textAlign: "center",
+                        }}
+                      >
+                        {reward.name}
+                      </Text>
+                      <Text style={{ fontSize: 9, color: "#8B7355" }}>
+                        Niv. {reward.level}
+                      </Text>
+                    </View>
+                  </AnimatedReward>
+                );
+              })}
+            </View>
+
+            {/* Próximas recompensas bloqueadas */}
+            {userLevel < 50 && (
+              <View style={{ marginTop: 12 }}>
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: "#8B7355",
+                    marginBottom: 8,
+                    textTransform: "uppercase",
+                    letterSpacing: 1,
+                  }}
+                >
+                  Próximas recompensas
+                </Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 10,
+                  }}
+                >
+                  {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
+                    .filter((lvl) => lvl > userLevel)
+                    .slice(0, 3)
+                    .map((lvl, idx) => {
+                      const t = getUserTier(lvl);
+                      return (
+                        <AnimatedReward
+                          key={lvl}
+                          delay={150 + idx * 35}
+                          fast={true}
+                        >
+                          <View
+                            style={{
+                              backgroundColor: "#F3E9E0",
+                              borderRadius: 14,
+                              padding: 12,
+                              width: (width - 60) / 3,
+                              alignItems: "center",
+                              gap: 4,
+                              opacity: 0.6,
+                            }}
+                          >
+                            <FontAwesome
+                              name="lock"
+                              size={18}
+                              color="#8B7355"
+                            />
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: "700",
+                                color: "#8B7355",
+                                textAlign: "center",
+                              }}
+                            >
+                              Niv. {lvl}
+                            </Text>
+                            <Text style={{ fontSize: 9, color: "#8B7355" }}>
+                              {t?.name ?? "—"}
+                            </Text>
+                          </View>
+                        </AnimatedReward>
+                      );
+                    })}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* ── Botones ── */}
         <TouchableOpacity
           style={{
@@ -836,7 +988,7 @@ export default function ProfileScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* ── Libros ── */}
+        {/* ── Mensajes de estado ── */}
         {(message === "updated" ||
           message === "deleted" ||
           message === "published") && (
@@ -857,9 +1009,7 @@ export default function ProfileScreen() {
                 ? "Libro actualizado correctamente"
                 : message === "deleted"
                   ? "Libro eliminado de tu biblioteca"
-                  : message === "published"
-                    ? "Libro publicado y añadido a tu biblioteca"
-                    : ""}
+                  : "Libro publicado y añadido a tu biblioteca"}
             </Text>
           </View>
         )}
@@ -869,7 +1019,6 @@ export default function ProfileScreen() {
             <ActivityIndicator color="#e07a5f" />
           </View>
         )}
-
         {!!libraryError && !libraryLoading && (
           <Text
             style={{
@@ -882,7 +1031,6 @@ export default function ProfileScreen() {
             {libraryError}
           </Text>
         )}
-
         {!libraryLoading && libraryBooks.length === 0 && !libraryError && (
           <Text
             style={{
@@ -896,6 +1044,7 @@ export default function ProfileScreen() {
           </Text>
         )}
 
+        {/* ── Libros ── */}
         {libraryBooks.length > 0 && (
           <View
             style={{
@@ -939,7 +1088,6 @@ export default function ProfileScreen() {
                       <Text style={{ fontSize: 40 }}>📚</Text>
                     </View>
                   )}
-
                   <View
                     style={{
                       position: "absolute",
@@ -971,13 +1119,13 @@ export default function ProfileScreen() {
                     }}
                     numberOfLines={1}
                   >
-                    {book.title}
+                    {book.titulo ?? book.title ?? "Sin título"}
                   </Text>
                   <Text
                     style={{ fontSize: 11, color: "#8B7355" }}
                     numberOfLines={1}
                   >
-                    {book.titulo ?? book.title ?? "Sin título"}
+                    {book.autor ?? "—"}
                   </Text>
                 </View>
               </TouchableOpacity>

@@ -1,8 +1,11 @@
+import CustomizationModal from "@/components/CustomizationModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTutorial } from "@/contexts/TutorialContext";
+import { getUserTier } from "@/lib/rewardsSystem";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, CameraView, type CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { useAuth } from "@/contexts/AuthContext";
 import React from "react";
 import {
   ActivityIndicator,
@@ -20,13 +23,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import { authService } from "../lib/authService";
-import { getEmailValidationError, normalizeEmail } from "../lib/emailValidation";
+import { getStoredAuthSession, updateStoredAuthUser } from "../lib/authSession";
 import {
-  getStoredAuthSession,
-  updateStoredAuthUser,
-} from "../lib/authSession";
+  getEmailValidationError,
+  normalizeEmail,
+} from "../lib/emailValidation";
 import supabase from "../lib/supabase";
-import { useTutorial } from '@/contexts/TutorialContext';
 
 const PROFILE_STORAGE_BUCKET =
   process.env.EXPO_PUBLIC_PROFILE_IMAGES_BUCKET ??
@@ -36,17 +38,17 @@ const PROFILE_STORAGE_BUCKET =
 const resolveFileExtension = (asset: ImagePicker.ImagePickerAsset): string => {
   const fromName = asset.fileName?.split(".").pop()?.toLowerCase();
   if (fromName && /^[a-z0-9]+$/.test(fromName)) return fromName;
-
   const fromMime = asset.mimeType?.split("/").pop()?.toLowerCase();
   if (fromMime && /^[a-z0-9]+$/.test(fromMime)) return fromMime;
-
   return "jpg";
 };
 
 const isRemoteAvatarUrl = (value: string | null | undefined): value is string =>
   Boolean(value && /^https?:\/\//i.test(value));
 
-const normalizeAvatarValue = (value: string | null | undefined): string | null => {
+const normalizeAvatarValue = (
+  value: string | null | undefined,
+): string | null => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
@@ -57,9 +59,7 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
     const url = new URL(publicUrl);
     const marker = `/storage/v1/object/public/${PROFILE_STORAGE_BUCKET}/`;
     const markerIndex = url.pathname.indexOf(marker);
-
     if (markerIndex === -1) return null;
-
     return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
   } catch {
     return null;
@@ -68,43 +68,42 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
 
 const toImageDataUrl = (value: string, mimeType?: string): string => {
   const trimmed = value.trim();
-  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) {
-    return trimmed;
-  }
-
+  if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(trimmed)) return trimmed;
   return `data:${mimeType ?? "image/jpeg"};base64,${trimmed}`;
 };
 
 const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
-
-    reader.onerror = () => {
+    reader.onerror = () =>
       reject(new Error("No se pudo leer la imagen seleccionada."));
-    };
-
     reader.onloadend = () => {
       if (typeof reader.result === "string" && reader.result.length > 0) {
         resolve(reader.result);
         return;
       }
-
       reject(new Error("No se pudo convertir la imagen seleccionada."));
     };
-
     reader.readAsDataURL(blob);
   });
 
-const readApiError = async (response: Response, fallback: string): Promise<string> => {
+const readApiError = async (
+  response: Response,
+  fallback: string,
+): Promise<string> => {
   const raw = await response.text().catch(() => "");
   if (!raw) return fallback;
 
   try {
     const parsed = JSON.parse(raw);
-    if (typeof parsed?.error === "string" && parsed.error.trim()) return parsed.error;
-    if (typeof parsed?.message === "string" && parsed.message.trim()) return parsed.message;
-    if (typeof parsed?.detail === "string" && parsed.detail.trim()) return parsed.detail;
-    if (typeof parsed?.title === "string" && parsed.title.trim()) return parsed.title;
+    if (typeof parsed?.error === "string" && parsed.error.trim())
+      return parsed.error;
+    if (typeof parsed?.message === "string" && parsed.message.trim())
+      return parsed.message;
+    if (typeof parsed?.detail === "string" && parsed.detail.trim())
+      return parsed.detail;
+    if (typeof parsed?.title === "string" && parsed.title.trim())
+      return parsed.title;
   } catch {
     // Keep raw text when body is not JSON.
   }
@@ -151,7 +150,7 @@ function CustomSwitch({
   );
 }
 
-// ── Input de contraseña con toggle ───────────────────────────────────
+// ── Input contraseña ─────────────────────────────────────────────────
 function PasswordInput({
   value,
   onChange,
@@ -225,9 +224,7 @@ function FloatingModal({
             maxHeight: "85%",
             overflow: "hidden",
           }}
-          onPress={(event) => {
-            event.stopPropagation();
-          }}
+          onPress={(e) => e.stopPropagation()}
         >
           {children}
         </Pressable>
@@ -313,7 +310,7 @@ function PhotoPickerModal({
           </View>
           <FontAwesome name="camera" size={20} color="#e07a5f" />
         </TouchableOpacity>
-        {hasPhoto ? (
+        {hasPhoto && (
           <TouchableOpacity
             style={{
               backgroundColor: "#fff1ed",
@@ -328,7 +325,9 @@ function PhotoPickerModal({
             disabled={loading}
           >
             <View>
-              <Text style={{ fontSize: 14, fontWeight: "900", color: "#b64b34" }}>
+              <Text
+                style={{ fontSize: 14, fontWeight: "900", color: "#b64b34" }}
+              >
                 Borrar foto
               </Text>
               <Text style={{ fontSize: 12, color: "#8B7355", marginTop: 2 }}>
@@ -337,7 +336,7 @@ function PhotoPickerModal({
             </View>
             <FontAwesome name="trash" size={20} color="#b64b34" />
           </TouchableOpacity>
-        ) : null}
+        )}
         <TouchableOpacity
           style={{
             backgroundColor: "#fdfbf7",
@@ -383,7 +382,9 @@ function EditProfileModal({
 }) {
   const [name, setName] = React.useState(profile?.name ?? "");
   const [username, setUsername] = React.useState(profile?.username ?? "");
-  const [avatar, setAvatar] = React.useState<string | null>(profile?.avatar ?? null);
+  const [avatar, setAvatar] = React.useState<string | null>(
+    profile?.avatar ?? null,
+  );
   const [photoModal, setPhotoModal] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
@@ -393,23 +394,13 @@ function EditProfileModal({
       setUsername(profile?.username ?? "");
     }
   }, [visible]);
-
   React.useEffect(() => {
     if (!visible) return;
-
-    if (!name && profile?.name) {
-      setName(profile.name);
-    }
-
-    if (!username && profile?.username) {
-      setUsername(profile.username);
-    }
+    if (!name && profile?.name) setName(profile.name);
+    if (!username && profile?.username) setUsername(profile.username);
   }, [visible, profile?.name, profile?.username, name, username]);
-
   React.useEffect(() => {
-    if (visible) {
-      setAvatar(profile?.avatar ?? null);
-    }
+    if (visible) setAvatar(profile?.avatar ?? null);
   }, [visible, profile?.avatar]);
 
   const inputStyle = {
@@ -445,7 +436,6 @@ function EditProfileModal({
           >
             Editar Perfil
           </Text>
-
           <View style={{ alignItems: "center", marginBottom: 8 }}>
             <TouchableOpacity
               disabled={photoLoading}
@@ -465,7 +455,7 @@ function EditProfileModal({
                   <Image
                     source={{ uri: avatar }}
                     style={{ width: 96, height: 96 }}
-                   />
+                  />
                 ) : (
                   <View
                     style={{
@@ -498,7 +488,6 @@ function EditProfileModal({
               Toca para cambiar foto
             </Text>
           </View>
-
           <Text style={labelStyle}>Nombre</Text>
           <TextInput
             style={inputStyle}
@@ -516,8 +505,6 @@ function EditProfileModal({
             placeholderTextColor="#c4a882"
             autoCapitalize="none"
           />
-          {/* Removed Biografía and Ubicación fields as requested */}
-
           <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
             <TouchableOpacity
               onPress={onClose}
@@ -537,24 +524,26 @@ function EditProfileModal({
             </TouchableOpacity>
             <TouchableOpacity
               onPress={async () => {
-                  const trimmedName = name.trim();
-                  const trimmedUsername = username.trim();
-                  if (!trimmedName || !trimmedUsername) {
-                    Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
-                    return;
-                  }
-
-                  setSaving(true);
-                  try {
-                    await onSave({
-                      name: trimmedName,
-                      username: trimmedUsername,
-                      avatar,
-                    });
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
+                const trimmedName = name.trim();
+                const trimmedUsername = username.trim();
+                if (!trimmedName || !trimmedUsername) {
+                  Alert.alert(
+                    "Campos obligatorios",
+                    "Introduce tu nombre y tu nombre de usuario.",
+                  );
+                  return;
+                }
+                setSaving(true);
+                try {
+                  await onSave({
+                    name: trimmedName,
+                    username: trimmedUsername,
+                    avatar,
+                  });
+                } finally {
+                  setSaving(false);
+                }
+              }}
               disabled={saving}
               style={{
                 flex: 1,
@@ -628,20 +617,20 @@ function ChangeEmailModal({
   const handleSave = async () => {
     const normalizedEmail = normalizeEmail(newEmail);
     const normalizedPassword = password.trim();
-
     if (!normalizedEmail) return setError("Introduce el nuevo email");
     const emailError = getEmailValidationError(normalizedEmail);
     if (emailError) return setError(emailError);
     if (!normalizedPassword) return setError("Introduce tu contraseña actual");
-
     setSaving(true);
     setError("");
     try {
-      const updatedUser = await authService.patchEmail(normalizedEmail, normalizedPassword);
+      const updatedUser = await authService.patchEmail(
+        normalizedEmail,
+        normalizedPassword,
+      );
       onEmailChanged?.(updatedUser?.email ?? normalizedEmail);
       setSuccess(true);
     } catch (e: any) {
-      console.error("[ChangeEmailModal.handleSave]", e);
       setError(e?.message ?? "Error al cambiar el email");
     } finally {
       setSaving(false);
@@ -665,11 +654,6 @@ function ChangeEmailModal({
   };
 
   return (
-    /**TODO: mostrar el email actual real, no el nuevo 
-        <Text style={{ fontSize: 13, color: "#8B7355", marginBottom: 16 }}>
-          Email actual: {newEmail}
-        </Text>*/
-
     <FloatingModal visible={visible} onClose={onClose}>
       <View style={{ padding: 24 }}>
         <Text
@@ -682,7 +666,6 @@ function ChangeEmailModal({
         >
           Cambiar Email
         </Text>
-
         {success ? (
           <View style={{ alignItems: "center", paddingVertical: 24 }}>
             <View
@@ -900,7 +883,6 @@ function ChangePasswordModal({
         >
           Cambiar Contraseña
         </Text>
-
         {success ? (
           <View style={{ alignItems: "center", paddingVertical: 24 }}>
             <View
@@ -978,12 +960,11 @@ function ChangePasswordModal({
               show={showConfirm}
               onToggle={() => setShowConfirm(!showConfirm)}
             />
-
             {newPassword.length > 0 && (
               <View style={{ marginTop: 8 }}>
                 <View style={{ flexDirection: "row", gap: 4, marginBottom: 4 }}>
                   {[1, 2, 3, 4].map((i) => {
-                    const strength = getStrength(newPassword);
+                    const s = getStrength(newPassword);
                     return (
                       <View
                         key={i}
@@ -992,9 +973,7 @@ function ChangePasswordModal({
                           height: 4,
                           borderRadius: 2,
                           backgroundColor:
-                            i <= strength
-                              ? strengthColors[strength]
-                              : "#F3E9E0",
+                            i <= s ? strengthColors[s] : "#F3E9E0",
                         }}
                       />
                     );
@@ -1005,7 +984,6 @@ function ChangePasswordModal({
                 </Text>
               </View>
             )}
-
             {error ? (
               <View
                 style={{
@@ -1020,7 +998,6 @@ function ChangePasswordModal({
                 <Text style={{ color: "#dc2626", fontSize: 13 }}>{error}</Text>
               </View>
             ) : null}
-
             <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
               <TouchableOpacity
                 onPress={onClose}
@@ -1143,14 +1120,16 @@ export default function SettingsScreen() {
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
-  const [languageOpen, setLanguageOpen] = React.useState(false);
+  const [customizationOpen, setCustomizationOpen] = React.useState(false);
   const [profile, setProfile] = React.useState<any>(null);
   const [currentEmail, setCurrentEmail] = React.useState("");
-
   const [selectedLanguage, setSelectedLanguage] = React.useState("es");
+  const [languageOpen, setLanguageOpen] = React.useState(false);
   const [toast, setToast] = React.useState("");
   const [photoLoading, setPhotoLoading] = React.useState(false);
-  const [persistedAvatar, setPersistedAvatar] = React.useState<string | null>(null);
+  const [persistedAvatar, setPersistedAvatar] = React.useState<string | null>(
+    null,
+  );
   const [showCameraModal, setShowCameraModal] = React.useState(false);
   const [cameraFacing, setCameraFacing] = React.useState<CameraType>("back");
   const [capturingPhoto, setCapturingPhoto] = React.useState(false);
@@ -1183,7 +1162,6 @@ export default function SettingsScreen() {
       source?.profilePhoto ??
       fallbackUser?.profilePhoto ??
       null;
-
     return {
       ...source,
       email: source?.email ?? fallbackUser?.email ?? "",
@@ -1193,29 +1171,27 @@ export default function SettingsScreen() {
     };
   };
 
-  const removeStoredProfilePhoto = async (avatarUrl: string | null | undefined) => {
+  const removeStoredProfilePhoto = async (
+    avatarUrl: string | null | undefined,
+  ) => {
     if (!isRemoteAvatarUrl(avatarUrl)) return;
-
     const storagePath = extractStoragePathFromPublicUrl(avatarUrl);
     if (!storagePath) return;
-
     const { error } = await supabase.storage
       .from(PROFILE_STORAGE_BUCKET)
       .remove([storagePath]);
-
-    if (error) {
-      console.warn("No se pudo eliminar la foto previa del storage:", error.message);
-    }
+    if (error)
+      console.warn(
+        "No se pudo eliminar la foto previa del storage:",
+        error.message,
+      );
   };
 
   const loadProfile = React.useCallback(async () => {
     const session = await getStoredAuthSession();
     const user = session?.user;
-
     if (!user) return;
-
     setCurrentEmail(user.email ?? "");
-
     try {
       const res = await apiRequest("/Auth/perfil", { method: "GET" });
       if (res.ok) {
@@ -1224,15 +1200,14 @@ export default function SettingsScreen() {
         setPersistedAvatar(normalized.avatar);
         setProfile((current: any) => {
           if (!hasUnsavedProfileDraft.current) return normalized;
-
           const currentAvatar =
             current && Object.prototype.hasOwnProperty.call(current, "avatar")
               ? current.avatar
               : undefined;
-
           return {
             ...normalized,
-            avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
+            avatar:
+              currentAvatar !== undefined ? currentAvatar : normalized.avatar,
           };
         });
         return;
@@ -1240,17 +1215,14 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error("No se pudo cargar el perfil desde el backend:", error);
     }
-
     const normalized = normalizeProfile({}, user);
     setPersistedAvatar(normalized.avatar);
     setProfile((current: any) => {
       if (!hasUnsavedProfileDraft.current) return normalized;
-
       const currentAvatar =
         current && Object.prototype.hasOwnProperty.call(current, "avatar")
           ? current.avatar
           : undefined;
-
       return {
         ...normalized,
         avatar: currentAvatar !== undefined ? currentAvatar : normalized.avatar,
@@ -1260,7 +1232,6 @@ export default function SettingsScreen() {
 
   const handleCloseEditProfile = React.useCallback(() => {
     setEditProfileOpen(false);
-
     if (hasUnsavedProfileDraft.current) {
       hasUnsavedProfileDraft.current = false;
       void loadProfile();
@@ -1273,33 +1244,23 @@ export default function SettingsScreen() {
     mimeType: string,
   ): Promise<string> => {
     void extension;
-
     return readBlobAsDataUrl(
-      new Blob([fileData], {
-        type: mimeType || "image/jpeg",
-      }),
+      new Blob([fileData], { type: mimeType || "image/jpeg" }),
     );
   };
 
   const uploadProfilePhoto = async (
     asset: ImagePicker.ImagePickerAsset,
   ): Promise<string> => {
-    if (typeof asset.base64 === "string" && asset.base64.trim().length > 0) {
+    if (typeof asset.base64 === "string" && asset.base64.trim().length > 0)
       return toImageDataUrl(asset.base64, asset.mimeType);
-    }
-
-    if (typeof asset.uri === "string" && /^data:image\//i.test(asset.uri)) {
+    if (typeof asset.uri === "string" && /^data:image\//i.test(asset.uri))
       return asset.uri;
-    }
-
     const extension = resolveFileExtension(asset);
     const localFile = await fetch(asset.uri);
-    if (!localFile.ok) {
+    if (!localFile.ok)
       throw new Error("No se pudo leer la imagen seleccionada.");
-    }
-
     const fileData = await localFile.arrayBuffer();
-
     return uploadProfileBinary(
       fileData,
       extension,
@@ -1309,21 +1270,13 @@ export default function SettingsScreen() {
 
   const pickPhotoFromWebCamera = async (): Promise<File | null> => {
     if (typeof document === "undefined") return null;
-
     return new Promise((resolve) => {
       const input = document.createElement("input");
       input.type = "file";
       input.accept = "image/*";
       input.setAttribute("capture", "environment");
-
-      input.onchange = () => {
-        resolve(input.files?.[0] ?? null);
-      };
-
-      input.oncancel = () => {
-        resolve(null);
-      };
-
+      input.onchange = () => resolve(input.files?.[0] ?? null);
+      input.oncancel = () => resolve(null);
       input.click();
     });
   };
@@ -1332,7 +1285,6 @@ export default function SettingsScreen() {
     result: ImagePicker.ImagePickerResult,
   ) => {
     if (result.canceled || result.assets.length === 0) return;
-
     setPhotoLoading(true);
     try {
       const publicUrl = await uploadProfilePhoto(result.assets[0]);
@@ -1349,49 +1301,47 @@ export default function SettingsScreen() {
   const handleSelectFromGallery = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert("Permiso requerido", "Necesitas permitir acceso a la galería.");
+      Alert.alert(
+        "Permiso requerido",
+        "Necesitas permitir acceso a la galería.",
+      );
       return;
     }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
       allowsMultipleSelection: false,
       base64: true,
       quality: 0.8,
     });
-
     await applySelectedProfilePhoto(result);
   };
 
   const handleTakePhoto = async () => {
     let permission;
-
     try {
       permission = await Camera.requestCameraPermissionsAsync();
     } catch {
       permission = null;
     }
-
     if (!permission?.granted) {
-      // En web (y otros casos) puede fallar pedir permiso; caer a selector de archivos.
       const file = await pickPhotoFromWebCamera();
       if (!file) return;
-
       setPhotoLoading(true);
       try {
         const extension =
           file.name?.split(".").pop()?.toLowerCase() ||
           file.type?.split("/").pop()?.toLowerCase() ||
           "jpg";
-
         const publicUrl = await uploadProfileBinary(
           await file.arrayBuffer(),
           extension,
           file.type || "image/jpeg",
         );
-
         hasUnsavedProfileDraft.current = true;
-        setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+        setProfile((current: any) => ({
+          ...(current ?? {}),
+          avatar: publicUrl,
+        }));
         showToast("Foto de perfil actualizada");
       } catch (e: any) {
         Alert.alert("Error", e?.message ?? "No se pudo actualizar la foto");
@@ -1400,13 +1350,10 @@ export default function SettingsScreen() {
       }
       return;
     }
-
-    // Si el modal de edición está abierto, ciérralo antes de abrir la cámara para evitar que quede por delante.
     if (editProfileOpen) {
       setWasEditingProfile(true);
       setEditProfileOpen(false);
     }
-
     setShowCameraModal(true);
   };
 
@@ -1419,27 +1366,24 @@ export default function SettingsScreen() {
     }
   };
 
-  const toggleCameraFacing = () => {
-    setCameraFacing((current) => (current === "back" ? "front" : "back"));
-  };
-
   const handleCapturePhoto = async () => {
     if (!cameraRef.current || capturingPhoto) return;
-
     setCapturingPhoto(true);
     setPhotoLoading(true);
-
     try {
       const captured = await cameraRef.current.takePictureAsync({
         quality: 0.8,
       });
       if (captured?.uri) {
-         const publicUrl = await uploadProfilePhoto({
-           ...captured,
-           mimeType: "image/jpeg",
-         } as ImagePicker.ImagePickerAsset);
+        const publicUrl = await uploadProfilePhoto({
+          ...captured,
+          mimeType: "image/jpeg",
+        } as ImagePicker.ImagePickerAsset);
         hasUnsavedProfileDraft.current = true;
-        setProfile((current: any) => ({ ...(current ?? {}), avatar: publicUrl }));
+        setProfile((current: any) => ({
+          ...(current ?? {}),
+          avatar: publicUrl,
+        }));
         showToast("Foto de perfil actualizada");
         closeCameraModal();
       }
@@ -1454,7 +1398,6 @@ export default function SettingsScreen() {
   React.useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
-
   useFocusEffect(
     React.useCallback(() => {
       void loadProfile();
@@ -1470,15 +1413,14 @@ export default function SettingsScreen() {
       const nextAvatar = normalizeAvatarValue(data.avatar);
       const nextName = data.name.trim();
       const nextUsername = data.username.trim();
-
       if (!nextName || !nextUsername) {
-        Alert.alert("Campos obligatorios", "Introduce tu nombre y tu nombre de usuario.");
+        Alert.alert(
+          "Campos obligatorios",
+          "Introduce tu nombre y tu nombre de usuario.",
+        );
         return;
       }
-
       let savedProfile: any = null;
-
-      // First: update backend app profile record
       try {
         const patchRes = await apiRequest("/Auth/perfil", {
           method: "PATCH",
@@ -1490,17 +1432,20 @@ export default function SettingsScreen() {
         });
         if (!patchRes.ok) {
           throw new Error(
-            await readApiError(patchRes, "Error actualizando perfil en el servidor"),
+            await readApiError(
+              patchRes,
+              "Error actualizando perfil en el servidor",
+            ),
           );
         }
         savedProfile = await patchRes.json().catch(() => null);
       } catch (err: any) {
-        console.error("Backend PATCH error:", err);
-        Alert.alert("Error", err?.message || "No se pudo actualizar el perfil en el servidor");
+        Alert.alert(
+          "Error",
+          err?.message || "No se pudo actualizar el perfil en el servidor",
+        );
         return;
       }
-
-      // Update local state so Settings shows new values
       const out = normalizeProfile(
         {
           ...(profile ?? {}),
@@ -1517,36 +1462,119 @@ export default function SettingsScreen() {
           profilePhoto: nextAvatar ?? "",
         },
       );
-
       await updateStoredAuthUser({
         name: nextName,
         username: nextUsername,
         profilePhoto: nextAvatar ?? "",
       });
-
-      if (persistedAvatar && persistedAvatar !== nextAvatar) {
+      if (persistedAvatar && persistedAvatar !== nextAvatar)
         await removeStoredProfilePhoto(persistedAvatar);
-      }
-
       hasUnsavedProfileDraft.current = false;
       setPersistedAvatar(nextAvatar);
       setProfile(out);
       setEditProfileOpen(false);
       showToast("Perfil actualizado correctamente");
-
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace("/profile" as any);
-      }
+      if (router.canGoBack()) router.back();
+      else router.replace("/profile" as any);
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // ── Guardar personalización cosmética ──
+  const handleSaveCustomization = async (
+    frameId: string | null,
+    colorId: string | null,
+  ) => {
+    try {
+      const patchRes = await apiRequest("/Auth/cosmetics", {
+        method: "PATCH",
+        body: JSON.stringify({
+          activeFrameId: frameId, // null = no tocar, "" = quitar
+          activeColorId: colorId,
+        }),
+      });
+      if (!patchRes.ok) {
+        const txt = await patchRes.text().catch(() => "");
+        throw new Error(txt || "Error guardando personalización");
+      }
+      setProfile((current: any) => ({
+        ...(current ?? {}),
+        activeFrameId: frameId,
+        activeColorId: colorId,
+      }));
+      await updateStoredAuthUser({
+        activeFrameId: frameId,
+        activeColorId: colorId,
+      } as any);
+      showToast("Personalización guardada");
+    } catch (e: any) {
+      showToast(e?.message ?? "Error al guardar");
     }
   };
 
   const handleSignOut = async () => {
     await authService.signOut();
     router.replace("/login" as any);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (Platform.OS === "web") {
+      const ok = window.confirm(
+        "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.",
+      );
+      if (!ok) return;
+      try {
+        const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "Error borrando la cuenta en el servidor");
+        }
+        await authService.signOut();
+        window.alert(
+          "Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.",
+        );
+      } catch (e: any) {
+        window.alert(
+          e?.message ?? "No se pudo eliminar la cuenta en el servidor.",
+        );
+      }
+      return;
+    }
+    Alert.alert(
+      "Eliminar cuenta",
+      "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await apiRequest("/Auth/perfil", {
+                method: "DELETE",
+              });
+              if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(
+                  text || "Error borrando la cuenta en el servidor",
+                );
+              }
+              await authService.signOut();
+              Alert.alert(
+                "Cuenta eliminada",
+                "Tu cuenta ha sido eliminada correctamente.",
+              );
+            } catch (e: any) {
+              Alert.alert(
+                "Error",
+                e?.message ?? "No se pudo eliminar la cuenta en el servidor.",
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   const sectionLabel = (text: string) => (
@@ -1565,7 +1593,6 @@ export default function SettingsScreen() {
       {text}
     </Text>
   );
-
   const card = {
     marginHorizontal: 20,
     backgroundColor: "#ffffff",
@@ -1575,76 +1602,13 @@ export default function SettingsScreen() {
     overflow: "hidden" as const,
   };
 
-  const handleDeleteAccount = async () => {
-    console.log('handleDeleteAccount invoked');
-
-    // On web, Alert.alert with multiple buttons doesn't behave like native alerts.
-    // Use window.confirm as a fallback so the user actually sees a confirmation dialog.
-    if (Platform.OS === "web") {
-      const ok = window.confirm(
-        "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer."
-      );
-      if (!ok) return;
-
-      try {
-        const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(text || "Error borrando la cuenta en el servidor");
-        }
-
-        await authService.signOut();
-        window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
-      } catch (e: any) {
-        console.error("Error borrando cuenta en backend:", e);
-        window.alert(e?.message ?? "No se pudo eliminar la cuenta en el servidor.");
-      }
-      return;
-    }
-
-    // Native mobile path: keep using Alert.alert with buttons
-    Alert.alert(
-      "Eliminar cuenta",
-      "¿Seguro que quieres eliminar tu cuenta? Esta acción no se puede deshacer.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
-            console.log('Eliminar: confirm pressed');
-            try {
-              // Llama al backend para borrar el baseUser; el backend debe encargarse
-              // de eliminar el usuario en Supabase de forma administrativa.
-              try {
-                const res = await apiRequest("/Auth/perfil", { method: "DELETE" });
-                if (!res.ok) {
-                  const text = await res.text().catch(() => "");
-                  throw new Error(text || "Error borrando la cuenta en el servidor");
-                }
-
-                // Si el backend respondió OK, cierra sesión y notifica.
-                await authService.signOut();
-                Alert.alert("Cuenta eliminada", "Tu cuenta ha sido eliminada correctamente.");
-              } catch (e: any) {
-                console.error("Error borrando cuenta en backend:", e);
-                Alert.alert("Error", e?.message ?? "No se pudo eliminar la cuenta en el servidor.");
-              }
-            } catch (error) {
-              console.error(error);
-              Alert.alert("Error", "No se pudo eliminar la cuenta.");
-            }
-          },
-        },
-      ]
-    );
-  };
+  const userLevel = profile?.level ?? 1;
+  const tier = getUserTier(userLevel);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fdfbf7" }}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* ── Toast ── */}
       {toast ? (
         <View
           style={{
@@ -1684,7 +1648,6 @@ export default function SettingsScreen() {
         </View>
       ) : null}
 
-      {/* ── Header inline ── */}
       <View
         style={{
           flexDirection: "row",
@@ -1744,6 +1707,17 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* ── Sección Personalización ── */}
+        {sectionLabel("Personalización")}
+        <View style={card}>
+          <SettingsRow
+            icon="paint-brush"
+            label="Marco y estilo"
+            subtitle={`Niv. ${userLevel} · ${tier?.name ?? "Sin categoría"} — Marco, color de nombre`}
+            onPress={() => setCustomizationOpen(true)}
+            isLast
+          />
+        </View>
 
         {sectionLabel("Soporte")}
         <View style={card}>
@@ -1770,9 +1744,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="trash"
             label="Eliminar cuenta"
-            onPress={() => {
-              handleDeleteAccount();
-            }}
+            onPress={handleDeleteAccount}
             isLast
             danger
           />
@@ -1788,6 +1760,7 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
+      {/* ── Modal cámara ── */}
       <Modal
         visible={showCameraModal}
         animationType="slide"
@@ -1799,7 +1772,6 @@ export default function SettingsScreen() {
             style={{ flex: 1 }}
             facing={cameraFacing}
           />
-
           <View
             style={{
               position: "absolute",
@@ -1826,7 +1798,6 @@ export default function SettingsScreen() {
               <Text style={{ color: "#fff", fontWeight: "900" }}>Cerrar</Text>
             </TouchableOpacity>
           </View>
-
           <View
             style={{
               position: "absolute",
@@ -1848,12 +1819,13 @@ export default function SettingsScreen() {
                 gap: 8,
                 backgroundColor: "rgba(0,0,0,0.48)",
               }}
-              onPress={toggleCameraFacing}
+              onPress={() =>
+                setCameraFacing((c) => (c === "back" ? "front" : "back"))
+              }
             >
               <FontAwesome name="refresh" size={18} color="#fff" />
               <Text style={{ color: "#fff", fontWeight: "900" }}>Girar</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={{
                 flex: 1,
@@ -1893,7 +1865,7 @@ export default function SettingsScreen() {
         onTakePhoto={handleTakePhoto}
         onRemovePhoto={() => {
           hasUnsavedProfileDraft.current = true;
-          setProfile((current: any) => ({ ...(current ?? {}), avatar: null }));
+          setProfile((c: any) => ({ ...(c ?? {}), avatar: null }));
         }}
         photoLoading={photoLoading}
       />
@@ -1907,6 +1879,18 @@ export default function SettingsScreen() {
         visible={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}
         currentEmail={currentEmail}
+      />
+
+      {/* ── Modal de personalización cosmética ── */}
+      <CustomizationModal
+        visible={customizationOpen}
+        onClose={() => setCustomizationOpen(false)}
+        userLevel={userLevel}
+        currentFrameId={profile?.activeFrameId ?? null}
+        currentColorId={profile?.activeColorId ?? null}
+        previewAvatarUri={profile?.avatar ?? profile?.profilePhoto}
+        previewName={profile?.name ?? "Tu nombre"}
+        onSave={handleSaveCustomization}
       />
     </View>
   );

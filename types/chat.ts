@@ -5,7 +5,9 @@ export interface ChatParticipantDto {
   username: string;
   profilePhoto: string;
   joinedAt: string;
-  role?: 'MEMBER' | 'MODERATOR' | null;
+  role?: "MEMBER" | "MODERATOR" | null;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface MessageDto {
@@ -15,6 +17,8 @@ export interface MessageDto {
   senderUsername: string;
   body: string;
   sentAt: string;
+  senderActiveFrameId?: string | null;
+  senderActiveColorId?: string | null;
 }
 
 export interface ChatDto {
@@ -131,7 +135,7 @@ export interface CommunityChat {
   community: Community;
 }
 
-export type ChatType = 'DIRECT_EXCHANGE' | 'COMMUNITY';
+export type ChatType = "DIRECT_EXCHANGE" | "COMMUNITY";
 
 export interface ChatData {
   id: number;

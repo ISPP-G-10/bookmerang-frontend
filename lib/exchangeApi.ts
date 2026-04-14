@@ -1,5 +1,9 @@
 import { apiRequest } from "@/lib/api";
-import { ExchangeMeetingDto, ExchangeMode, ExchangeWithMatchDto } from "@/types/exchange";
+import {
+  ExchangeMeetingDto,
+  ExchangeMode,
+  ExchangeWithMatchDto,
+} from "@/types/exchange";
 
 type CreateExchangeMeetingPayload = {
   exchangeId: number;
@@ -16,7 +20,10 @@ type CounterProposeMeetingPayload = {
   scheduledAt: string;
 };
 
-async function readApiError(response: Response, fallback: string): Promise<string> {
+async function readApiError(
+  response: Response,
+  fallback: string,
+): Promise<string> {
   const raw = await response.text();
   if (!raw) return fallback;
 
@@ -55,7 +62,9 @@ function normalizeExchange(raw: any): ExchangeWithMatchDto {
     user2Id: toNullableString(raw?.user2Id ?? raw?.User2Id),
     book1Id: toNullableNumber(raw?.book1Id ?? raw?.Book1Id),
     book2Id: toNullableNumber(raw?.book2Id ?? raw?.Book2Id),
-    status: String(raw?.status ?? raw?.Status ?? "NEGOTIATING").toUpperCase() as ExchangeWithMatchDto["status"],
+    status: String(
+      raw?.status ?? raw?.Status ?? "NEGOTIATING",
+    ).toUpperCase() as ExchangeWithMatchDto["status"],
     createdAt: toNullableString(raw?.createdAt ?? raw?.CreatedAt),
     updatedAt: toNullableString(raw?.updatedAt ?? raw?.UpdatedAt),
   };
@@ -64,26 +73,41 @@ function normalizeExchange(raw: any): ExchangeWithMatchDto {
 function normalizeMeeting(raw: any): ExchangeMeetingDto {
   const latitud = Number(raw?.latitud ?? raw?.Latitud);
   const longitud = Number(raw?.longitud ?? raw?.Longitud);
-  const hasCustomLocation = Number.isFinite(latitud) && Number.isFinite(longitud);
+  const hasCustomLocation =
+    Number.isFinite(latitud) && Number.isFinite(longitud);
 
   return {
-    exchangeMeetingId: Number(raw?.exchangeMeetingId ?? raw?.ExchangeMeetingId ?? 0),
+    exchangeMeetingId: Number(
+      raw?.exchangeMeetingId ?? raw?.ExchangeMeetingId ?? 0,
+    ),
     exchangeId: Number(raw?.exchangeId ?? raw?.ExchangeId ?? 0),
-    exchangeMode: String(raw?.exchangeMode ?? raw?.ExchangeMode ?? "CUSTOM").toUpperCase() as ExchangeMode,
+    exchangeMode: String(
+      raw?.exchangeMode ?? raw?.ExchangeMode ?? "CUSTOM",
+    ).toUpperCase() as ExchangeMode,
     bookspotId: toNullableNumber(raw?.bookspotId ?? raw?.BookspotId),
     customLocation: hasCustomLocation ? [longitud, latitud] : null,
     scheduledAt: String(raw?.scheduledAt ?? raw?.ScheduledAt ?? ""),
     proposerId: String(raw?.proposerId ?? raw?.ProposerId ?? ""),
     proposerName: toNullableString(raw?.proposerName ?? raw?.ProposerName),
-    meetingStatus: String(raw?.meetingStatus ?? raw?.MeetingStatus ?? "PROPOSAL").toUpperCase() as ExchangeMeetingDto["meetingStatus"],
-    markAsCompletedByUser1: Boolean(raw?.markAsCompletedByUser1 ?? raw?.MarkAsCompletedByUser1),
-    markAsCompletedByUser2: Boolean(raw?.markAsCompletedByUser2 ?? raw?.MarkAsCompletedByUser2),
+    meetingStatus: String(
+      raw?.meetingStatus ?? raw?.MeetingStatus ?? "PROPOSAL",
+    ).toUpperCase() as ExchangeMeetingDto["meetingStatus"],
+    markAsCompletedByUser1: Boolean(
+      raw?.markAsCompletedByUser1 ?? raw?.MarkAsCompletedByUser1,
+    ),
+    markAsCompletedByUser2: Boolean(
+      raw?.markAsCompletedByUser2 ?? raw?.MarkAsCompletedByUser2,
+    ),
     pin: toNullableString(raw?.pin ?? raw?.Pin),
-    bookDropStatus: toNullableString(raw?.bookDropStatus ?? raw?.BookDropStatus) as ExchangeMeetingDto["bookDropStatus"],
+    bookDropStatus: toNullableString(
+      raw?.bookDropStatus ?? raw?.BookDropStatus,
+    ) as ExchangeMeetingDto["bookDropStatus"],
   };
 }
 
-export async function getExchange(exchangeId: number): Promise<ExchangeWithMatchDto | null> {
+export async function getExchange(
+  exchangeId: number,
+): Promise<ExchangeWithMatchDto | null> {
   const res = await apiRequest(`/Exchange/${exchangeId}`);
 
   if (res.status === 404) {
@@ -111,7 +135,10 @@ export async function getExchangeByChatIdWithMatch(
 
   if (!res.ok) {
     throw new Error(
-      await readApiError(res, `Error al obtener exchange con chat id ${chatId}`),
+      await readApiError(
+        res,
+        `Error al obtener exchange con chat id ${chatId}`,
+      ),
     );
   }
 
@@ -119,7 +146,9 @@ export async function getExchangeByChatIdWithMatch(
   return raw ? normalizeExchange(raw) : null;
 }
 
-export async function acceptExchange(exchangeId: number): Promise<ExchangeWithMatchDto> {
+export async function acceptExchange(
+  exchangeId: number,
+): Promise<ExchangeWithMatchDto> {
   const res = await apiRequest(`/Exchange/${exchangeId}/accept`, {
     method: "PATCH",
     body: JSON.stringify({}),
@@ -134,7 +163,9 @@ export async function acceptExchange(exchangeId: number): Promise<ExchangeWithMa
   return normalizeExchange(await res.json());
 }
 
-export async function rejectExchange(exchangeId: number): Promise<ExchangeWithMatchDto> {
+export async function rejectExchange(
+  exchangeId: number,
+): Promise<ExchangeWithMatchDto> {
   const res = await apiRequest(`/Exchange/${exchangeId}/reject`, {
     method: "PATCH",
     body: JSON.stringify({}),
@@ -155,7 +186,9 @@ export async function deleteExchange(_exchangeId: number): Promise<boolean> {
   );
 }
 
-export async function getExchangeMeeting(meetingId: number): Promise<ExchangeMeetingDto | null> {
+export async function getExchangeMeeting(
+  meetingId: number,
+): Promise<ExchangeMeetingDto | null> {
   const res = await apiRequest(`/ExchangeMeeting/${meetingId}`);
 
   if (res.status === 404) {
@@ -163,7 +196,9 @@ export async function getExchangeMeeting(meetingId: number): Promise<ExchangeMee
   }
 
   if (!res.ok) {
-    throw new Error(await readApiError(res, `Error al obtener el meeting ${meetingId}`));
+    throw new Error(
+      await readApiError(res, `Error al obtener el meeting ${meetingId}`),
+    );
   }
 
   const raw = await parseJsonOrNull<any>(res);
@@ -181,7 +216,10 @@ export async function getMeetingByExchangeId(
 
   if (!res.ok) {
     throw new Error(
-      await readApiError(res, `Error al obtener el meeting del exchange ${exchangeId}`),
+      await readApiError(
+        res,
+        `Error al obtener el meeting del exchange ${exchangeId}`,
+      ),
     );
   }
 
@@ -205,7 +243,9 @@ export async function createExchangeMeeting(
   });
 
   if (!res.ok) {
-    throw new Error(await readApiError(res, "Error al crear la propuesta de quedada"));
+    throw new Error(
+      await readApiError(res, "Error al crear la propuesta de quedada"),
+    );
   }
 
   return normalizeMeeting(await res.json());
@@ -215,41 +255,44 @@ export async function counterProposeExchangeMeeting(
   meetingId: number,
   payload: CounterProposeMeetingPayload,
 ): Promise<ExchangeMeetingDto> {
-  const res = await apiRequest(`/ExchangeMeeting/${meetingId}/counter-propose`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      exchangeMode: payload.exchangeMode,
-      bookspotId: payload.bookspotId ?? null,
-      latitud: payload.customLocation?.[1] ?? null,
-      longitud: payload.customLocation?.[0] ?? null,
-      scheduledAt: payload.scheduledAt,
-    }),
-  });
+  const res = await apiRequest(
+    `/ExchangeMeeting/${meetingId}/counter-propose`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        exchangeMode: payload.exchangeMode,
+        bookspotId: payload.bookspotId ?? null,
+        latitud: payload.customLocation?.[1] ?? null,
+        longitud: payload.customLocation?.[0] ?? null,
+        scheduledAt: payload.scheduledAt,
+      }),
+    },
+  );
 
   if (!res.ok) {
-    throw new Error(await readApiError(res, "Error al contra-proponer la quedada"));
+    throw new Error(
+      await readApiError(res, "Error al contra-proponer la quedada"),
+    );
   }
 
   return normalizeMeeting(await res.json());
 }
 
-export async function acceptExchangeMeeting(meetingId: number): Promise<ExchangeMeetingDto> {
+export async function acceptExchangeMeeting(
+  meetingId: number,
+): Promise<ExchangeMeetingDto> {
   const res = await apiRequest(`/ExchangeMeeting/${meetingId}/accept`, {
     method: "PUT",
     body: JSON.stringify({}),
   });
 
   if (!res.ok) {
-    throw new Error(await readApiError(res, "Error al aceptar la propuesta de quedada"));
+    throw new Error(
+      await readApiError(res, "Error al aceptar la propuesta de quedada"),
+    );
   }
 
   return normalizeMeeting(await res.json());
-}
-
-export async function rejectExchangeMeeting(_meetingId: number): Promise<void> {
-  throw new Error(
-    "rejectExchangeMeeting no está soportado por ExchangeMeetingController. Ese controlador no expone DELETE /api/exchangemeeting/{meetingId}.",
-  );
 }
 
 export async function completeExchangeMeeting(meetingId: number): Promise<ExchangeMeetingDto> {
@@ -260,14 +303,19 @@ export async function completeExchangeMeeting(meetingId: number): Promise<Exchan
 
   if (!res.ok) {
     throw new Error(
-      await readApiError(res, `Error al confirmar el intercambio del meeting ${meetingId}`),
+      await readApiError(
+        res,
+        `Error al confirmar el intercambio del meeting ${meetingId}`,
+      ),
     );
   }
 
   return normalizeMeeting(await res.json());
 }
 
-export async function reportExchange(exchangeId: number): Promise<ExchangeWithMatchDto> {
+export async function reportExchange(
+  exchangeId: number,
+): Promise<ExchangeWithMatchDto> {
   const res = await apiRequest(`/Exchange/${exchangeId}/report`, {
     method: "PATCH",
     body: JSON.stringify({}),
