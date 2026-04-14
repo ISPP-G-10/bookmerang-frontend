@@ -1870,25 +1870,6 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const handleRejectMeetingProposal = async () => {
-    if (!exchangeMeeting || meetingSubmitting) return;
-
-    try {
-      setMeetingSubmitting(true);
-      setError(null);
-      await rejectExchangeMeeting(exchangeMeeting.exchangeMeetingId);
-      setExchangeMeeting(null);
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "No se pudo rechazar la propuesta.";
-      setError(message);
-    } finally {
-      setMeetingSubmitting(false);
-    }
-  };
-
   const toRankedBookspot = (bookspot: BookspotDTO): RankedBookspot => ({
     id: bookspot.id,
     nombre: bookspot.nombre,
@@ -2553,18 +2534,6 @@ export default function ChatDetailScreen() {
                           <Text style={styles.meetingProposalCounterText}>
                             Contraproponer
                           </Text>
-                        </Pressable>
-
-                        <Pressable
-                          style={({ pressed }) => [
-                            styles.meetingProposalRejectButton,
-                            (pressed || meetingSubmitting) &&
-                              styles.meetingProposalActionPressed,
-                          ]}
-                          onPress={openRejectMeetingConfirm}
-                          disabled={meetingSubmitting}
-                        >
-                          <FontAwesome name="times" size={16} color="#fff" />
                         </Pressable>
                       </View>
                     )}
