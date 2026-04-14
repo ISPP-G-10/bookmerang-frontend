@@ -36,7 +36,11 @@ export default function TabLayout() {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const segments = useSegments();
   const pathname = usePathname();
-  const isTabsActive = segments[0] === '(tabs)';
+  // `isTabsActive` ensures the tutorial only starts when the user is actually
+  // viewing the tabs. Expo Router v3 might resolve the root path `/` to empty segments
+  // or a direct nested route, so we check if segments start with `(tabs)`, are empty,
+  // or point to a known tab screen like 'matcher'.
+  const isTabsActive = !segments || !segments[0] || segments[0] === '(tabs)' || segments[0] === 'matcher';
 
   const displayName = session?.user?.name || session?.user?.username || 'lector/a';
 

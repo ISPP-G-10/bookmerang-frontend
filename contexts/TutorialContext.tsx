@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-
-const TUTORIAL_KEY = 'bookmerang_tutorial_completed';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TutorialContextType {
   tutorialCompleted: boolean;
@@ -18,25 +17,47 @@ const TutorialContext = createContext<TutorialContextType>({
 });
 
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
+  const { currentUserId, loading: authLoading } = useAuth();
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
   const [tutorialLoading, setTutorialLoading] = useState(true);
 
+  const getTutorialKey = useCallback(() => {
+    if (currentUserId) {
+      return `bookmerang_tutorial_completed_${currentUserId}`;
+    }
+    return 'bookmerang_tutorial_completed';
+  }, [currentUserId]);
+
   useEffect(() => {
-    AsyncStorage.getItem(TUTORIAL_KEY).then((value) => {
+    if (authLoading) return;
+
+    const key = getTutorialKey();
+    setTutorialLoading(true);
+    AsyncStorage.getItem(key).then((value) => {
       setTutorialCompleted(value === 'true');
       setTutorialLoading(false);
     });
-  }, []);
+  }, [authLoading, getTutorialKey]);
 
   const completeTutorial = useCallback(async () => {
-    await AsyncStorage.setItem(TUTORIAL_KEY, 'true');
-    setTutorialCompleted(true);
-  }, []);
+    const key = getTutorialKey();
+    try {
+      await AsyncStorage.setItem(key, 'true');
+      setTutorialCompleted(true);
+    } catch (e) {
+      console.error('Failed to set tutorial completion flag:', e);
+    }
+  }, [getTutorialKey]);
 
   const resetTutorial = useCallback(async () => {
-    await AsyncStorage.removeItem(TUTORIAL_KEY);
-    setTutorialCompleted(false);
-  }, []);
+    const key = getTutorialKey();
+    try {
+      await AsyncStorage.removeItem(key);
+      setTutorialCompleted(false);
+    } catch (e) {
+      console.error('Failed to remove tutorial completion flag:', e);
+    }
+  }, [getTutorialKey]);
 
   return (
     <TutorialContext.Provider value={{ tutorialCompleted, tutorialLoading, completeTutorial, resetTutorial }}>
@@ -46,3 +67,4 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useTutorial = () => useContext(TutorialContext);
+
