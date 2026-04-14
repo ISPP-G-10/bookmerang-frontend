@@ -1115,7 +1115,7 @@ function SettingsRow({
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { resetTutorial } = useTutorial();
+  const { requestTutorialReplay } = useTutorial();
   const { userPlan } = useAuth();
   const [editProfileOpen, setEditProfileOpen] = React.useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = React.useState(false);
@@ -1725,9 +1725,9 @@ export default function SettingsScreen() {
             icon="question-circle"
             label="Repetir tutorial"
             subtitle="Vuelve a ver la guía de la app"
-            onPress={async () => {
-              await resetTutorial();
-              router.replace("/(tabs)/matcher" as any);
+            onPress={() => {
+              requestTutorialReplay();
+              router.replace('/(tabs)/matcher' as any);
             }}
             isLast
           />

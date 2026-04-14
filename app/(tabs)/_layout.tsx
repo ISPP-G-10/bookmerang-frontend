@@ -31,12 +31,22 @@ function stripHref(props: any): any {
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { session, isBookdropUser, loading } = useAuth();
-  const { tutorialCompleted, tutorialLoading, completeTutorial } = useTutorial();
+  const {
+    tutorialCompleted,
+    tutorialLoading,
+    tutorialReplayRequested,
+    completeTutorial,
+  } = useTutorial();
   const { start, copilotEvents, visible: copilotVisible } = useCopilot();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const segments = useSegments();
   const pathname = usePathname();
-  const isTabsActive = segments[0] === '(tabs)';
+  // `isTabsActive` ensures the tutorial only starts when the user is actually
+  // viewing the tabs. Expo Router v3 might resolve the root path `/` to empty segments
+  // or a direct nested route, so we check if segments start with `(tabs)`, are empty,
+  // or point to a known tab screen like 'matcher'.
+  const isTabsActive = !segments || !segments[0] || segments[0] === '(tabs)' || segments[0] === 'matcher';
+  const shouldShowTutorial = !tutorialCompleted || tutorialReplayRequested;
 
   const displayName = session?.user?.name || session?.user?.username || 'lector/a';
 
@@ -50,13 +60,13 @@ export default function TabLayout() {
 
   // Auto-start tutorial for new users
   useEffect(() => {
-    if (!tutorialLoading && !tutorialCompleted && session && isTabsActive) {
+    if (!tutorialLoading && shouldShowTutorial && session && isTabsActive) {
       const timeout = setTimeout(() => {
         start();
       }, 800);
       return () => clearTimeout(timeout);
     }
-  }, [tutorialLoading, tutorialCompleted, session, isTabsActive]);
+  }, [tutorialLoading, shouldShowTutorial, session, isTabsActive]);
 
   // Navigate tabs in sync with tutorial steps
   useEffect(() => {
@@ -125,9 +135,7 @@ export default function TabLayout() {
           options={{
             title: 'Matcher',
             tabBarIcon: ({ color }) => <TabBarIcon name="heart" color={color} />,
-            tabBarButton: (props) => tutorialCompleted ? (
-              <Pressable {...stripHref(props)} />
-            ) : (
+            tabBarButton: (props) => shouldShowTutorial ? (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '💘',
@@ -139,6 +147,8 @@ export default function TabLayout() {
               >
                 <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
+            ) : (
+              <Pressable {...stripHref(props)} />
             ),
           }}
         />
@@ -147,9 +157,7 @@ export default function TabLayout() {
           options={{
             title: 'Chats',
             tabBarIcon: ({ color }) => <TabBarIcon name="comment" color={color} />,
-            tabBarButton: (props) => tutorialCompleted ? (
-              <Pressable {...stripHref(props)} />
-            ) : (
+            tabBarButton: (props) => shouldShowTutorial ? (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '💬',
@@ -161,6 +169,8 @@ export default function TabLayout() {
               >
                 <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
+            ) : (
+              <Pressable {...stripHref(props)} />
             ),
           }}
         />
@@ -169,9 +179,7 @@ export default function TabLayout() {
           options={{
             title: 'Subir',
             tabBarIcon: ({ color }) => <TabBarIcon name="plus" color={color} />,
-            tabBarButton: (props) => tutorialCompleted ? (
-              <Pressable {...stripHref(props)} />
-            ) : (
+            tabBarButton: (props) => shouldShowTutorial ? (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '➕',
@@ -183,6 +191,8 @@ export default function TabLayout() {
               >
                 <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
+            ) : (
+              <Pressable {...stripHref(props)} />
             ),
           }}
         />
@@ -191,9 +201,7 @@ export default function TabLayout() {
           options={{
             title: 'Comunidades',
             tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-            tabBarButton: (props) => tutorialCompleted ? (
-              <Pressable {...stripHref(props)} />
-            ) : (
+            tabBarButton: (props) => shouldShowTutorial ? (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '🏡',
@@ -205,6 +213,8 @@ export default function TabLayout() {
               >
                 <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
+            ) : (
+              <Pressable {...stripHref(props)} />
             ),
           }}
         />
@@ -213,9 +223,7 @@ export default function TabLayout() {
           options={{
             title: 'BookSpots',
             tabBarIcon: ({ color }) => <TabBarIcon name="map-marker" color={color} />,
-            tabBarButton: (props) => tutorialCompleted ? (
-              <Pressable {...stripHref(props)} />
-            ) : (
+            tabBarButton: (props) => shouldShowTutorial ? (
               <CopilotStep
                 text={JSON.stringify({
                   icon: '📍',
@@ -227,13 +235,15 @@ export default function TabLayout() {
               >
                 <WalkthroughablePressable {...stripHref(props)} />
               </CopilotStep>
+            ) : (
+              <Pressable {...stripHref(props)} />
             ),
           }}
         />
       </Tabs>
 
-      {/* Welcome step — solo se monta si el tutorial no ha sido completado */}
-      {!tutorialCompleted && <View
+      {/* Welcome step — solo se monta cuando toca mostrar el tutorial */}
+      {shouldShowTutorial && <View
         style={{
           position: 'absolute',
           top: screenHeight * 0.65,
