@@ -1,72 +1,84 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
-  View,
-  Text,
-  Pressable,
   ActivityIndicator,
   Alert,
-  StyleSheet,
-  Modal,
-  ScrollView,
   Image,
-} from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { getCommunity, leaveCommunity, deleteCommunity, getMyCommunities } from '@/lib/communityApi';
-import { getBookspotById, BookspotDTO } from '@/lib/bookspotApi';
-import { getChat } from '@/lib/chatApi';
-import { useAuth } from '@/contexts/AuthContext';
-import { CommunityDto } from '@/types/community';
-import { ChatParticipantDto } from '@/types/chat';
-import CommunityLibraryTab from '@/components/communities/CommunityLibraryTab';
+import CommunityChatTab from "@/components/communities/CommunityChatTab";
+import CommunityLibraryTab from "@/components/communities/CommunityLibraryTab";
+import CommunityMeetupTab from "@/components/communities/CommunityMeetupTab";
+import CommunityRankingTab from "@/components/communities/CommunityRankingTab";
+import { useAuth } from "@/contexts/AuthContext";
+import { BookspotDTO, getBookspotById } from "@/lib/bookspotApi";
+import { getChat } from "@/lib/chatApi";
+import {
+  deleteCommunity,
+  getCommunity,
+  getMyCommunities,
+  kickMember,
+  leaveCommunity,
+} from "@/lib/communityApi";
+import { CommunityDto, CommunityMemberDto } from "@/types/community";
 
 const MAX_MEMBERS = 10;
 
-type SectionKey = 'quedadas' | 'biblioteca' | 'ranking';
+type SectionKey = "chat" | "quedadas" | "biblioteca" | "ranking";
 
-const SECTIONS: { key: SectionKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'quedadas', label: 'Quedadas', icon: 'calendar-outline' },
-  { key: 'biblioteca', label: 'Biblioteca', icon: 'book' },
-  { key: 'ranking', label: 'Ranking', icon: 'trophy-outline' },
+const SECTIONS: {
+  key: SectionKey;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  { key: "chat", label: "Chat", icon: "chatbubbles-outline" },
+  { key: "quedadas", label: "Quedadas", icon: "calendar-outline" },
+  { key: "biblioteca", label: "Biblioteca", icon: "book" },
+  { key: "ranking", label: "Ranking", icon: "trophy-outline" },
 ];
 
 export default function CommunityDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { currentUserId } = useAuth();
+  const { backendUserId } = useAuth();
   const communityId = Number(id);
 
   const [community, setCommunity] = useState<CommunityDto | null>(null);
   const [bookspot, setBookspot] = useState<BookspotDTO | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<SectionKey>('biblioteca');
+  const [activeSection, setActiveSection] = useState<SectionKey>("chat");
   const [adminModalVisible, setAdminModalVisible] = useState(false);
-  const [adminMembers, setAdminMembers] = useState<ChatParticipantDto[]>([]);
+  const [adminMembers, setAdminMembers] = useState<CommunityMemberDto[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [kickingMemberId, setKickingMemberId] = useState<string | null>(null);
   const [confirmModalVisible, setConfirmModalVisible] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState({
-    title: '',
-    message: '',
+    title: "",
+    message: "",
     isDestructive: false,
     onConfirm: async () => {},
   });
 
-  // ... rest of state
-
-  const bookspotName = bookspot?.nombre ?? '';
+  const bookspotName = bookspot?.nombre ?? "";
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [data, myComms] = await Promise.all([
         getCommunity(communityId),
-        getMyCommunities()
+        getMyCommunities(),
       ]);
       setCommunity(data);
-      setIsMember(myComms.some(c => c.id === communityId));
+      setIsMember(myComms.some((c) => c.id === communityId));
 
       // Fetch real bookspot data
       if (data.referenceBookspotId) {
@@ -74,7 +86,7 @@ export default function CommunityDetailScreen() {
         setBookspot(spotData);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo cargar la comunidad');
+      Alert.alert("Error", error.message || "No se pudo cargar la comunidad");
     } finally {
       setLoading(false);
     }
@@ -83,7 +95,7 @@ export default function CommunityDetailScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, [fetchData])
+    }, [fetchData]),
   );
 
   const handleAdmin = async () => {
@@ -91,18 +103,64 @@ export default function CommunityDetailScreen() {
     setAdminModalVisible(true);
     setAdminLoading(true);
     try {
-      if (community.chatId) {
-        const chat = await getChat(community.chatId);
-        setAdminMembers(chat.participants || []);
+      if (!community.chatId) {
+        setAdminMembers([]);
+        return;
       }
+
+      const chat = await getChat(community.chatId);
+      const members: CommunityMemberDto[] = (chat.participants || []).map(
+        (p) => ({
+          communityId: community.id,
+          userId: p.userId,
+          username: p.username,
+          profilePhoto: p.profilePhoto,
+          role: p.role ?? "MEMBER",
+          joinedAt: p.joinedAt,
+        }),
+      );
+
+      setAdminMembers(members);
     } catch (e) {
-      console.warn("Could not load chat participants", e);
+      console.warn("Could not load community members", e);
+      setAdminMembers([]);
     } finally {
       setAdminLoading(false);
     }
   };
 
-  const confirmAction = (title: string, msg: string, onConfirm: () => void, isDestructive = false) => {
+  const handleKickMember = (member: CommunityMemberDto) => {
+    if (!community) return;
+
+    confirmAction(
+      "Expulsar miembro",
+      `¿Seguro que quieres expulsar a ${member.username} de la comunidad?`,
+      async () => {
+        try {
+          setKickingMemberId(member.userId);
+          await kickMember(community.id, member.userId);
+          setAdminMembers((prev) =>
+            prev.filter((m) => m.userId !== member.userId),
+          );
+          setCommunity((prev) =>
+            prev ? { ...prev, memberCount: prev.memberCount - 1 } : prev,
+          );
+        } catch (e: any) {
+          alert(e.message || "No se pudo expulsar al miembro");
+        } finally {
+          setKickingMemberId(null);
+        }
+      },
+      true, // isDestructive
+    );
+  };
+
+  const confirmAction = (
+    title: string,
+    msg: string,
+    onConfirm: () => void,
+    isDestructive = false,
+  ) => {
     setConfirmConfig({
       title,
       message: msg,
@@ -119,11 +177,11 @@ export default function CommunityDetailScreen() {
     try {
       setAdminLoading(true);
       await leaveCommunity(community.id);
-      Alert.alert('Éxito', 'Has abandonado la comunidad');
+      Alert.alert("Éxito", "Has abandonado la comunidad");
       setAdminModalVisible(false);
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo abandonar');
+      Alert.alert("Error", e.message || "No se pudo abandonar");
     } finally {
       setAdminLoading(false);
     }
@@ -134,17 +192,23 @@ export default function CommunityDetailScreen() {
     try {
       setAdminLoading(true);
       await deleteCommunity(community.id);
-      Alert.alert('Éxito', 'Comunidad eliminada');
+      Alert.alert("Éxito", "Comunidad eliminada");
       setAdminModalVisible(false);
       router.back();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo eliminar');
+      Alert.alert("Error", e.message || "No se pudo eliminar");
     } finally {
       setAdminLoading(false);
     }
   };
 
-  const isCreator = community?.creatorId === currentUserId;
+  const isCreator =
+    !!community &&
+    !!backendUserId &&
+    community.creatorId.toLowerCase() === backendUserId.toLowerCase();
+  const canModerateCommunity =
+    !!community && (isCreator || community.currentUserRole === "MODERATOR");
+  const canCreateMeetups = canModerateCommunity;
 
   if (loading || !community) {
     return (
@@ -168,17 +232,23 @@ export default function CommunityDetailScreen() {
         </Pressable>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.communityName} numberOfLines={1}>{community.name}</Text>
+          <Text style={styles.communityName} numberOfLines={1}>
+            {community.name}
+          </Text>
           <View style={styles.bookspotRow}>
             <Ionicons name="location-outline" size={13} color="#9ca3af" />
-            <Text style={styles.bookspotName} numberOfLines={1}>{bookspotName}</Text>
+            <Text style={styles.bookspotName} numberOfLines={1}>
+              {bookspotName}
+            </Text>
           </View>
         </View>
 
         <View style={styles.headerRight}>
           <View style={styles.membersChip}>
             <Ionicons name="people-outline" size={15} color="#4b5563" />
-            <Text style={styles.membersText}>{community.memberCount}/{MAX_MEMBERS}</Text>
+            <Text style={styles.membersText}>
+              {community.memberCount}/{MAX_MEMBERS}
+            </Text>
           </View>
 
           {isMember && (
@@ -194,15 +264,17 @@ export default function CommunityDetailScreen() {
           <Ionicons name="lock-closed-outline" size={48} color="#d1ccc3" />
           <Text style={styles.inactiveTitle}>Acceso restringido</Text>
           <Text style={styles.inactiveText}>
-            Debes ser miembro de esta comunidad para acceder a sus funcionalidades.
+            Debes ser miembro de esta comunidad para acceder a sus
+            funcionalidades.
           </Text>
         </View>
-      ) : community.status !== 'ACTIVE' ? (
+      ) : community.status !== "ACTIVE" ? (
         <View style={styles.inactiveContainer}>
           <Ionicons name="people-outline" size={48} color="#d1ccc3" />
           <Text style={styles.inactiveTitle}>Comunidad en formación</Text>
           <Text style={styles.inactiveText}>
-            Se necesitan al menos 3 miembros para desbloquear las funcionalidades de la comunidad.
+            Se necesitan al menos 3 miembros para desbloquear las
+            funcionalidades de la comunidad.
           </Text>
           <Text style={styles.inactiveCount}>
             {community.memberCount}/3 miembros
@@ -212,9 +284,9 @@ export default function CommunityDetailScreen() {
         <>
           {/* Tabs de secciones */}
           <View style={styles.tabBar}>
-            {SECTIONS.map(section => {
+            {SECTIONS.map((section) => {
               const isActive = activeSection === section.key;
-              const isDisabled = section.key !== 'biblioteca';
+              const isDisabled = false;
               return (
                 <Pressable
                   key={section.key}
@@ -225,13 +297,17 @@ export default function CommunityDetailScreen() {
                   <Ionicons
                     name={section.icon}
                     size={20}
-                    color={isActive ? '#e4715f' : isDisabled ? '#d1ccc3' : '#9ca3af'}
+                    color={
+                      isActive ? "#e4715f" : isDisabled ? "#d1ccc3" : "#9ca3af"
+                    }
                   />
-                  <Text style={[
-                    styles.tabLabel,
-                    isActive && styles.tabLabelActive,
-                    isDisabled && styles.tabLabelDisabled,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.tabLabel,
+                      isActive && styles.tabLabelActive,
+                      isDisabled && styles.tabLabelDisabled,
+                    ]}
+                  >
                     {section.label}
                   </Text>
                 </Pressable>
@@ -240,67 +316,154 @@ export default function CommunityDetailScreen() {
           </View>
 
           {/* Contenido de la sección activa */}
-          {activeSection === 'biblioteca' && (
+          {activeSection === "quedadas" && (
+            <CommunityMeetupTab
+              communityId={communityId}
+              meetingPointId={community?.referenceBookspotId}
+              meetingPointName={bookspot?.nombre}
+              meetingPointAddress={bookspot?.addressText}
+              canCreateMeetups={canCreateMeetups}
+            />
+          )}
+
+          {activeSection === "chat" && community.chatId && (
+            <CommunityChatTab
+              communityId={communityId}
+              chatId={community.chatId}
+            />
+          )}
+
+          {activeSection === "biblioteca" && (
             <CommunityLibraryTab communityId={communityId} />
+          )}
+          {activeSection === "ranking" && (
+            <CommunityRankingTab communityId={communityId} />
           )}
         </>
       )}
 
       {/* Modal de Administración */}
-      <Modal visible={adminModalVisible} transparent={true} animationType="slide">
+      <Modal
+        visible={adminModalVisible}
+        transparent={true}
+        animationType="slide"
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Gestionar Comunidad</Text>
-              <Pressable onPress={() => setAdminModalVisible(false)} style={{ padding: 4 }}>
+              <Pressable
+                onPress={() => setAdminModalVisible(false)}
+                style={{ padding: 4 }}
+              >
                 <Ionicons name="close" size={24} color="#333" />
               </Pressable>
             </View>
 
             {adminLoading ? (
-              <View style={{ padding: 40, alignItems: 'center' }}>
+              <View style={{ padding: 40, alignItems: "center" }}>
                 <ActivityIndicator size="large" color="#e4715f" />
               </View>
             ) : (
-              <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
-                <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
-                {adminMembers.map(m => (
-                  <View key={m.userId} style={styles.memberRow}>
-                    <View style={styles.memberInfo}>
-                      {m.profilePhoto ? (
-                        <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
-                      ) : (
-                        <View style={styles.memberAvatarPlaceholder}>
-                          <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
+              <>
+                <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
+                  <Text style={styles.sectionTitle}>
+                    Miembros ({adminMembers.length})
+                  </Text>
+                  {adminMembers.map((m) => {
+                    const isCurrentUser =
+                      !!backendUserId &&
+                      m.userId.toLowerCase() === backendUserId.toLowerCase();
+                    const targetIsCreator =
+                      m.userId.toLowerCase() ===
+                      community.creatorId.toLowerCase();
+                    const targetIsModerator = m.role === "MODERATOR";
+                    const canKick =
+                      canModerateCommunity &&
+                      !isCurrentUser &&
+                      !targetIsCreator &&
+                      (isCreator || !targetIsModerator);
+                    const isKicking = kickingMemberId === m.userId;
+
+                    return (
+                      <View key={m.userId} style={styles.memberRow}>
+                        <View style={styles.memberInfo}>
+                          {m.profilePhoto ? (
+                            <Image
+                              source={{ uri: m.profilePhoto }}
+                              style={styles.memberAvatar}
+                            />
+                          ) : (
+                            <View style={styles.memberAvatarPlaceholder}>
+                              <Text style={styles.memberAvatarText}>
+                                {m.username.charAt(0)}
+                              </Text>
+                            </View>
+                          )}
+                          <Text style={styles.memberName}>{m.username}</Text>
+                          {m.userId === community.creatorId ? (
+                            <Text style={styles.creatorBadge}>(Creador)</Text>
+                          ) : m.role === "MODERATOR" ? (
+                            <Text style={styles.creatorBadge}>(Moderador)</Text>
+                          ) : null}
                         </View>
-                      )}
-                      <Text style={styles.memberName}>{m.username}</Text>
-                      {m.userId === community.creatorId && (
-                        <Text style={styles.creatorBadge}>(Moderador)</Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </ScrollView>
+                        {canKick && (
+                          <Pressable
+                            style={styles.kickBtn}
+                            onPress={() => handleKickMember(m)}
+                            disabled={isKicking}
+                          >
+                            {isKicking ? (
+                              <ActivityIndicator size="small" color="#ef4444" />
+                            ) : (
+                              <Ionicons
+                                name="person-remove-outline"
+                                size={18}
+                                color="#ef4444"
+                              />
+                            )}
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+
+                <View style={styles.modalActions}>
+                  <Pressable
+                    style={styles.leaveBtn}
+                    onPress={() =>
+                      confirmAction(
+                        "Abandonar",
+                        "¿Seguro que quieres abandonar esta comunidad?",
+                        handleLeave,
+                        true,
+                      )
+                    }
+                  >
+                    <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
+                  </Pressable>
+
+                  {canModerateCommunity && (
+                    <Pressable
+                      style={styles.deleteBtn}
+                      onPress={() =>
+                        confirmAction(
+                          "Eliminar",
+                          "¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.",
+                          handleDelete,
+                          true,
+                        )
+                      }
+                    >
+                      <Text style={styles.deleteBtnText}>
+                        Eliminar Comunidad
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
             )}
-
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.leaveBtn}
-                onPress={() => confirmAction('Abandonar', '¿Seguro que quieres abandonar esta comunidad?', handleLeave, true)}
-              >
-                <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
-              </Pressable>
-
-              {isCreator && (
-                <Pressable
-                  style={styles.deleteBtn}
-                  onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
-                >
-                  <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
-                </Pressable>
-              )}
-            </View>
           </View>
         </View>
 
@@ -319,7 +482,9 @@ export default function CommunityDetailScreen() {
                 <Pressable
                   style={[
                     styles.confirmPrimaryBtn,
-                    confirmConfig.isDestructive ? styles.confirmDangerBtn : null,
+                    confirmConfig.isDestructive
+                      ? styles.confirmDangerBtn
+                      : null,
                   ]}
                   onPress={async () => {
                     setConfirmModalVisible(false);
@@ -340,34 +505,34 @@ export default function CommunityDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fdfbf7',
+    backgroundColor: "#fdfbf7",
   },
   centered: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
-    paddingTop: 50,
+    paddingTop: 10,
     paddingBottom: 12,
-    backgroundColor: '#fdfbf7',
+    backgroundColor: "#fdfbf7",
   },
   backButton: {
     width: 36,
     height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerCenter: {
     flex: 1,
     marginLeft: 8,
   },
   headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   adminButton: {
@@ -375,122 +540,122 @@ const styles = StyleSheet.create({
   },
   communityName: {
     fontSize: 17,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
   },
   bookspotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginTop: 2,
     gap: 3,
   },
   bookspotName: {
     fontSize: 13,
-    color: '#9ca3af',
+    color: "#9ca3af",
   },
   membersChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
   },
   membersText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#4b5563',
+    fontWeight: "600",
+    color: "#4b5563",
   },
   tabBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: '#f0ece4',
+    borderBottomColor: "#f0ece4",
   },
   tab: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 10,
     gap: 3,
     borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: '#e4715f',
+    borderBottomColor: "#e4715f",
   },
   tabLabel: {
     fontSize: 11,
-    color: '#9ca3af',
-    fontWeight: '500',
+    color: "#9ca3af",
+    fontWeight: "500",
   },
   tabLabelActive: {
-    color: '#e4715f',
-    fontWeight: '600',
+    color: "#e4715f",
+    fontWeight: "600",
   },
   tabLabelDisabled: {
-    color: '#d1ccc3',
+    color: "#d1ccc3",
   },
   inactiveContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 40,
   },
   inactiveTitle: {
     fontSize: 17,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
     marginTop: 16,
   },
   inactiveText: {
     fontSize: 14,
-    color: '#6b7280',
-    textAlign: 'center',
+    color: "#6b7280",
+    textAlign: "center",
     marginTop: 8,
   },
   inactiveCount: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#e4715f',
+    fontWeight: "600",
+    color: "#e4715f",
     marginTop: 12,
   },
   // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '80%',
+    maxHeight: "80%",
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: "600",
+    color: "#666",
     marginBottom: 12,
   },
   memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
   },
   memberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   memberAvatar: {
@@ -503,27 +668,32 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#e4715f',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#e4715f",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
   memberAvatarText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    fontWeight: "bold",
+    textTransform: "uppercase",
   },
   memberName: {
     fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
+    color: "#333",
+    fontWeight: "500",
   },
   creatorBadge: {
     fontSize: 12,
-    color: '#e4715f',
+    color: "#e4715f",
     marginLeft: 8,
-    fontWeight: '600',
+    fontWeight: "600",
+  },
+  kickBtn: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#fee2e2",
   },
   modalActions: {
     gap: 12,
@@ -531,45 +701,45 @@ const styles = StyleSheet.create({
   },
   leaveBtn: {
     padding: 16,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#f3f4f6",
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   leaveBtnText: {
-    color: '#4b5563',
+    color: "#4b5563",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   deleteBtn: {
     padding: 16,
-    backgroundColor: '#fee2e2',
+    backgroundColor: "#fee2e2",
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
   },
   deleteBtnText: {
-    color: '#ef4444',
+    color: "#ef4444",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   confirmOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(15, 23, 42, 0.35)",
+    justifyContent: "center",
+    alignItems: "center",
     zIndex: 99,
   },
   confirmCard: {
-    width: '90%',
+    width: "90%",
     maxWidth: 360,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderRadius: 18,
     paddingHorizontal: 18,
     paddingVertical: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
     shadowRadius: 12,
@@ -577,43 +747,43 @@ const styles = StyleSheet.create({
   },
   confirmTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
+    fontWeight: "700",
+    color: "#111827",
     marginBottom: 6,
   },
   confirmMessage: {
     fontSize: 14,
-    color: '#4B5563',
+    color: "#4B5563",
     marginBottom: 16,
   },
   confirmButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    flexDirection: "row",
+    justifyContent: "flex-end",
   },
   confirmSecondaryBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     marginRight: 8,
-    backgroundColor: '#F3F4F8',
+    backgroundColor: "#F3F4F8",
   },
   confirmSecondaryText: {
-    color: '#6B7280',
+    color: "#6B7280",
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   confirmPrimaryBtn: {
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#e4715f',
+    backgroundColor: "#e4715f",
   },
   confirmDangerBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: "#DC2626",
   },
   confirmPrimaryText: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

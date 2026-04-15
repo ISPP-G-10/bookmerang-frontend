@@ -1,11 +1,6 @@
 import type { MatcherCard, SwipeDirection } from '@/types/matcher';
 import { apiRequest } from './api';
 
-// ──────────────────────────────────────────────
-// Tipos que devuelve el backend
-// ──────────────────────────────────────────────
-
-/** DTO plano que devuelve GET /api/matcher/feed */
 interface FeedBookDto {
   id: number;
   ownerId: string;
@@ -25,7 +20,6 @@ interface FeedBookDto {
   distanceKm: number;
 }
 
-/** Resultado paginado de GET /api/matcher/feed */
 interface FeedResultDto {
   items: FeedBookDto[];
   page: number;
@@ -33,7 +27,6 @@ interface FeedResultDto {
   hasMore: boolean;
 }
 
-/** Resultado de POST /api/matcher/swipe */
 export interface SwipeResultDto {
   outcome: 'Recorded' | 'MatchCreated' | 'BookUnavailable';
   match: MatchCreatedDto | null;
@@ -41,20 +34,16 @@ export interface SwipeResultDto {
 
 export interface MatchCreatedDto {
   matchId: number;
-  chatId: number;
+  chatId: string;
   otherUserId: string;
   otherUsername: string;
 }
-
-// ──────────────────────────────────────────────
-// Mapeo backend → frontend
-// ──────────────────────────────────────────────
 
 function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
   return {
     book: {
       id: dto.id,
-      ownerId: 0, // Guid del backend, no se usa visualmente
+      ownerId: 0,
       isbn: null,
       titulo: dto.titulo,
       autor: dto.autor,
@@ -93,18 +82,11 @@ function mapFeedBookToMatcherCard(dto: FeedBookDto): MatcherCard {
   };
 }
 
-// ──────────────────────────────────────────────
-// Llamadas a la API
-// ──────────────────────────────────────────────
-
 export interface FeedResult {
   cards: MatcherCard[];
   hasMore: boolean;
 }
 
-/**
- * Obtiene el feed paginado de libros candidatos para el matcher.
- */
 export async function fetchFeed(
   page: number = 0,
   size: number = 20,
@@ -123,10 +105,6 @@ export async function fetchFeed(
   };
 }
 
-/**
- * Envía un swipe (LEFT o RIGHT) sobre un libro.
- * Devuelve el resultado del swipe y, si hay match, los datos del match.
- */
 export async function sendSwipe(
   bookId: number,
   direction: SwipeDirection,
@@ -142,19 +120,4 @@ export async function sendSwipe(
   }
 
   return res.json();
-}
-
-/**
- * Deshace el último swipe del usuario (si no generó match).
- */
-export async function undoLastSwipe(): Promise<{ message: string }> {
-  const res = await apiRequest('/matcher/undo', {
-    method: 'POST',
-  });
-
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(body.message ?? `Error al deshacer swipe (${res.status})`);
-  }
-  return body;
 }

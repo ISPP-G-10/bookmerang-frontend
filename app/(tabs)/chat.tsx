@@ -1,15 +1,15 @@
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   View as RNView,
   StyleSheet,
   TextInput,
 } from "react-native";
+import ChatAvatar from "@/components/ChatAvatar";
 
 import { Text, View } from "@/components/Themed";
 import Header from "@/components/Header";
@@ -51,37 +51,19 @@ function ChatListItem({
   const router = useRouter();
   const lastMessage = chat.lastMessage;
 
-  // Nombre a mostrar: en chats directos el otro usuario, en comunidad el nombre del grupo
-  let displayName: string;
-  let avatarUrl: string | null = null;
-
   const otherParticipant = chat.participants.find(
     (p) => p.userId !== currentUserId,
   );
 
-  if (chat.type === 'COMMUNITY') {
-    // Usar el nombre de la comunidad devuelto por el backend
-    displayName = chat.name ?? 'Comunidad';
-  } else {
-    displayName = otherParticipant?.username ?? "Usuario";
-    avatarUrl = otherParticipant?.profilePhoto || null;
-  }
+  const displayName = otherParticipant?.username ?? "Usuario";
+  const avatarUrl = otherParticipant?.profilePhoto || null;
 
-  // Para mensajes de grupo, mostrar quién envió el último mensaje
   let lastMessagePreview = "";
   if (lastMessage) {
-    if (chat.type === "COMMUNITY") {
-      const senderName =
-        lastMessage.senderId === currentUserId
-          ? "Tú"
-          : (lastMessage.senderUsername?.split(" ")[0] ?? "Usuario");
-      lastMessagePreview = `${senderName}: ${lastMessage.body}`;
-    } else {
-      lastMessagePreview =
-        lastMessage.senderId === currentUserId
-          ? `Tú: ${lastMessage.body}`
-          : lastMessage.body;
-    }
+    lastMessagePreview =
+      lastMessage.senderId === currentUserId
+        ? `Tú: ${lastMessage.body}`
+        : lastMessage.body;
   }
 
   const initials = displayName
@@ -101,13 +83,13 @@ function ChatListItem({
     >
       {/* Avatar */}
       <RNView style={styles.avatarWrapper}>
-        {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
-        ) : (
-          <RNView style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </RNView>
-        )}
+        <ChatAvatar
+          profilePhoto={avatarUrl}
+          username={displayName}
+          size={54}
+          activeFrameId={otherParticipant?.activeFrameId}
+          activeColorId={otherParticipant?.activeColorId}
+        />
       </RNView>
 
       {/* Contenido */}
@@ -140,9 +122,8 @@ export default function ChatListScreen() {
   const [allChats, setAllChats] = useState<ChatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const TAB_VALUES = ["Comunidades", "Nuevos matches", "En curso", "Finalizados"];
+  const TAB_VALUES = ["Nuevos matches", "En curso", "Finalizados"];
   const TAB_LABELS: Record<string, string> = {
-    Comunidades: "Comunidades",
     "Nuevos matches": "Nuevos",
     "En curso": "Curso",
     Finalizados: "Final",
@@ -150,6 +131,7 @@ export default function ChatListScreen() {
   const [activeTab, setActiveTab] = useState<string>('Nuevos matches');
   const [search, setSearch] = useState('');
   const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([])
+  const hasLoadedOnce = useRef(false);
 
   // Determina a qué pestaña pertenece un exchange según su estado.
   const exchangeMatchesTab = (
@@ -180,12 +162,12 @@ export default function ChatListScreen() {
 
   const fetchChats = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!hasLoadedOnce.current) setLoading(true);
       setError(null);
 
       const data = await getMyChats();
 
-      const exchangeResults = await Promise.all(data.map(c => getExchangeByChatIdWithMatch(c.id)));
+      const exchangeResults = await Promise.all(data.map((c) => getExchangeByChatIdWithMatch(c.id)));
       setExchanges(exchangeResults.filter((e): e is ExchangeWithMatchDto => e !== null));
 
       // Si aún no conocemos el userId del backend, resolverlo desde los chats
@@ -205,6 +187,7 @@ export default function ChatListScreen() {
 
       setAllChats(sorted);
       setChats(sorted);
+      hasLoadedOnce.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar chats");
     } finally {
@@ -220,12 +203,11 @@ export default function ChatListScreen() {
   );
 
   useEffect(() => {
+    // Filter out community chats - they are now in the Communities tab
+    const nonCommunityChats = allChats.filter((c) => c.type !== 'COMMUNITY');
+
     // filtrar por texto (barra de búsqueda)
-    const bySearch = allChats.filter((c) => {
-      if (c.type === 'COMMUNITY') {
-        const name = c.name ?? 'Comunidad';
-        return name.toLowerCase().includes(search.toLowerCase());
-      }
+    const bySearch = nonCommunityChats.filter((c) => {
       const other = c.participants.find((p) => p.userId !== currentUserId);
       const name = (other?.username ?? "Usuario desconocido").toLowerCase();
       return name.includes(search.toLowerCase());
@@ -233,15 +215,7 @@ export default function ChatListScreen() {
 
     // filtrar por pestaña
     const byTab = bySearch.filter((chat) => {
-      if (activeTab === 'Comunidades') {
-        return chat.type === 'COMMUNITY';
-      }
-
-      if (chat.type === 'COMMUNITY') {
-        return false;
-      }
-
-      const currentExchange = exchanges.find((e) => e.chatId === chat.id);
+      const currentExchange = exchanges.find((e) => String(e.chatId) === String(chat.id));
       return exchangeMatchesTab(currentExchange, activeTab);
     });
 
@@ -328,7 +302,7 @@ export default function ChatListScreen() {
           let iconName = "comments-o";
           let title = "No tienes chats todavía";
           let subtitle =
-            "Cuando hagas match con otros usuarios o te unas a comunidades, tus conversaciones aparecerán aquí.";
+            "Cuando hagas match con otros usuarios, tus conversaciones aparecerán aquí.";
 
           if (activeTab === "En curso") {
             iconName = "handshake-o";
@@ -397,26 +371,6 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: {
     marginRight: 14,
-  },
-  avatarImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#D1D5DB",
-  },
-  avatarPlaceholder: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "#e4715f",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarText: {
-    color: "#000000",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
   },
   chatContent: {
     flex: 1,

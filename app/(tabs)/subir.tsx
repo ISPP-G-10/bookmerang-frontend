@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
+import DraftsModal from "@/components/book-upload/DraftsModal";
 import {
   MIN_BOOK_PHOTOS,
   MAX_BOOK_PHOTOS,
@@ -94,15 +95,14 @@ export default function SubirScreen() {
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
-  const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
-  const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
+    const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
   const [showDraftsModal, setShowDraftsModal] = useState(false);
   const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
-  const [pendingDeleteDraft, setPendingDeleteDraft] = useState<BookDraftSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [infoModal, setInfoModal] = useState<InfoModalState | null>(null);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [capturingPhoto, setCapturingPhoto] = useState(false);
   const cameraRef = useRef<CameraView | null>(null);
@@ -119,13 +119,13 @@ export default function SubirScreen() {
   }, [draftId, photos.length]);
 
   const resetUploadScreen = useCallback((message?: string) => {
+    router.setParams({ draftId: "", reset: "" });
     setDraftId(null);
     setPhotos([]);
     setError(null);
     setFeedback(message ?? null);
     setShowDraftsModal(false);
     setShowSaveDraftModal(false);
-    setPendingDeleteDraft(null);
     setInfoModal(null);
   }, []);
 
@@ -501,57 +501,15 @@ export default function SubirScreen() {
     }
   };
 
-  const performDeleteDraft = async (draft: BookDraftSummary) => {
-    setDeletingDraftId(draft.id);
-    setError(null);
-    setPendingDeleteDraft(null);
-
-    try {
-      await deleteBook(draft.id);
-      setDrafts((current) => current.filter((item) => item.id !== draft.id));
-
-      if (draftId === draft.id) {
-        setDraftId(null);
-        setPhotos([]);
-      }
-
-      setFeedback("Borrador eliminado correctamente.");
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setDeletingDraftId(null);
-    }
-  };
-
-  const handleDeleteDraft = (draft: BookDraftSummary) => {
-    if (deletingDraftId) return;
-    setPendingDeleteDraft(draft);
-  };
-
-  const closeDeleteDraftModal = () => {
-    setPendingDeleteDraft(null);
-  };
-
-  const confirmDeleteDraft = () => {
-    if (!pendingDeleteDraft) return;
-    performDeleteDraft(pendingDeleteDraft);
-  };
-
+  
   const handleCancel = () => {
-    Alert.alert(
-      "Cancelar",
-      "Se perderán los cambios no guardados de esta pantalla.",
-      [
-        { text: "Seguir editando", style: "cancel" },
-        {
-          text: "Cancelar subida",
-          style: "destructive",
-          onPress: () => {
-            resetUploadScreen();
-          },
-        },
-      ],
-    );
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = () => {
+    setShowCancelModal(false);
+    resetUploadScreen();
+    router.replace("/matcher" as any);
   };
 
   return (
@@ -662,62 +620,21 @@ export default function SubirScreen() {
         </View>
       ) : null}
 
-      <Modal
-        transparent
+      <DraftsModal
         visible={showDraftsModal}
-        animationType="slide"
-        onRequestClose={() => setShowDraftsModal(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowDraftsModal(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Tus borradores</Text>
-            {drafts.length === 0 ? (
-              <Text style={styles.emptyDraftsText}>No tienes borradores guardados.</Text>
-            ) : (
-              <ScrollView style={styles.modalList}>
-                {drafts.map((draft) => (
-                  <View key={draft.id} style={styles.draftItem}>
-                    <TouchableOpacity
-                      style={styles.draftMainArea}
-                      onPress={() => handleLoadDraft(draft)}
-                      disabled={Boolean(deletingDraftId)}
-                    >
-                      {draft.thumbnailUrl ? (
-                        <Image source={{ uri: draft.thumbnailUrl }} style={styles.draftThumb} />
-                      ) : (
-                        <View style={styles.draftThumbPlaceholder}>
-                          <FontAwesome name="book" size={18} color="#b2a89b" />
-                        </View>
-                      )}
-                      <View style={styles.draftInfo}>
-                        <Text numberOfLines={1} style={styles.draftTitle}>
-                          {draft.titulo?.trim() || "Sin título"}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.draftSubtitle}>
-                          {draft.autor?.trim() || "Autor sin definir"}
-                        </Text>
-                        <Text style={styles.draftDate}>{formatUpdatedAt(draft.updatedAt)}</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.draftDeleteButton}
-                      onPress={() => handleDeleteDraft(draft)}
-                      disabled={deletingDraftId === draft.id}
-                    >
-                      {deletingDraftId === draft.id ? (
-                        <ActivityIndicator size="small" color="#d5785f" />
-                      ) : (
-                        <FontAwesome name="trash" size={16} color="#d5785f" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowDraftsModal(false)}
+        drafts={drafts}
+        onLoadDraft={handleLoadDraft}
+        onDraftDeleted={(draftIdToDelete) => {
+          setDrafts((current) => current.filter((item) => item.id !== draftIdToDelete));
+          if (draftId === draftIdToDelete) {
+            setDraftId(null);
+            setPhotos([]);
+          }
+        }}
+        onError={setError}
+        onSuccess={setFeedback}
+      />
 
       <FlowInfoModal
         visible={Boolean(infoModal)}
@@ -785,14 +702,14 @@ export default function SubirScreen() {
         onSecondaryPress={() => setShowSaveDraftModal(false)}
       />
 
-      <FlowInfoModal
-        visible={Boolean(pendingDeleteDraft)}
-        title="Eliminar borrador"
-        message="Esta acción eliminará el borrador de forma permanente."
-        primaryLabel="Eliminar"
-        secondaryLabel="Cancelar"
-        onPrimaryPress={confirmDeleteDraft}
-        onSecondaryPress={closeDeleteDraftModal}
+            <FlowInfoModal
+        visible={showCancelModal}
+        title="Cancelar subida"
+        message="¿Estás seguro de que quieres cancelar? Perderás los cambios no guardados."
+        primaryLabel="Sí, cancelar"
+        secondaryLabel="Seguir editando"
+        onPrimaryPress={confirmCancel}
+        onSecondaryPress={() => setShowCancelModal(false)}
       />
     </View>
   );

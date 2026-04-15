@@ -1,306 +1,645 @@
-import React, { useState, useCallback } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, Alert, Pressable, Platform, Modal, ScrollView, Image } from 'react-native';
-import * as Location from 'expo-location';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  RefreshControl,
+  Modal,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-
+import * as Location from 'expo-location';
 import Header from '@/components/Header';
-import { exploreCommunities, getMyCommunities, joinCommunity, leaveCommunity, deleteCommunity } from '@/lib/communityApi';
-import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
-import { getChat } from '@/lib/chatApi';
-import { useAuth } from '@/contexts/AuthContext';
-import { CommunityDto } from '@/types/community';
-import { ChatParticipantDto } from '@/types/chat';
-import PlatformMap from '@/components/communities/PlatformMap';
+import { 
+  exploreCommunities, 
+  getMyCommunities, 
+  joinCommunity, 
+  getCommunityLibrary, 
+  getCommunityMembers } from '@/lib/communityApi';
+import { getBookspotById } from '@/lib/bookspotApi';
+import { CommunityDto, CommunityMemberDto } from '@/types/community';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Colors from mockup
+const COLORS = {
+  coral: '#e4715f',
+  coralLight: '#fdf0ec',
+  darkText: '#3d405b',
+  grayText: '#6b7280',
+  lightGray: '#9ca3af',
+  border: '#e5e7eb',
+  background: '#fdfbf7',
+  tagBg: '#f3f4f6',
+  white: '#ffffff',
+};
+
+// Avatar colors for member circles
+const AVATAR_COLORS = ['#e4715f', '#3d405b', '#81b29a', '#f2cc8f', '#9c6644', '#457b9d', '#8338ec', '#fb5607'];
+
+const MAX_MEMBERS = 10;
+const MAX_VISIBLE_AVATARS = 4;
+
+// Default genres when library is empty
+const DEFAULT_GENRES = ['Literatura', 'Ficción'];
 
 const DEFAULT_LOCATION = {
   latitude: 37.3886,
   longitude: -5.9823,
-  latitudeDelta: 0.1,
-  longitudeDelta: 0.1,
 };
+
+type TabKey = 'explorar' | 'mis';
+
+interface BookspotInfo {
+  name: string;
+  city: string;
+  address?: string;
+}
 
 export default function ComunidadesScreen() {
   const router = useRouter();
-  const { currentUserId } = useAuth();
-  const [location, setLocation] = useState(DEFAULT_LOCATION);
+  const [activeTab, setActiveTab] = useState<TabKey>('mis');
+  const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
   const [myCommunities, setMyCommunities] = useState<CommunityDto[]>([]);
-  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Admin Modal state
-  const [adminModalVisible, setAdminModalVisible] = useState(false);
-  const [selectedAdminComm, setSelectedAdminComm] = useState<CommunityDto | null>(null);
-  const [adminMembers, setAdminMembers] = useState<ChatParticipantDto[]>([]);
-  const [adminLoading, setAdminLoading] = useState(false);
-
-  // Confirm Modal state
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-  const [confirmConfig, setConfirmConfig] = useState({
-    title: '',
-    message: '',
-    isDestructive: false,
-    onConfirm: async () => {},
-  });
+  const [bookspotInfoMap, setBookspotInfoMap] = useState<Record<number, BookspotInfo>>({});
+  const [communityGenresMap, setCommunityGenresMap] = useState<Record<number, string[]>>({});
+  const [refreshing, setRefreshing] = useState(false);
+  const hasLoadedOnce = useRef(false);
+  const [joiningId, setJoiningId] = useState<number | null>(null);
+  const [hoveredCardId, setHoveredCardId] = useState<number | null>(null);
+  const [selectedCommunity, setSelectedCommunity] = useState<CommunityDto | null>(null);
+  const [selectedCommunityMembers, setSelectedCommunityMembers] = useState<CommunityMemberDto[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const fetchCommunities = useCallback(async (lat: number, lon: number) => {
     try {
-      setLoading(true);
-      const [allComms, myComms, allBookspots] = await Promise.all([
+      const [allComms, myComms] = await Promise.all([
         exploreCommunities(lat, lon, 50),
         getMyCommunities(),
-        getUserActiveBookspots()
       ]);
+
       setCommunities(allComms);
       setMyCommunities(myComms);
-      setBookspots(allBookspots);
-    } catch (error: any) {
+
+      // Fetch bookspot info for all communities
+      const allCommunities = [...allComms, ...myComms];
+      const uniqueBookspotIds = [...new Set(allCommunities.map(c => c.referenceBookspotId))];
+      
+      const bookspotInfoPromises = uniqueBookspotIds.map(async (id) => {
+        try {
+          const bookspot = await getBookspotById(id);
+          const city = bookspot.addressText?.split(',').pop()?.trim() || 'Madrid';
+          const address = bookspot.addressText || 'Dirección no disponible';
+          return { id, info: { name: bookspot.nombre, city, address } };
+        } catch {
+          return { id, info: { name: 'BookSpot', city: 'Madrid', address: 'Dirección no disponible' } };
+        }
+      });
+
+      const results = await Promise.all(bookspotInfoPromises);
+      const infoMap: Record<number, BookspotInfo> = {};
+      results.forEach(r => { infoMap[r.id] = r.info; });
+      setBookspotInfoMap(infoMap);
+
+      // Fetch genres from community libraries
+      const genresPromises = allCommunities.map(async (community) => {
+        try {
+          const library = await getCommunityLibrary(community.id, 1, 50);
+          // Extract unique genres from all books
+          const allGenres = library.flatMap(book => book.genres || []);
+          const uniqueGenres = [...new Set(allGenres)].slice(0, 3); // Max 3 genres
+          return { id: community.id, genres: uniqueGenres.length > 0 ? uniqueGenres : DEFAULT_GENRES };
+        } catch {
+          return { id: community.id, genres: DEFAULT_GENRES };
+        }
+      });
+
+      const genresResults = await Promise.all(genresPromises);
+      const genresMap: Record<number, string[]> = {};
+      genresResults.forEach(r => { genresMap[r.id] = r.genres; });
+      setCommunityGenresMap(genresMap);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'No se pudieron cargar las comunidades';
       console.error(error);
-      Alert.alert('Error', error.message || 'No se pudieron cargar las comunidades');
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', errorMessage);
     }
   }, []);
 
-  const loadLocationAndData = useCallback(async () => {
+  const loadLocationAndData = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
+    
     let lat = DEFAULT_LOCATION.latitude;
     let lon = DEFAULT_LOCATION.longitude;
 
     if (Platform.OS !== 'web') {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         try {
-          let currentLocation = await Location.getCurrentPositionAsync({});
+          const currentLocation = await Location.getCurrentPositionAsync({});
           lat = currentLocation.coords.latitude;
           lon = currentLocation.coords.longitude;
-          setLocation({
-            latitude: lat,
-            longitude: lon,
-            latitudeDelta: 0.1,
-            longitudeDelta: 0.1,
-          });
         } catch (e) {
           console.warn('Could not get current location, using default', e);
         }
       }
     }
-    
+
     await fetchCommunities(lat, lon);
+    hasLoadedOnce.current = true;
+    setLoading(false);
+    setRefreshing(false);
   }, [fetchCommunities]);
 
   useFocusEffect(
     useCallback(() => {
-      loadLocationAndData();
+      loadLocationAndData(!hasLoadedOnce.current ? false : true);
     }, [loadLocationAndData])
   );
-const handleJoin = async (communityId: number) => {
-  try {
-    setLoading(true);
-    await joinCommunity(communityId);
 
-    await loadLocationAndData(); 
-  } catch (error: any) {
-    console.error('Error joining community:', error);
-    const errorMessage = error.message || 'No se pudo unir a la comunidad';
-    
-    if (Platform.OS === 'web') {
-      // Forzamos el alert nativo del navegador para depuración inmediata
-      window.alert(`No se pudo unir: ${errorMessage}`);
-    } else {
-      Alert.alert('No se pudo unir', errorMessage);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadLocationAndData(true);
+  }, [loadLocationAndData]);
 
-
-  const handleAdmin = async (comm: CommunityDto) => {
-    setSelectedAdminComm(comm);
-    setAdminModalVisible(true);
-    setAdminLoading(true);
+  const handleJoin = async (communityId: number) => {
     try {
-      if (comm.chatId) {
-        const chat = await getChat(comm.chatId);
-        setAdminMembers(chat.participants || []);
+      setJoiningId(communityId);
+      await joinCommunity(communityId);
+      await loadLocationAndData(true);
+      Alert.alert('¡Éxito!', 'Te has unido a la comunidad');
+    } catch (error: unknown) {
+      console.error('Error joining community:', error);
+      const errorMessage = error instanceof Error ? error.message : 'No se pudo unir a la comunidad';
+      
+      if (Platform.OS === 'web') {
+        window.alert(`No se pudo unir: ${errorMessage}`);
+      } else {
+        Alert.alert('No se pudo unir', errorMessage);
       }
-    } catch (e) {
-      console.warn("Could not load chat participants", e);
     } finally {
-      setAdminLoading(false);
+      setJoiningId(null);
     }
   };
 
-  const confirmAction = (title: string, msg: string, onConfirm: () => void, isDestructive = false) => {
-    setConfirmConfig({
-      title,
-      message: msg,
-      isDestructive,
-      onConfirm: async () => {
-        onConfirm();
-      },
-    });
-    setConfirmModalVisible(true);
-  };
-
-  const handleLeave = async () => {
-    if (!selectedAdminComm) return;
-    try {
-      setAdminLoading(true);
-      await leaveCommunity(selectedAdminComm.id);
-      Alert.alert('Éxito', 'Has abandonado la comunidad');
-      setAdminModalVisible(false);
-      await loadLocationAndData();
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo abandonar');
-    } finally {
-      setAdminLoading(false);
+  const handleCommunityPress = async (community: CommunityDto) => {
+    const isMine = myCommIds.has(community.id);
+    if (isMine) {
+      // If user is member, go directly to community detail
+      router.push(`/communities/${community.id}` as never);
+    } else {
+      // If not member, show modal with details and load members
+      setSelectedCommunity(community);
+      setSelectedCommunityMembers([]);
+      setModalVisible(true);
+      
+      // Load members in background
+      try {
+        setLoadingMembers(true);
+        const members = await getCommunityMembers(community.id);
+        setSelectedCommunityMembers(members);
+      } catch (error) {
+        console.error('Error loading members:', error);
+      } finally {
+        setLoadingMembers(false);
+      }
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedAdminComm) return;
-    try {
-      setAdminLoading(true);
-      await deleteCommunity(selectedAdminComm.id);
-      Alert.alert('Éxito', 'Comunidad eliminada');
-      setAdminModalVisible(false);
-      await loadLocationAndData();
-    } catch (e: any) {
-      Alert.alert('Error', e.message || 'No se pudo eliminar');
-    } finally {
-      setAdminLoading(false);
-    }
+  const handleModalJoin = async () => {
+    if (!selectedCommunity) return;
+    setModalVisible(false);
+    await handleJoin(selectedCommunity.id);
   };
 
+  const handleModalClose = () => {
+    setModalVisible(false);
+    setSelectedCommunity(null);
+  };
 
+  const handleCreatePress = () => {
+    router.push('/communities/create' as never);
+  };
 
-  // Agrupar comunidades por bookspot para renderizar en el mapa
-  const communitiesWithLocation = communities.map(c => {
-    const spot = bookspots.find(b => b.id === c.referenceBookspotId);
-    return { ...c, spot };
-  }).filter(c => c.spot !== undefined) as (CommunityDto & { spot: BookspotPendingDTO })[];
+  // Filter communities based on active tab and search query
+  const myCommIds = useMemo(() => new Set(myCommunities.map(c => c.id)), [myCommunities]);
+  
+  const filteredCommunities = useMemo(() => {
+    let list: CommunityDto[];
+    
+    if (activeTab === 'explorar') {
+      // Show communities user hasn't joined
+      list = communities.filter(c => !myCommIds.has(c.id));
+    } else {
+      // Show user's communities
+      list = myCommunities;
+    }
 
-  const isCreator = selectedAdminComm?.creatorId === currentUserId;
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      list = list.filter(c => c.name.toLowerCase().includes(query));
+    }
+
+    return list;
+  }, [activeTab, communities, myCommunities, myCommIds, searchQuery]);
+
+  // Get genres for a community from library books
+  const getGenres = (id: number): string[] => {
+    return communityGenresMap[id] || DEFAULT_GENRES;
+  };
+
+  // Render member avatars (for list cards)
+  const renderMemberAvatars = (memberCount: number, communityId: number) => {
+    const visibleCount = Math.min(memberCount, MAX_VISIBLE_AVATARS);
+    const remainingCount = memberCount - visibleCount;
+    const avatars = [];
+
+    for (let i = 0; i < visibleCount; i++) {
+      avatars.push(
+        <View
+          key={i}
+          style={[
+            styles.avatar,
+            {
+              backgroundColor: AVATAR_COLORS[(communityId + i) % AVATAR_COLORS.length],
+              marginLeft: i > 0 ? -8 : 0,
+              zIndex: visibleCount - i,
+            },
+          ]}
+        >
+          <Text style={styles.avatarText}>
+            {String.fromCharCode(65 + ((communityId + i) % 26))}
+          </Text>
+        </View>
+      );
+    }
+
+    if (remainingCount > 0) {
+      avatars.push(
+        <View
+          key="remaining"
+          style={[
+            styles.avatar,
+            styles.avatarRemaining,
+            { marginLeft: -8, zIndex: 0 },
+          ]}
+        >
+          <Text style={styles.avatarRemainingText}>+{remainingCount}</Text>
+        </View>
+      );
+    }
+
+    return avatars;
+  };
+
+  // Render a community card
+  const renderCommunityCard = ({ item }: { item: CommunityDto }) => {
+    const availableSpots = MAX_MEMBERS - item.memberCount;
+    const bookspotInfo = bookspotInfoMap[item.referenceBookspotId];
+    const genres = getGenres(item.id);
+    const isMine = myCommIds.has(item.id);
+    const isJoining = joiningId === item.id;
+    const isHovered = hoveredCardId === item.id;
+
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.card,
+          isHovered && styles.cardHovered,
+          pressed && styles.cardPressed,
+        ]}
+        onPress={() => handleCommunityPress(item)}
+        onHoverIn={() => setHoveredCardId(item.id)}
+        onHoverOut={() => setHoveredCardId(null)}
+      >
+        {/* Card Header: Name + Chevron */}
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+          <Ionicons name="chevron-forward" size={20} color={COLORS.lightGray} />
+        </View>
+
+        {/* Location */}
+        <View style={styles.infoRow}>
+          <Ionicons name="location-outline" size={16} color={COLORS.grayText} />
+          <Text style={styles.infoText}>{bookspotInfo?.city || 'Madrid'}</Text>
+        </View>
+
+        {/* BookSpot */}
+        <View style={styles.infoRow}>
+          <Ionicons name="storefront-outline" size={16} color={COLORS.grayText} />
+          <Text style={styles.infoText} numberOfLines={1}>
+            {bookspotInfo?.name || 'BookSpot'}
+          </Text>
+        </View>
+
+        {/* Members Row */}
+        <View style={styles.membersRow}>
+          <View style={styles.avatarsContainer}>
+            {renderMemberAvatars(item.memberCount, item.id)}
+          </View>
+          <Text style={styles.memberCount}>{item.memberCount}/{MAX_MEMBERS}</Text>
+          {availableSpots > 0 && (
+            <Text style={styles.availableSpots}>{availableSpots} plazas</Text>
+          )}
+        </View>
+
+        {/* Genre Tags */}
+        <View style={styles.tagsContainer}>
+          {genres.map((genre, idx) => (
+            <View key={idx} style={styles.tag}>
+              <Text style={styles.tagText}>{genre}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Action Button */}
+        {!isMine ? (
+          <Pressable
+            style={[styles.joinButton, isJoining && styles.joinButtonDisabled]}
+            onPress={(e) => {
+              e.stopPropagation();
+              if (!isJoining) handleJoin(item.id);
+            }}
+            disabled={isJoining}
+          >
+            {isJoining ? (
+              <ActivityIndicator size="small" color={COLORS.white} />
+            ) : (
+              <>
+                <Ionicons name="people" size={18} color={COLORS.white} />
+                <Text style={styles.joinButtonText}>Unirse a la comunidad</Text>
+              </>
+            )}
+          </Pressable>
+        ) : (
+          <Pressable
+            style={styles.viewButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              router.push(`/communities/${item.id}` as never);
+            }}
+          >
+            <Ionicons name="eye-outline" size={18} color={COLORS.coral} />
+            <Text style={styles.viewButtonText}>Ver comunidad</Text>
+          </Pressable>
+        )}
+      </Pressable>
+    );
+  };
+
+  // Empty state component
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Ionicons 
+        name={activeTab === 'explorar' ? 'compass-outline' : 'people-outline'} 
+        size={48} 
+        color={COLORS.lightGray} 
+      />
+      <Text style={styles.emptyStateTitle}>
+        {activeTab === 'explorar' 
+          ? 'No hay comunidades cerca' 
+          : 'Aún no te has unido a ninguna comunidad'}
+      </Text>
+      <Text style={styles.emptyStateText}>
+        {activeTab === 'explorar'
+          ? 'Intenta ampliar tu búsqueda o crea una nueva comunidad'
+          : 'Explora comunidades cerca de ti y únete'}
+      </Text>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       <Header />
       
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <Pressable
+          style={[styles.tab, activeTab === 'mis' && styles.tabActive]}
+          onPress={() => setActiveTab('mis')}
+        >
+          <Text style={[styles.tabText, activeTab === 'mis' && styles.tabTextActive]}>
+            Mis Comunidades
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, activeTab === 'explorar' && styles.tabActive]}
+          onPress={() => setActiveTab('explorar')}
+        >
+          <Text style={[styles.tabText, activeTab === 'explorar' && styles.tabTextActive]}>
+            Explorar
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={20} color={COLORS.lightGray} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar comunidades..."
+            placeholderTextColor={COLORS.lightGray}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color={COLORS.lightGray} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Section Header */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>
+          {activeTab === 'explorar' ? 'Cerca de ti' : 'Tus comunidades'}
+        </Text>
+        <Pressable style={styles.addButton} onPress={handleCreatePress}>
+          <Ionicons name="add" size={20} color={COLORS.white} />
+        </Pressable>
+      </View>
+
+      {/* Community List */}
       {loading && communities.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#e4715f" />
+          <ActivityIndicator size="large" color={COLORS.coral} />
         </View>
       ) : (
-        <View style={styles.mapContainer}>
-          <PlatformMap
-            location={location}
-            communities={communitiesWithLocation}
-            myCommunities={myCommunities}
-            onJoin={handleJoin}
-            onAdmin={handleAdmin}
-            onLibrary={(communityId: number) => router.push(`/communities/${communityId}` as any)}
-          />
-          
-          <Pressable 
-            style={styles.fab} 
-            onPress={() => router.push('/communities/create' as any)}
-          >
-            <Ionicons name="add" size={24} color="#fff" />
-          </Pressable>
-        </View>
+        <FlatList
+          data={filteredCommunities}
+          renderItem={renderCommunityCard}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={renderEmptyState}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[COLORS.coral]}
+              tintColor={COLORS.coral}
+            />
+          }
+        />
       )}
 
-      {/* Modal de Administración */}
-      <Modal visible={adminModalVisible} transparent={true} animationType="slide">
+      {/* Community Detail Modal (Bottom Sheet) */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={handleModalClose}
+      >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Gestionar Comunidad</Text>
-              <Pressable onPress={() => setAdminModalVisible(false)} style={{ padding: 4 }}>
-                <Ionicons name="close" size={24} color="#333" />
-              </Pressable>
-            </View>
+          <Pressable style={styles.modalBackdrop} onPress={handleModalClose} />
+          <View style={styles.modalContainer}>
+            {selectedCommunity && (
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                {/* Modal Header */}
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{selectedCommunity.name}</Text>
+                  <Pressable onPress={handleModalClose} style={styles.modalCloseBtn}>
+                    <Ionicons name="close" size={24} color={COLORS.grayText} />
+                  </Pressable>
+                </View>
+                {/* Location */}
+                <View style={styles.modalLocationRow}>
+                  <Ionicons name="location" size={16} color={COLORS.coral} />
+                  <Text style={styles.modalLocationText}>
+                    {bookspotInfoMap[selectedCommunity.referenceBookspotId]?.city || 'Madrid'}
+                  </Text>
+                </View>
 
-            {adminLoading ? (
-              <View style={{ padding: 40, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#e4715f" />
-              </View>
-            ) : (
-              <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
-                <Text style={styles.sectionTitle}>Miembros ({adminMembers.length})</Text>
-                {adminMembers.map(m => (
-                  <View key={m.userId} style={styles.memberRow}>
-                    <View style={styles.memberInfo}>
-                      {m.profilePhoto ? (
-                        <Image source={{ uri: m.profilePhoto }} style={styles.memberAvatar} />
-                      ) : (
-                        <View style={styles.memberAvatarPlaceholder}>
-                          <Text style={styles.memberAvatarText}>{m.username.charAt(0)}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.memberName}>{m.username}</Text>
-                      {m.userId === selectedAdminComm?.creatorId && (
-                        <Text style={styles.creatorBadge}>(Moderador)</Text>
-                      )}
+                {/* BookSpot Card */}
+                <View style={styles.bookspotCard}>
+                  <View style={styles.bookspotIcon}>
+                    <Ionicons name="storefront" size={24} color={COLORS.coral} />
+                  </View>
+                  <View style={styles.bookspotInfo}>
+                    <Text style={styles.bookspotLabel}>BookSpot de referencia</Text>
+                    <Text style={styles.bookspotName}>
+                      {bookspotInfoMap[selectedCommunity.referenceBookspotId]?.name || 'BookSpot'}
+                    </Text>
+                    <View style={styles.bookspotAddressRow}>
+                      <Ionicons name="location-outline" size={14} color={COLORS.grayText} />
+                      <Text style={styles.bookspotAddress}>
+                        {bookspotInfoMap[selectedCommunity.referenceBookspotId]?.address || 'Dirección no disponible'}
+                      </Text>
                     </View>
                   </View>
-                ))}
+                </View>
+
+                {/* Members Section */}
+                <View style={styles.modalSection}>
+                  <View style={styles.modalSectionHeader}>
+                    <Ionicons name="people-outline" size={20} color={COLORS.darkText} />
+                    <Text style={styles.modalSectionTitle}>
+                      Miembros ({selectedCommunity.memberCount}/{MAX_MEMBERS})
+                    </Text>
+                  </View>
+                  <View style={styles.membersGrid}>
+                    {loadingMembers ? (
+                      <ActivityIndicator size="small" color={COLORS.coral} style={{ padding: 10 }} />
+                    ) : (
+                      selectedCommunityMembers.map((member, idx) => (
+                        <View key={member.userId} style={styles.memberChip}>
+                          <View
+                            style={[
+                              styles.memberChipAvatar,
+                              { backgroundColor: AVATAR_COLORS[idx % AVATAR_COLORS.length] }
+                            ]}
+                          >
+                            <Text style={styles.memberChipAvatarText}>
+                              {member.username.substring(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                          <Text style={styles.memberChipName}>{member.username}</Text>
+                        </View>
+                      ))
+                    )}
+                    {/* Available spots badge */}
+                    {MAX_MEMBERS - selectedCommunity.memberCount > 0 && (
+                      <View style={styles.availableSpotsChip}>
+                        <Text style={styles.availableSpotsChipText}>
+                          {MAX_MEMBERS - selectedCommunity.memberCount} plazas libres
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                {/* Genres Section */}
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>Géneros de interés</Text>
+                  <View style={styles.genreTagsRow}>
+                    {getGenres(selectedCommunity.id).map((genre, idx) => (
+                      <View key={idx} style={styles.genreTag}>
+                        <Text style={styles.genreTagText}>{genre}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Benefits Section */}
+                <View style={styles.benefitsCard}>
+                  <Text style={styles.benefitsTitle}>Al unirte tendrás:</Text>
+                  <View style={styles.benefitRow}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.coral} />
+                    <Text style={styles.benefitText}>Chat interno con los miembros</Text>
+                  </View>
+                  <View style={styles.benefitRow}>
+                    <Ionicons name="calendar-outline" size={20} color={COLORS.coral} />
+                    <Text style={styles.benefitText}>Quedadas de intercambio en el BookSpot</Text>
+                  </View>
+                  <View style={styles.benefitRow}>
+                    <Ionicons name="library-outline" size={20} color={COLORS.coral} />
+                    <Text style={styles.benefitText}>Biblioteca compartida con "Me gusta"</Text>
+                  </View>
+                  <View style={styles.benefitRow}>
+                    <Ionicons name="trophy-outline" size={20} color={COLORS.coral} />
+                    <Text style={styles.benefitText}>Ranking mensual con premio al 1º</Text>
+                  </View>
+                </View>
+
+                {/* Bottom spacing for buttons */}
+                <View style={{ height: 100 }} />
               </ScrollView>
             )}
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.leaveBtn}
-                onPress={() => confirmAction('Abandonar', '¿Seguro que quieres abandonar esta comunidad?', handleLeave, true)}
-              >
-                <Text style={styles.leaveBtnText}>Abandonar Comunidad</Text>
+            {/* Fixed Bottom Buttons */}
+            <View style={styles.modalButtonsContainer}>
+              <Pressable style={styles.modalCloseButton} onPress={handleModalClose}>
+                <Text style={styles.modalCloseButtonText}>Cerrar</Text>
               </Pressable>
-
-              {isCreator && (
-                <Pressable
-                  style={styles.deleteBtn}
-                  onPress={() => confirmAction('Eliminar', '¿Seguro que quieres eliminar esta comunidad permanentemente? Se perderán todos los datos.', handleDelete, true)}
-                >
-                  <Text style={styles.deleteBtnText}>Eliminar Comunidad</Text>
-                </Pressable>
-              )}
+              <Pressable
+                style={[styles.modalJoinButton, joiningId === selectedCommunity?.id && styles.joinButtonDisabled]}
+                onPress={handleModalJoin}
+                disabled={joiningId === selectedCommunity?.id}
+              >
+                {joiningId === selectedCommunity?.id ? (
+                  <ActivityIndicator size="small" color={COLORS.white} />
+                ) : (
+                  <Text style={styles.modalJoinButtonText}>Unirse</Text>
+                )}
+              </Pressable>
             </View>
-
           </View>
         </View>
-
-          {/* Confirm overlay at modalOverlay level to cover full screen on iOS */}
-          {confirmModalVisible && (
-            <View style={styles.confirmOverlay}>
-              <View style={styles.confirmCard}>
-                <Text style={styles.confirmTitle}>{confirmConfig.title}</Text>
-                <Text style={styles.confirmMessage}>{confirmConfig.message}</Text>
-                <View style={styles.confirmButtons}>
-                  <Pressable
-                    style={styles.confirmSecondaryBtn}
-                    onPress={() => setConfirmModalVisible(false)}
-                  >
-                    <Text style={styles.confirmSecondaryText}>Cancelar</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.confirmPrimaryBtn,
-                      confirmConfig.isDestructive ? styles.confirmDangerBtn : null,
-                    ]}
-                    onPress={async () => {
-                      setConfirmModalVisible(false);
-                      await confirmConfig.onConfirm();
-                    }}
-                  >
-                    <Text style={styles.confirmPrimaryText}>Confirmar</Text>
-                  </Pressable>
-                </View>
-              </View>
-            </View>
-          )}
       </Modal>
     </View>
   );
@@ -309,207 +648,507 @@ const handleJoin = async (communityId: number) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fdfbf7',
+    backgroundColor: COLORS.background,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  mapContainer: {
-    flex: 1,
-    position: 'relative',
+  
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#e4715f',
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: COLORS.coral,
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.grayText,
+  },
+  tabTextActive: {
+    color: COLORS.coral,
+    fontWeight: '600',
+  },
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.white,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 15,
+    color: COLORS.darkText,
+  },
+
+  // Section Header
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.background,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.darkText,
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.coral,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
+
+  // List
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+
+  // Card
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    // Transition for web hover effect
+    ...(Platform.OS === 'web' && {
+      transition: 'all 0.2s ease-in-out',
+      cursor: 'pointer',
+    }),
+  } as any,
+  cardHovered: {
+    borderColor: COLORS.coral,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    transform: [{ scale: 1.01 }],
+  },
+  cardPressed: {
+    opacity: 0.95,
+    transform: [{ scale: 0.99 }],
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.darkText,
+    flex: 1,
+    marginRight: 8,
+  },
+
+  // Info rows
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  infoText: {
+    fontSize: 14,
+    color: COLORS.grayText,
+    marginLeft: 6,
+    flex: 1,
+  },
+
+  // Members
+  membersRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  avatarsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+  avatarText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  avatarRemaining: {
+    backgroundColor: COLORS.tagBg,
+  },
+  avatarRemainingText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.grayText,
+  },
+  memberCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginLeft: 12,
+  },
+  availableSpots: {
+    fontSize: 13,
+    color: COLORS.coral,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+
+  // Tags
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+    gap: 6,
+  },
+  tag: {
+    backgroundColor: COLORS.tagBg,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  tagText: {
+    fontSize: 12,
+    color: COLORS.grayText,
+    fontWeight: '500',
+  },
+
+  // Buttons
+  joinButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.coral,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  joinButtonDisabled: {
+    opacity: 0.7,
+  },
+  joinButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.coralLight,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  viewButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.coral,
+  },
+
+  // Empty State
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: COLORS.grayText,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+
+  // Modal styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    backgroundColor: '#fff',
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContainer: {
+    backgroundColor: COLORS.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '80%',
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    minHeight: SCREEN_HEIGHT * 0.6,
+  },
+  modalContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 12,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  memberInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
-  },
-  memberAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e4715f',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  memberAvatarText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  memberName: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  creatorBadge: {
-    fontSize: 12,
-    color: '#e4715f',
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  removeBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#fee2e2',
-    borderRadius: 6,
-  },
-  removeBtnText: {
-    color: '#ef4444',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  modalActions: {
-    gap: 12,
-    marginTop: 8,
-  },
-  leaveBtn: {
-    padding: 16,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  leaveBtnText: {
-    color: '#4b5563',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteBtn: {
-    padding: 16,
-    backgroundColor: '#fee2e2',
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  deleteBtnText: {
-    color: '#ef4444',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  confirmOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 99,
-  },
-  confirmCard: {
-    width: '90%',
-    maxWidth: 360,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  confirmTitle: {
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: '700',
-    color: '#111827',
-    marginBottom: 6,
+    color: COLORS.darkText,
+    flex: 1,
+    marginRight: 12,
   },
-  confirmMessage: {
-    fontSize: 14,
-    color: '#4B5563',
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  confirmButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  confirmSecondaryBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    marginRight: 8,
-    backgroundColor: '#F3F4F8',
-  },
-  confirmSecondaryText: {
-    color: '#6B7280',
+  modalLocationText: {
     fontSize: 14,
+    color: COLORS.coral,
+    marginLeft: 4,
     fontWeight: '500',
   },
-  confirmPrimaryBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#e4715f',
+
+  // BookSpot Card in modal
+  bookspotCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.coralLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    alignItems: 'center',
   },
-  confirmDangerBtn: {
-    backgroundColor: '#DC2626',
+  bookspotIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  confirmPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+  bookspotInfo: {
+    flex: 1,
+  },
+  bookspotLabel: {
+    fontSize: 12,
+    color: COLORS.grayText,
+    marginBottom: 2,
+  },
+  bookspotName: {
+    fontSize: 16,
     fontWeight: '600',
+    color: COLORS.darkText,
+    marginBottom: 4,
+  },
+  bookspotAddressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bookspotAddress: {
+    fontSize: 13,
+    color: COLORS.grayText,
+    marginLeft: 4,
+    flex: 1,
+  },
+
+  // Modal sections
+  modalSection: {
+    marginBottom: 20,
+  },
+  modalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginLeft: 8,
+  },
+
+  // Members grid in modal
+  membersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  memberChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingLeft: 4,
+  },
+  memberChipAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+  },
+  memberChipAvatarText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  memberChipName: {
+    fontSize: 13,
+    color: COLORS.darkText,
+    fontWeight: '500',
+  },
+  availableSpotsChip: {
+    backgroundColor: COLORS.coralLight,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.coralLight,
+    borderStyle: 'dashed',
+  },
+  availableSpotsChipText: {
+    fontSize: 13,
+    color: COLORS.coral,
+    fontWeight: '500',
+  },
+
+  // Genre tags in modal
+  genreTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  genreTag: {
+    backgroundColor: COLORS.coralLight,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  genreTagText: {
+    fontSize: 14,
+    color: COLORS.coral,
+    fontWeight: '500',
+  },
+
+  // Benefits card in modal
+  benefitsCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  benefitsTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.darkText,
+    marginBottom: 12,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  benefitText: {
+    fontSize: 14,
+    color: COLORS.grayText,
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  // Modal buttons
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    gap: 12,
+  },
+  modalCloseButton: {
+    flex: 1,
+    backgroundColor: COLORS.tagBg,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.darkText,
+  },
+  modalJoinButton: {
+    flex: 1.5,
+    backgroundColor: COLORS.coral,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalJoinButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.white,
   },
 });

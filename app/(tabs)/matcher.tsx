@@ -2,8 +2,8 @@ import Header from '@/components/Header';
 import { BookDetailsScreen } from '@/components/matcher/BookDetails';
 import MatchOverlay, { type MatchOverlayData } from '@/components/matcher/MatchOverlay';
 import TinderSwiper, { type TinderSwiperRef } from '@/components/matcher/TinderSwiper';
-import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
-import { fetchFeed, sendSwipe, undoLastSwipe, type SwipeResultDto } from '@/lib/matcherApi';
+import { MATCHER_LAYOUT, getEffectiveWidth } from '@/constants/matcherLayout';
+import { fetchFeed, sendSwipe, type SwipeResultDto } from '@/lib/matcherApi';
 import type { MatcherCard } from '@/types/matcher';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -23,14 +23,13 @@ export default function MatcherScreen() {
   const [matchResult, setMatchResult] = useState<SwipeResultDto['match'] | null>(null);
   const [swipeError, setSwipeError] = useState<string | null>(null);
   const isSwiping = useRef(false);
-  const [canUndo, setCanUndo] = useState(false);
-
   const [cards, setCards] = useState<MatcherCard[]>([]);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [allSwiped, setAllSwiped] = useState(false);
+  const [swiperKey, setSwiperKey] = useState(0);
   const loadingMore = useRef(false);
 
   const loadFeed = useCallback(async (pageNum: number, append = false) => {
@@ -43,7 +42,10 @@ export default function MatcherScreen() {
       setCards((prev) => (append ? [...prev, ...result.cards] : result.cards));
       setHasMore(result.hasMore);
       setPage(pageNum);
-      if (!append) setAllSwiped(false);
+      if (!append) {
+        setAllSwiped(false);
+        setSwiperKey((prev) => prev + 1);
+      }
     } catch (e: any) {
       setError(e.message ?? 'Error al cargar el feed');
     } finally {
@@ -71,14 +73,12 @@ export default function MatcherScreen() {
 
   const styles = useMemo(() => {
     const config = MATCHER_LAYOUT;
-    
-    const cardWidth = SCREEN_WIDTH * config.card.widthPercent;
-    const cardHeight = cardWidth * config.card.heightRatio;
-    
-    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
-    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
-    const buttonGap = SCREEN_WIDTH * config.buttons.buttonGapPercent;
-    
+    const W = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+    const dislikeButtonSize = W * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = W * config.buttons.likeButtonPercent;
+    const buttonGap = W * config.buttons.buttonGapPercent;
+
     const buttonBottom = Math.max(
       insets.bottom - 10,
       SCREEN_HEIGHT * config.buttons.bottomPercent
@@ -124,8 +124,9 @@ export default function MatcherScreen() {
 
   const iconSize = useMemo(() => {
     const config = MATCHER_LAYOUT;
-    const dislikeButtonSize = SCREEN_WIDTH * config.buttons.dislikeButtonPercent;
-    const likeButtonSize = SCREEN_WIDTH * config.buttons.likeButtonPercent;
+    const W = getEffectiveWidth(SCREEN_WIDTH, SCREEN_HEIGHT);
+    const dislikeButtonSize = W * config.buttons.dislikeButtonPercent;
+    const likeButtonSize = W * config.buttons.likeButtonPercent;
     
     return {
       dislike: dislikeButtonSize * config.buttons.iconSizeRatio,
@@ -164,16 +165,13 @@ export default function MatcherScreen() {
             bookTitle: card.book.titulo,
             bookCoverUrl: card.book.photos?.[0]?.url ?? null,
           });
-          setCanUndo(false);
-        } else {
-          setCanUndo(true);
         }
+
         setSwipeError(null);
       } catch (e: any) {
         console.warn('Error al registrar swipe:', e.message);
         setSwipeError(e.message ?? 'Error al registrar el swipe');
         setTimeout(() => setSwipeError(null), 3000);
-        setCanUndo(false);
       } finally {
         isSwiping.current = false;
       }
@@ -203,40 +201,10 @@ export default function MatcherScreen() {
     setAllSwiped(true);
   }, []);
 
-  const handleUndo = useCallback(async () => {
-    try {
-      await undoLastSwipe();
-      setCanUndo(false);
-      await loadFeed(0);
-    } catch (e: any) {
-      setSwipeError(e.message ?? 'No se pudo deshacer el swipe');
-      setTimeout(() => setSwipeError(null), 3000);
-    }
-  }, [loadFeed]);
-
   const handleChat = (card: MatcherCard) => {
     console.log('Chat con:', card.book.titulo);
     setSelectedCard(null);
   };
-
-  if (matchInfo) {
-    return (
-      <MatchOverlay
-        data={matchInfo}
-        onClose={() => {
-          setMatchInfo(null);
-          setMatchResult(null);
-        }}
-        onChat={() => {
-          setMatchInfo(null);
-          if (matchResult?.chatId) {
-            router.push(`/chat/${matchResult.chatId}` as any);
-          }
-          setMatchResult(null);
-        }}
-      />
-    );
-  }
 
   if (loading) {
     return (
@@ -311,6 +279,7 @@ export default function MatcherScreen() {
       <Header />
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <TinderSwiper
+          key={swiperKey}
           ref={swiperRef}
           cards={cards}
           onSwipeLeft={handleSwipeLeft}
@@ -325,26 +294,6 @@ export default function MatcherScreen() {
             style={[styles.actionButton, styles.dislikeButton]}
           >
             <Ionicons name="close" size={iconSize.dislike} color="#e07a5f" />
-          </Pressable>
-
-          <Pressable
-            onPress={handleUndo}
-            disabled={!canUndo}
-            style={[
-              styles.actionButton,
-              {
-                width: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
-                height: SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent,
-                backgroundColor: canUndo ? '#f2cc8f' : '#e8e8e8',
-                opacity: canUndo ? 1 : 0.4,
-              },
-            ]}
-          >
-            <Ionicons
-              name="arrow-undo"
-              size={SCREEN_WIDTH * MATCHER_LAYOUT.buttons.undoButtonPercent * MATCHER_LAYOUT.buttons.iconSizeRatio}
-              color={canUndo ? '#3e2723' : '#bbb'}
-            />
           </Pressable>
 
           <Pressable
@@ -375,6 +324,23 @@ export default function MatcherScreen() {
           }}>
             <Text style={{ color: '#fdfbf7', fontWeight: '600' }}>{swipeError}</Text>
           </View>
+        )}
+
+        {matchInfo && (
+          <MatchOverlay
+            data={matchInfo}
+            onClose={() => {
+              setMatchInfo(null);
+              setMatchResult(null);
+            }}
+            onChat={() => {
+              setMatchInfo(null);
+              if (matchResult?.chatId) {
+                router.push(`/chat/${matchResult.chatId}?draft=${encodeURIComponent('Hola, me ha interesado tu libro')}` as any);
+              }
+              setMatchResult(null);
+            }}
+          />
         )}
       </View>
     </View>

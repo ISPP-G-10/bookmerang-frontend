@@ -1,4 +1,4 @@
-import { MATCHER_LAYOUT } from '@/constants/matcherLayout';
+import { MATCHER_LAYOUT, getEffectiveWidth } from '@/constants/matcherLayout';
 import type { MatcherCard } from '@/types/matcher';
 import { BlurView } from 'expo-blur';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';

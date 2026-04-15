@@ -2,6 +2,7 @@ import Header from "@/components/Header";
 import FlowFooter from "@/components/book-upload/FlowFooter";
 import FlowHeader from "@/components/book-upload/FlowHeader";
 import FlowInfoModal from "@/components/book-upload/FlowInfoModal";
+import DraftsModal from "@/components/book-upload/DraftsModal";
 import {
   MIN_BOOK_PHOTOS,
   deleteBook,
@@ -68,17 +69,16 @@ export default function UploadStatusScreen() {
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingDrafts, setLoadingDrafts] = useState(false);
-  const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
-  const [showDraftsModal, setShowDraftsModal] = useState(false);
+    const [showDraftsModal, setShowDraftsModal] = useState(false);
   const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
-  const [pendingDeleteDraft, setPendingDeleteDraft] = useState<BookDraftSummary | null>(null);
-  const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
+    const [drafts, setDrafts] = useState<BookDraftSummary[]>([]);
 
   const [bookDetail, setBookDetail] = useState<BookDetail | null>(null);
   const [selectedCondition, setSelectedCondition] = useState<
     "LikeNew" | "VeryGood" | "Good" | "Acceptable" | "Poor" | null
   >(null);
   const [observations, setObservations] = useState("");
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -235,55 +235,20 @@ export default function UploadStatusScreen() {
     router.replace(`/books/create/${draft.id}/estado` as any);
   };
 
-  const performDeleteDraft = async (draft: BookDraftSummary) => {
-    setDeletingDraftId(draft.id);
-    setError(null);
-    setPendingDeleteDraft(null);
-
-    try {
-      await deleteBook(draft.id);
-      setDrafts((current) => current.filter((item) => item.id !== draft.id));
-      setFeedback("Borrador eliminado correctamente.");
-
-      if (draft.id === bookId) {
-        setShowDraftsModal(false);
-        router.replace("/subir" as any);
-      }
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setDeletingDraftId(null);
-    }
-  };
-
-  const handleDeleteDraft = (draft: BookDraftSummary) => {
-    if (deletingDraftId) return;
-    setPendingDeleteDraft(draft);
-  };
-
-  const closeDeleteDraftModal = () => {
-    setPendingDeleteDraft(null);
-  };
-
-  const confirmDeleteDraft = () => {
-    if (!pendingDeleteDraft) return;
-    performDeleteDraft(pendingDeleteDraft);
-  };
-
+  
   const handleBack = () => {
     if (!Number.isFinite(bookId) || bookId <= 0) return;
     router.replace(`/books/create/${bookId}/datos` as any);
   };
 
   const handleCancel = () => {
-    Alert.alert(
-      "Cancelar",
-      "Se perderán los cambios no guardados de este paso.",
-      [
-        { text: "Seguir editando", style: "cancel" },
-        { text: "Salir", style: "destructive", onPress: () => router.replace("/subir" as any) },
-      ],
-    );
+    setShowCancelModal(true);
+  };
+
+  const confirmCancel = async () => {
+    setShowCancelModal(false);
+    await markUploadFlowResetNeeded();
+    router.replace("/matcher" as any);
   };
 
   return (
@@ -384,62 +349,21 @@ export default function UploadStatusScreen() {
         </>
       )}
 
-      <Modal
-        transparent
+      <DraftsModal
         visible={showDraftsModal}
-        animationType="slide"
-        onRequestClose={() => setShowDraftsModal(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowDraftsModal(false)}>
-          <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Tus borradores</Text>
-            {drafts.length === 0 ? (
-              <Text style={styles.emptyDraftsText}>No tienes borradores guardados.</Text>
-            ) : (
-              <ScrollView style={styles.modalList}>
-                {drafts.map((draft) => (
-                  <View key={draft.id} style={styles.draftItem}>
-                    <TouchableOpacity
-                      style={styles.draftMainArea}
-                      onPress={() => handleLoadDraft(draft)}
-                      disabled={Boolean(deletingDraftId)}
-                    >
-                      {draft.thumbnailUrl ? (
-                        <Image source={{ uri: draft.thumbnailUrl }} style={styles.draftThumb} />
-                      ) : (
-                        <View style={styles.draftThumbPlaceholder}>
-                          <FontAwesome name="book" size={16} color="#b2a89b" />
-                        </View>
-                      )}
-                      <View style={styles.draftInfo}>
-                        <Text numberOfLines={1} style={styles.draftTitle}>
-                          {draft.titulo?.trim() || "Sin título"}
-                        </Text>
-                        <Text numberOfLines={1} style={styles.draftSubtitle}>
-                          {draft.autor?.trim() || "Autor sin definir"}
-                        </Text>
-                        <Text style={styles.draftDate}>{formatUpdatedAt(draft.updatedAt)}</Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.draftDeleteButton}
-                      onPress={() => handleDeleteDraft(draft)}
-                      disabled={deletingDraftId === draft.id}
-                    >
-                      {deletingDraftId === draft.id ? (
-                        <ActivityIndicator size="small" color="#d5785f" />
-                      ) : (
-                        <FontAwesome name="trash" size={16} color="#d5785f" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowDraftsModal(false)}
+        drafts={drafts}
+        onLoadDraft={handleLoadDraft}
+        onDraftDeleted={(draftIdToDelete) => {
+          setDrafts((current) => current.filter((item) => item.id !== draftIdToDelete));
+          if (bookId === draftIdToDelete) {
+            setShowDraftsModal(false);
+            router.replace("/subir" as any);
+          }
+        }}
+        onError={setError}
+        onSuccess={setFeedback}
+      />
 
       <FlowInfoModal
         visible={Boolean(infoModal)}
@@ -459,13 +383,13 @@ export default function UploadStatusScreen() {
       />
 
       <FlowInfoModal
-        visible={Boolean(pendingDeleteDraft)}
-        title="Eliminar borrador"
-        message="Esta acción eliminará el borrador de forma permanente."
-        primaryLabel="Eliminar"
-        secondaryLabel="Cancelar"
-        onPrimaryPress={confirmDeleteDraft}
-        onSecondaryPress={closeDeleteDraftModal}
+        visible={showCancelModal}
+        title="Cancelar subida"
+        message="¿Estás seguro de que quieres cancelar? Perderás los cambios no guardados."
+        primaryLabel="Sí, cancelar"
+        secondaryLabel="Seguir editando"
+        onPrimaryPress={confirmCancel}
+        onSecondaryPress={() => setShowCancelModal(false)}
       />
     </View>
   );

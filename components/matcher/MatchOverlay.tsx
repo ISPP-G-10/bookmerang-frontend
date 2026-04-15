@@ -239,7 +239,7 @@ export default function MatchOverlay({ data, onClose, onChat }: MatchOverlayProp
         <Text style={styles.subtitleText}>
           Tú y{' '}
           <Text style={styles.usernameText}>{data.otherUsername}</Text>
-          {'\n'}queréis intercambiar libros 📚
+          {'\n'}quereis intercambiar libros 📚 
         </Text>
       </Animated.View>
 
@@ -295,10 +295,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   titleText: {
-    fontSize: 38,
+    fontSize: 30,
     fontWeight: '900',
     color: '#fff',
     textAlign: 'center',
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   bookContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -326,11 +326,11 @@ const styles = StyleSheet.create({
   },
   subtitleContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
     paddingHorizontal: 32,
   },
   bookTitleText: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fff',
     textAlign: 'center',
@@ -340,10 +340,10 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   subtitleText: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
   },
   usernameText: {
     fontWeight: '800',
@@ -351,20 +351,20 @@ const styles = StyleSheet.create({
   },
   buttonsContainer: {
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     width: '100%',
-    paddingHorizontal: 40,
+    paddingHorizontal: 48,
   },
   chatButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
     borderRadius: 30,
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 260,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.2,
@@ -372,22 +372,22 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   chatButtonText: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '700',
     color: '#e07a5f',
   },
   continueButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+    paddingVertical: 11,
+    paddingHorizontal: 24,
     borderRadius: 30,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.5)',
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 260,
     alignItems: 'center',
   },
   continueButtonText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
   },

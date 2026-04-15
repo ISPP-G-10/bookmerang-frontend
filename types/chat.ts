@@ -5,19 +5,24 @@ export interface ChatParticipantDto {
   username: string;
   profilePhoto: string;
   joinedAt: string;
+  role?: "MEMBER" | "MODERATOR" | null;
+  activeFrameId?: string | null;
+  activeColorId?: string | null;
 }
 
 export interface MessageDto {
   id: number;
-  chatId: number;
+  chatId: string | number;
   senderId: string;
   senderUsername: string;
   body: string;
   sentAt: string;
+  senderActiveFrameId?: string | null;
+  senderActiveColorId?: string | null;
 }
 
 export interface ChatDto {
-  id: number;
+  id: string;
   type: string;
   createdAt: string;
   participants: ChatParticipantDto[];
@@ -130,7 +135,7 @@ export interface CommunityChat {
   community: Community;
 }
 
-export type ChatType = 'DIRECT_EXCHANGE' | 'COMMUNITY';
+export type ChatType = "DIRECT_EXCHANGE" | "COMMUNITY";
 
 export interface ChatData {
   id: number;

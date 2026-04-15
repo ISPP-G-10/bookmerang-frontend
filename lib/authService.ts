@@ -1,4 +1,5 @@
 import { apiRequest } from "./api";
+import { getEmailValidationError, normalizeEmail } from "./emailValidation";
 import {
   clearStoredAuthSession,
   setStoredAuthSession,
@@ -13,6 +14,20 @@ async function readApiError(response: Response, fallback: string): Promise<strin
     const parsed = JSON.parse(raw);
     if (typeof parsed?.error === "string") return parsed.error;
     if (typeof parsed?.message === "string") return parsed.message;
+    if (typeof parsed?.detail === "string") return parsed.detail;
+    if (typeof parsed?.title === "string") return parsed.title;
+    if (parsed?.errors && typeof parsed.errors === "object") {
+      const messages = Object.values(parsed.errors)
+        .flatMap((value) =>
+          Array.isArray(value)
+            ? value.filter((item): item is string => typeof item === "string")
+            : [],
+        )
+        .map((message) => message.trim())
+        .filter((message) => message.length > 0);
+
+      if (messages.length > 0) return messages.join(" ");
+    }
   } catch {
     // Keep raw text when body is not JSON.
   }
@@ -30,6 +45,41 @@ export interface RegisterProfileData {
   latitud: number;
   longitud: number;
 }
+
+export interface RegisterBookdropProfileData {
+  Email: string;
+  Password: string;
+  Username: string;
+  Name: string;
+  ProfilePhoto?: string;
+  NombreEstablecimiento: string;
+  AddressText: string;
+  Latitud: number;
+  Longitud: number;
+  StripeSessionId?: string;
+}
+
+export interface BookdropCheckoutInitResult {
+  status: "payment_required";
+  checkoutUrl: string;
+}
+
+export interface BookdropRegisterCompletedResult {
+  status: "registered";
+  user: {
+    id: string;
+    supabaseId: string;
+    email: string;
+    username: string;
+    name: string;
+    profilePhoto: string;
+    userType: string;
+  };
+}
+
+export type RegisterBookdropBackendResult =
+  | BookdropCheckoutInitResult
+  | BookdropRegisterCompletedResult;
 
 export interface UserPreferencesData {
   latitude: number;
@@ -53,11 +103,19 @@ export interface UserPreferencesResponse {
   };
 }
 
+export interface TutorialStatusResponse {
+  tutorialCompleted: boolean;
+}
+
 export const authService = {
   async signIn(email: string, password: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
     const response = await apiRequest("/Auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: normalizedEmail, password }),
     });
 
     if (!response.ok) {
@@ -74,6 +132,7 @@ export const authService = {
         username: data.user.username,
         name: data.user.name,
         profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
       },
     });
 
@@ -81,10 +140,15 @@ export const authService = {
   },
 
   async registerBackendProfile(profileData: RegisterProfileData) {
+    const normalizedEmail = normalizeEmail(profileData.email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
     const response = await apiRequest("/Auth/register", {
       method: "POST",
       body: JSON.stringify({
         ...profileData,
+        email: normalizedEmail,
         profilePhoto: profileData.profilePhoto || "",
         userType: profileData.userType || 2,
       }),
@@ -104,15 +168,69 @@ export const authService = {
         username: data.user.username,
         name: data.user.name,
         profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
       },
     });
 
     return data.user;
   },
 
+  async registerBookdropBackendProfile(
+    bookdropProfileData: RegisterBookdropProfileData,
+  ): Promise<RegisterBookdropBackendResult> {
+    const normalizedEmail = normalizeEmail(bookdropProfileData.Email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
+    const response = await apiRequest("/Auth/register/business", {
+      method: "POST",
+      body: JSON.stringify({
+        ...bookdropProfileData,
+        Email: normalizedEmail,
+        profilePhoto: bookdropProfileData.ProfilePhoto || "",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al registrar el perfil del bookdrop en el backend"));
+    }
+
+    const data = await response.json();
+    if (data?.requiresPayment === true && typeof data?.checkoutUrl === "string") {
+      return {
+        status: "payment_required",
+        checkoutUrl: data.checkoutUrl,
+      };
+    }
+
+    if (!data?.accessToken || !data?.user) {
+      throw new Error("Respuesta inesperada del servidor en el registro de bookdrop");
+    }
+
+    await setStoredAuthSession({
+      accessToken: data.accessToken,
+      user: {
+        id: data.user.id,
+        supabaseId: data.user.supabaseId,
+        email: data.user.email,
+        username: data.user.username,
+        name: data.user.name,
+        profilePhoto: data.user.profilePhoto,
+        userType: data.user.userType,
+      },
+    });
+
+    return {
+      status: "registered",
+      user: data.user,
+    };
+  },
+
   async patchEmail(newEmail: string, currentPassword: string) {
-    const normalizedEmail = newEmail.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(newEmail);
     const normalizedPassword = currentPassword.trim();
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
 
     const response = await apiRequest("/Auth/email", {
       method: "PATCH",
@@ -187,6 +305,32 @@ export const authService = {
 
     if (!response.ok) {
       throw new Error(await readApiError(response, "Error al obtener preferencias"));
+    }
+
+    return response.json();
+  },
+
+  async getTutorialStatus(userId: string): Promise<TutorialStatusResponse> {
+    const response = await apiRequest(`/users/${userId}/preferences/tutorial`);
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al obtener el estado del tutorial"));
+    }
+
+    return response.json();
+  },
+
+  async updateTutorialStatus(
+    userId: string,
+    tutorialCompleted: boolean,
+  ): Promise<TutorialStatusResponse> {
+    const response = await apiRequest(`/users/${userId}/preferences/tutorial`, {
+      method: "PUT",
+      body: JSON.stringify({ tutorialCompleted }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al actualizar el estado del tutorial"));
     }
 
     return response.json();
