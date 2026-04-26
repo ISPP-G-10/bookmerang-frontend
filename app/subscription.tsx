@@ -224,7 +224,7 @@ export default function SubscriptionScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => router.dismiss()}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <FontAwesome name="chevron-left" size={18} color="#8B7355" />
