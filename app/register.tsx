@@ -11,7 +11,12 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+
+let WebView: any = null;
+if (Platform.OS !== "web") {
+  WebView = require("react-native-webview").WebView;
+}
 
 type Genre = { id: number; name: string };
 
@@ -48,6 +53,10 @@ export default function RegisterScreen() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [showCheckoutWebView, setShowCheckoutWebView] = useState(false);
+  const [bookdropCheckoutUrl, setBookdropCheckoutUrl] = useState<string | null>(null);
+  const [pendingBookdropPayload, setPendingBookdropPayload] = useState<PendingBookdropRegistration | null>(null);
 
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState("");
@@ -217,6 +226,51 @@ export default function RegisterScreen() {
   };
 
 
+  const handleBookdropWebViewNavigationChange = async (navState: { url: string }) => {
+    const { url } = navState;
+
+    if (url.includes("status=cancelled")) {
+      setShowCheckoutWebView(false);
+      setBookdropCheckoutUrl(null);
+      setError("No se ha podido pagar. Intentalo de nuevo.");
+      return;
+    }
+
+    if (url.includes("status=success")) {
+      const sessionIdMatch = url.match(/[?&]session_id=([^&]+)/);
+      const sessionId = sessionIdMatch ? sessionIdMatch[1] : null;
+      if (!sessionId || !pendingBookdropPayload) return;
+
+      setShowCheckoutWebView(false);
+      setBookdropCheckoutUrl(null);
+      setLoading(true);
+      setError("");
+
+      try {
+        const result = await authService.registerBookdropBackendProfile({
+          ...pendingBookdropPayload,
+          StripeSessionId: sessionId,
+        });
+
+        if (result.status !== "registered") {
+          throw new Error("No se ha podido verificar el pago en Stripe.");
+        }
+
+        if (result.user?.id) {
+          setBackendUserId(result.user.id);
+          setRegisteredUserId(result.user.id);
+        }
+
+        setPendingBookdropPayload(null);
+        router.replace("/bookDropControlPanel" as any);
+      } catch (err: any) {
+        setError(err?.message || "No se ha podido completar el registro tras el pago.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleRegister = async () => {
     if (!validate()) return;
 
@@ -284,14 +338,16 @@ export default function RegisterScreen() {
       const result = await authService.registerBookdropBackendProfile(payload);
 
       if (result.status === "payment_required") {
-        savePendingBookdropRegistration(payload);
-
         if (Platform.OS === "web" && typeof window !== "undefined") {
+          savePendingBookdropRegistration(payload);
           window.location.assign(result.checkoutUrl);
           return;
         }
 
-        await Linking.openURL(result.checkoutUrl);
+        // Native: open Stripe inside an in-app WebView modal to preserve state
+        setPendingBookdropPayload(payload);
+        setBookdropCheckoutUrl(result.checkoutUrl);
+        setShowCheckoutWebView(true);
         setLoading(false);
         return;
       }
@@ -521,6 +577,79 @@ export default function RegisterScreen() {
         error={preferencesError}
         loading={preferencesLoading}
       />
+
+      {/* ═══ STRIPE CHECKOUT MODAL – Bookdrop (native only) ═══ */}
+      {Platform.OS !== "web" && (
+        <Modal
+          visible={showCheckoutWebView}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowCheckoutWebView(false);
+            setBookdropCheckoutUrl(null);
+            setError("Pago cancelado.");
+          }}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: "#fff" }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <View
+              style={{
+                paddingTop: 56,
+                paddingBottom: 12,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#faf8f3",
+                borderBottomWidth: 1,
+                borderBottomColor: "#e8dcc8",
+              }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "900", color: "#2d2520" }}>
+                Pago seguro
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCheckoutWebView(false);
+                  setBookdropCheckoutUrl(null);
+                  setError("Pago cancelado.");
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={24} color="#8B7355" />
+              </TouchableOpacity>
+            </View>
+
+            {bookdropCheckoutUrl && WebView && (
+              <WebView
+                source={{ uri: bookdropCheckoutUrl }}
+                onNavigationStateChange={handleBookdropWebViewNavigationChange}
+                startInLoadingState
+                renderLoading={() => (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      backgroundColor: "#fff",
+                    }}
+                  >
+                    <ActivityIndicator size="large" color="#e07a5f" />
+                    <Text style={{ marginTop: 12, color: "#8B7355", fontSize: 14 }}>
+                      Cargando pasarela de pago...
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
     </AuthLayout>
   );
 }

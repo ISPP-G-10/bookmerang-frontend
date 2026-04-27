@@ -1,5 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { router, Tabs, usePathname, useSegments } from 'expo-router';
+import { router, Tabs, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 
@@ -40,7 +40,6 @@ export default function TabLayout() {
   const { start, copilotEvents, visible: copilotVisible } = useCopilot();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const segments = useSegments();
-  const pathname = usePathname();
   // `isTabsActive` ensures the tutorial only starts when the user is actually
   // viewing the tabs. Expo Router v3 might resolve the root path `/` to empty segments
   // or a direct nested route, so we check if segments start with `(tabs)`, are empty,
@@ -49,14 +48,6 @@ export default function TabLayout() {
   const shouldShowTutorial = !tutorialCompleted || tutorialReplayRequested;
 
   const displayName = session?.user?.name || session?.user?.username || 'lector/a';
-
-  // Redirect bookdrop users away from tabs
-  useEffect(() => {
-    if (loading) return;
-    if (isBookdropUser) {
-      router.replace('/bookDropControlPanel' as any);
-    }
-  }, [isBookdropUser, loading, pathname]);
 
   // Auto-start tutorial for new users
   useEffect(() => {
