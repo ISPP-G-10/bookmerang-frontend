@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { Outfit_400Regular, Outfit_700Bold } from "@expo-google-fonts/outfit";
@@ -10,7 +11,7 @@ import { useFonts } from "expo-font";
 import { Stack, usePathname, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "../global.css";
@@ -56,18 +57,23 @@ function AuthGate({ children }: { children: ReactNode }) {
   const { session, isBookdropUser, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [hasVisited, setHasVisited] = useState<boolean | null>(null);
 
   const isAuthRoute = pathname === "/login" || pathname === "/register";
+  const isWelcomeRoute = pathname === "/welcome";
   const isBookdropRoute = pathname === "/bookDropControlPanel";
   const isIndexRoute = pathname === "/";
 
   useEffect(() => {
-    if (loading) return;
+    AsyncStorage.getItem("hasVisited").then((val) => setHasVisited(val !== null));
+  }, []);
+
+  useEffect(() => {
+    if (loading || hasVisited === null) return;
 
     if (!session) {
-      if (!isAuthRoute) {
-        router.replace("/login" as any);
-      }
+      if (isAuthRoute || isWelcomeRoute) return;
+      router.replace(hasVisited ? ("/login" as any) : ("/welcome" as any));
       return;
     }
 
@@ -78,33 +84,33 @@ function AuthGate({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isAuthRoute || isBookdropRoute || isIndexRoute) {
+    if (isAuthRoute || isBookdropRoute || isIndexRoute || isWelcomeRoute) {
       router.replace("/(tabs)/matcher" as any);
     }
   }, [
     isAuthRoute,
+    isWelcomeRoute,
     isBookdropRoute,
     isBookdropUser,
     isIndexRoute,
+    hasVisited,
     loading,
     pathname,
     router,
     session,
   ]);
 
-  if (loading) {
-    return null;
-  }
+  if (loading || hasVisited === null) return null;
 
   if (!session) {
-    return isAuthRoute ? <>{children}</> : null;
+    return isAuthRoute || isWelcomeRoute ? <>{children}</> : null;
   }
 
   if (isBookdropUser) {
     return isBookdropRoute ? <>{children}</> : null;
   }
 
-  if (isAuthRoute || isBookdropRoute || isIndexRoute) {
+  if (isAuthRoute || isBookdropRoute || isIndexRoute || isWelcomeRoute) {
     return null;
   }
 
@@ -164,6 +170,7 @@ function RootLayoutNav() {
                       options={{ headerShown: false }}
                     />
                     <Stack.Screen name="subscription" options={{ headerShown: false }} />
+                    <Stack.Screen name="welcome" options={{ headerShown: false }} />
                     <Stack.Screen
                       name="chat/[id]"
                       options={{
