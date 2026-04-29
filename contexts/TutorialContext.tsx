@@ -19,7 +19,7 @@ const TutorialContext = createContext<TutorialContextType>({
 });
 
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
-  const { currentUserId, loading: authLoading } = useAuth();
+  const { currentUserId, isBookdropUser, loading: authLoading } = useAuth();
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
   const [tutorialLoading, setTutorialLoading] = useState(true);
   const [tutorialReplayRequested, setTutorialReplayRequested] = useState(false);
@@ -29,6 +29,14 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
 
     if (!currentUserId) {
       setTutorialCompleted(false);
+      setTutorialReplayRequested(false);
+      setTutorialLoading(false);
+      return;
+    }
+
+    // Bookdrop users have no tutorial — skip the API call entirely
+    if (isBookdropUser) {
+      setTutorialCompleted(true);
       setTutorialReplayRequested(false);
       setTutorialLoading(false);
       return;
@@ -54,7 +62,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, currentUserId]);
+  }, [authLoading, currentUserId, isBookdropUser]);
 
   const completeTutorial = useCallback(async () => {
     setTutorialReplayRequested(false);

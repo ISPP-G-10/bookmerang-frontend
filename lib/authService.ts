@@ -56,7 +56,30 @@ export interface RegisterBookdropProfileData {
   AddressText: string;
   Latitud: number;
   Longitud: number;
+  StripeSessionId?: string;
 }
+
+export interface BookdropCheckoutInitResult {
+  status: "payment_required";
+  checkoutUrl: string;
+}
+
+export interface BookdropRegisterCompletedResult {
+  status: "registered";
+  user: {
+    id: string;
+    supabaseId: string;
+    email: string;
+    username: string;
+    name: string;
+    profilePhoto: string;
+    userType: string;
+  };
+}
+
+export type RegisterBookdropBackendResult =
+  | BookdropCheckoutInitResult
+  | BookdropRegisterCompletedResult;
 
 export interface UserPreferencesData {
   latitude: number;
@@ -152,7 +175,9 @@ export const authService = {
     return data.user;
   },
 
-  async registerBookdropBackendProfile(bookdropProfileData: RegisterBookdropProfileData) {
+  async registerBookdropBackendProfile(
+    bookdropProfileData: RegisterBookdropProfileData,
+  ): Promise<RegisterBookdropBackendResult> {
     const normalizedEmail = normalizeEmail(bookdropProfileData.Email);
     const emailError = getEmailValidationError(normalizedEmail);
     if (emailError) throw new Error(emailError);
@@ -171,6 +196,17 @@ export const authService = {
     }
 
     const data = await response.json();
+    if (data?.requiresPayment === true && typeof data?.checkoutUrl === "string") {
+      return {
+        status: "payment_required",
+        checkoutUrl: data.checkoutUrl,
+      };
+    }
+
+    if (!data?.accessToken || !data?.user) {
+      throw new Error("Respuesta inesperada del servidor en el registro de bookdrop");
+    }
+
     await setStoredAuthSession({
       accessToken: data.accessToken,
       user: {
@@ -184,7 +220,10 @@ export const authService = {
       },
     });
 
-    return data.user;
+    return {
+      status: "registered",
+      user: data.user,
+    };
   },
 
   async patchEmail(newEmail: string, currentPassword: string) {

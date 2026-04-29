@@ -83,6 +83,12 @@ export default function ComunidadesScreen() {
   const [selectedCommunityMembers, setSelectedCommunityMembers] = useState<CommunityMemberDto[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   const fetchCommunities = useCallback(async (lat: number, lon: number) => {
     try {
@@ -179,16 +185,11 @@ export default function ComunidadesScreen() {
       setJoiningId(communityId);
       await joinCommunity(communityId);
       await loadLocationAndData(true);
-      Alert.alert('¡Éxito!', 'Te has unido a la comunidad');
+      showToast('Te has unido a la comunidad', 'success');
     } catch (error: unknown) {
       console.error('Error joining community:', error);
       const errorMessage = error instanceof Error ? error.message : 'No se pudo unir a la comunidad';
-      
-      if (Platform.OS === 'web') {
-        window.alert(`No se pudo unir: ${errorMessage}`);
-      } else {
-        Alert.alert('No se pudo unir', errorMessage);
-      }
+      showToast(errorMessage, 'error');
     } finally {
       setJoiningId(null);
     }
@@ -424,7 +425,51 @@ export default function ComunidadesScreen() {
   return (
     <View style={styles.container}>
       <Header />
-      
+
+      {toast && (
+        <View style={{
+          position: 'absolute',
+          top: 110,
+          left: 16,
+          right: 16,
+          zIndex: 999,
+          backgroundColor: toast.type === 'success' ? '#f0fdf4' : '#fff0f0',
+          borderRadius: 14,
+          padding: 14,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 6,
+        }}>
+          <View style={{
+            width: 24,
+            height: 24,
+            borderRadius: 12,
+            backgroundColor: toast.type === 'success' ? '#22c55e' : '#dc2626',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Ionicons
+              name={toast.type === 'success' ? 'checkmark' : 'close'}
+              size={14}
+              color="#ffffff"
+            />
+          </View>
+          <Text style={{
+            fontSize: 14,
+            fontWeight: '700',
+            color: toast.type === 'success' ? '#166534' : '#dc2626',
+            flex: 1,
+          }}>
+            {toast.message}
+          </Text>
+        </View>
+      )}
+
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <Pressable

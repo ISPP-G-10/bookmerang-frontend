@@ -9,17 +9,35 @@ import { getEmailValidationError, normalizeEmail } from "@/lib/emailValidation";
 import { GeocodingSuggestion, searchGeocodingSuggestions } from "@/lib/geocodingApi";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { router } from "expo-router";
-import { useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+
+let WebView: any = null;
+if (Platform.OS !== "web") {
+  WebView = require("react-native-webview").WebView;
+}
 
 type Genre = { id: number; name: string };
 
 const FALLBACK_LAT = 37.3886;
 const FALLBACK_LNG = -5.9823;
+const BOOKDROP_PENDING_KEY = "bookmerang:bookdrop-register-pending";
+
+type PendingBookdropRegistration = {
+  Email: string;
+  Password: string;
+  Username: string;
+  Name: string;
+  NombreEstablecimiento: string;
+  AddressText: string;
+  Latitud: number;
+  Longitud: number;
+};
 
 export default function RegisterScreen() {
   const { setBackendUserId } = useAuth();
+  const params = useLocalSearchParams<{ status?: string | string[]; session_id?: string | string[] }>();
   const [isBookdrop, setIsBookdrop] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,6 +54,10 @@ export default function RegisterScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [showCheckoutWebView, setShowCheckoutWebView] = useState(false);
+  const [bookdropCheckoutUrl, setBookdropCheckoutUrl] = useState<string | null>(null);
+  const [pendingBookdropPayload, setPendingBookdropPayload] = useState<PendingBookdropRegistration | null>(null);
+
   const [showPreferences, setShowPreferences] = useState(false);
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(false);
@@ -45,7 +67,97 @@ export default function RegisterScreen() {
     longitude: number;
   } | null>(null);
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
+  const handledStripeSessionRef = useRef<string | null>(null);
 
+  const paymentStatus = Array.isArray(params.status) ? params.status[0] : params.status;
+  const stripeSessionId = Array.isArray(params.session_id) ? params.session_id[0] : params.session_id;
+
+  const savePendingBookdropRegistration = (payload: PendingBookdropRegistration) => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    window.sessionStorage.setItem(BOOKDROP_PENDING_KEY, JSON.stringify(payload));
+  };
+
+  const loadPendingBookdropRegistration = (): PendingBookdropRegistration | null => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return null;
+    const raw = window.sessionStorage.getItem(BOOKDROP_PENDING_KEY);
+    if (!raw) return null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed as PendingBookdropRegistration;
+    } catch {
+      return null;
+    }
+  };
+
+  const clearPendingBookdropRegistration = () => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    window.sessionStorage.removeItem(BOOKDROP_PENDING_KEY);
+  };
+
+  const applyPendingToForm = (pending: PendingBookdropRegistration) => {
+    setEmail(pending.Email);
+    setPassword(pending.Password);
+    setUsername(pending.Username);
+    setName(pending.Name);
+    setBookdropName(pending.NombreEstablecimiento);
+    setBookdropAddress(pending.AddressText);
+    setBookdropLocation({ lat: pending.Latitud, lon: pending.Longitud });
+  };
+
+  useEffect(() => {
+    if (paymentStatus === "cancelled") {
+      const pending = loadPendingBookdropRegistration();
+      if (pending) applyPendingToForm(pending);
+      setIsBookdrop(true);
+      setError("No se ha podido pagar. Intentalo de nuevo.");
+      setLoading(false);
+      return;
+    }
+
+    if (paymentStatus !== "success" || !stripeSessionId) return;
+    if (handledStripeSessionRef.current === stripeSessionId) return;
+    handledStripeSessionRef.current = stripeSessionId;
+
+    const pending = loadPendingBookdropRegistration();
+    if (!pending) {
+      setIsBookdrop(true);
+      setError("No hemos encontrado los datos del registro. Vuelve a completar el formulario.");
+      setLoading(false);
+      return;
+    }
+
+    applyPendingToForm(pending);
+    setIsBookdrop(true);
+    setLoading(true);
+    setError("");
+
+    (async () => {
+      try {
+        const result = await authService.registerBookdropBackendProfile({
+          ...pending,
+          StripeSessionId: stripeSessionId,
+        });
+
+        if (result.status !== "registered") {
+          throw new Error("No se ha podido verificar el pago en Stripe.");
+        }
+
+        if (result.user?.id) {
+          setBackendUserId(result.user.id);
+          setRegisteredUserId(result.user.id);
+        }
+
+        clearPendingBookdropRegistration();
+        router.replace("/bookDropControlPanel" as any);
+      } catch (err: any) {
+        setError(err?.message || "No se ha podido completar el registro tras el pago.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [paymentStatus, stripeSessionId, setBackendUserId]);
   const validate = () => {
     if (!email || !password || !username || !name) {
       setError("Todos los campos son obligatorios");
@@ -114,6 +226,51 @@ export default function RegisterScreen() {
   };
 
 
+  const handleBookdropWebViewNavigationChange = async (navState: { url: string }) => {
+    const { url } = navState;
+
+    if (url.includes("status=cancelled")) {
+      setShowCheckoutWebView(false);
+      setBookdropCheckoutUrl(null);
+      setError("No se ha podido pagar. Intentalo de nuevo.");
+      return;
+    }
+
+    if (url.includes("status=success")) {
+      const sessionIdMatch = url.match(/[?&]session_id=([^&]+)/);
+      const sessionId = sessionIdMatch ? sessionIdMatch[1] : null;
+      if (!sessionId || !pendingBookdropPayload) return;
+
+      setShowCheckoutWebView(false);
+      setBookdropCheckoutUrl(null);
+      setLoading(true);
+      setError("");
+
+      try {
+        const result = await authService.registerBookdropBackendProfile({
+          ...pendingBookdropPayload,
+          StripeSessionId: sessionId,
+        });
+
+        if (result.status !== "registered") {
+          throw new Error("No se ha podido verificar el pago en Stripe.");
+        }
+
+        if (result.user?.id) {
+          setBackendUserId(result.user.id);
+          setRegisteredUserId(result.user.id);
+        }
+
+        setPendingBookdropPayload(null);
+        router.replace("/bookDropControlPanel" as any);
+      } catch (err: any) {
+        setError(err?.message || "No se ha podido completar el registro tras el pago.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleRegister = async () => {
     if (!validate()) return;
 
@@ -167,8 +324,7 @@ export default function RegisterScreen() {
     setError("");
 
     try {
-      // La ubicación viene de la dirección seleccionada por geocoding
-      const userData = await authService.registerBookdropBackendProfile({
+      const payload: PendingBookdropRegistration = {
         Email: normalizeEmail(email),
         Password: password,
         Username: username,
@@ -177,27 +333,38 @@ export default function RegisterScreen() {
         AddressText: bookdropAddress,
         Latitud: bookdropLocation!.lat,
         Longitud: bookdropLocation!.lon,
-      });
+      };
 
-      if (userData?.id) {
-        setBackendUserId(userData.id);
-        setRegisteredUserId(userData.id);
+      const result = await authService.registerBookdropBackendProfile(payload);
+
+      if (result.status === "payment_required") {
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          savePendingBookdropRegistration(payload);
+          window.location.assign(result.checkoutUrl);
+          return;
+        }
+
+        // Native: open Stripe inside an in-app WebView modal to preserve state
+        setPendingBookdropPayload(payload);
+        setBookdropCheckoutUrl(result.checkoutUrl);
+        setShowCheckoutWebView(true);
+        setLoading(false);
+        return;
       }
 
-      // 3) Prepare Preferences Modal
-      const genres = await authService.fetchGenres();
-      setAvailableGenres(genres);
+      if (result.user?.id) {
+        setBackendUserId(result.user.id);
+        setRegisteredUserId(result.user.id);
+      }
 
-      
+      clearPendingBookdropRegistration();
       setLoading(false);
       router.replace("/bookDropControlPanel" as any);
-      //setShowPreferences(true);
     } catch (err: any) {
       setError(err.message || "Error al crear la cuenta");
       setLoading(false);
     }
   };
-
   const handleSavePreferences = async (preferences: {
     distanceKm: number;
     genres: string[];
@@ -410,6 +577,81 @@ export default function RegisterScreen() {
         error={preferencesError}
         loading={preferencesLoading}
       />
+
+      {/* ═══ STRIPE CHECKOUT MODAL – Bookdrop (native only) ═══ */}
+      {Platform.OS !== "web" && (
+        <Modal
+          visible={showCheckoutWebView}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowCheckoutWebView(false);
+            setBookdropCheckoutUrl(null);
+            setError("Pago cancelado.");
+          }}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1, backgroundColor: "#fff" }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <View
+              style={{
+                paddingTop: 56,
+                paddingBottom: 12,
+                paddingHorizontal: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#faf8f3",
+                borderBottomWidth: 1,
+                borderBottomColor: "#e8dcc8",
+              }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "900", color: "#2d2520" }}>
+                Pago seguro
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowCheckoutWebView(false);
+                  setBookdropCheckoutUrl(null);
+                  setError("Pago cancelado.");
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={24} color="#8B7355" />
+              </TouchableOpacity>
+            </View>
+
+            {bookdropCheckoutUrl && WebView && (
+              <WebView
+                source={{ uri: bookdropCheckoutUrl }}
+                onNavigationStateChange={handleBookdropWebViewNavigationChange}
+                startInLoadingState
+                renderLoading={() => (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      backgroundColor: "#fff",
+                    }}
+                  >
+                    <ActivityIndicator size="large" color="#e07a5f" />
+                    <Text style={{ marginTop: 12, color: "#8B7355", fontSize: 14 }}>
+                      Cargando pasarela de pago...
+                    </Text>
+                  </View>
+                )}
+              />
+            )}
+          </KeyboardAvoidingView>
+        </Modal>
+      )}
     </AuthLayout>
   );
 }
+
+
