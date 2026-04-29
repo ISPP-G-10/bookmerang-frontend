@@ -1531,9 +1531,8 @@ export default function SettingsScreen() {
           throw new Error(text || "Error borrando la cuenta en el servidor");
         }
         await authService.signOut();
-        window.alert(
-          "Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.",
-        );
+        window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
+        router.replace("/login" as any);
       } catch (e: any) {
         window.alert(
           e?.message ?? "No se pudo eliminar la cuenta en el servidor.",
@@ -1564,6 +1563,7 @@ export default function SettingsScreen() {
               Alert.alert(
                 "Cuenta eliminada",
                 "Tu cuenta ha sido eliminada correctamente.",
+                [{ text: "Aceptar", onPress: () => router.replace("/login" as any) }],
               );
             } catch (e: any) {
               Alert.alert(
