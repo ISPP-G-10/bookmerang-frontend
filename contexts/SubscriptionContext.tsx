@@ -25,8 +25,8 @@ interface SubscriptionContextType {
   cancelSubscription: () => Promise<void>;
   /** Re-fetches subscription status from backend */
   refreshStatus: () => Promise<void>;
-  /** Syncs subscription directly from Stripe API (webhook-free fallback) */
-  syncFromStripe: () => Promise<void>;
+  /** Syncs subscription directly from Stripe API. Returns the status. */
+  syncFromStripe: () => Promise<SubscriptionStatus | null>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType>({
@@ -36,7 +36,7 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   getCheckoutUrl: async () => '',
   cancelSubscription: async () => {},
   refreshStatus: async () => {},
-  syncFromStripe: async () => {},
+  syncFromStripe: async () => null,
 });
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
@@ -64,14 +64,16 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     await refreshStatus();
   }, [refreshStatus]);
 
-  const syncFromStripe = useCallback(async () => {
+  const syncFromStripe = useCallback(async (): Promise<SubscriptionStatus | null> => {
     try {
       const status = await syncSubscriptionFromStripe();
       setSubscriptionStatus(status);
       await refreshUserPlan();
+      return status;
     } catch (error) {
       console.warn('[SubscriptionContext] syncFromStripe failed, falling back to refreshStatus:', error);
       await refreshStatus();
+      return null;
     }
   }, [refreshStatus, refreshUserPlan]);
 

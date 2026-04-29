@@ -76,7 +76,7 @@ export default function EditBookScreen() {
         cover: toCoverEnum(cover),
         observaciones: description,
       });
-      router.replace("/profile?message=updated" as any);
+      router.dismissTo("/profile?message=updated" as any);
     } catch {
       setError("No se pudo guardar el libro.");
     }

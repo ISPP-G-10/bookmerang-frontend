@@ -11,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { ConfirmModal } from "@/components/ConfirmationModal";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -26,7 +25,8 @@ if (Platform.OS !== "web") {
 const openStripePopup = (
   url: string,
   onSuccess: () => void,
-  onCancel: () => void
+  onCancel: () => void,
+  onPopupClosed: () => void
 ) => {
   const width = 500;
   const height = 700;
@@ -45,26 +45,31 @@ const openStripePopup = (
     return;
   }
 
-  // Check if popup was closed or redirected
+  let resolved = false;
+
   const checkPopup = setInterval(() => {
     try {
       if (popup.closed) {
         clearInterval(checkPopup);
-        // User closed the popup manually
-        onCancel();
+        if (!resolved) {
+          // Popup closed without us detecting the redirect URL.
+          // Could be success OR cancel — verify with backend.
+          onPopupClosed();
+        }
         return;
       }
 
-      // Try to read URL (will fail if still on Stripe domain due to CORS)
       const currentUrl = popup.location?.href;
-      if (currentUrl && (currentUrl.includes("status=success") || currentUrl.includes("status=cancelled"))) {
+      if (currentUrl && currentUrl.includes("status=success")) {
+        resolved = true;
         clearInterval(checkPopup);
         popup.close();
-        if (currentUrl.includes("status=success")) {
-          onSuccess();
-        } else {
-          onCancel();
-        }
+        onSuccess();
+      } else if (currentUrl && currentUrl.includes("status=cancelled")) {
+        resolved = true;
+        clearInterval(checkPopup);
+        popup.close();
+        onCancel();
       }
     } catch {
       // Cross-origin - popup is still on Stripe, keep waiting
@@ -83,14 +88,12 @@ const openStripePopup = (
 export default function SubscriptionScreen() {
   const router = useRouter();
   const { bottom } = useSafeAreaInsets();
-  const { userPlan } = useAuth();
   const {
     isPremium,
     subscriptionStatus,
     loading,
     getCheckoutUrl,
     cancelSubscription,
-    refreshStatus,
     syncFromStripe,
   } = useSubscription();
 
@@ -102,15 +105,34 @@ export default function SubscriptionScreen() {
 
   // ── Handle successful payment ──────────────────────────────────────
 
+  const syncWithRetries = useCallback(async (maxRetries = 3, delayMs = 2000): Promise<boolean> => {
+    for (let i = 0; i < maxRetries; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+      const status = await syncFromStripe();
+      if (status?.isPremium) return true;
+    }
+    return false;
+  }, [syncFromStripe]);
+
   const handlePaymentSuccess = useCallback(async () => {
-    setTimeout(async () => {
-      await syncFromStripe();
+    const success = await syncWithRetries();
+    if (success) {
       Alert.alert(
         "¡Suscripción activada!",
         "Ahora eres un usuario Premium. Disfruta de todas las funciones."
       );
-    }, 2000);
-  }, [syncFromStripe]);
+    }
+  }, [syncWithRetries]);
+
+  const handlePopupClosed = useCallback(async () => {
+    const success = await syncWithRetries();
+    if (success) {
+      Alert.alert(
+        "¡Suscripción activada!",
+        "Ahora eres un usuario Premium. Disfruta de todas las funciones."
+      );
+    }
+  }, [syncWithRetries]);
 
   // ── Checkout: WebView (native) or popup (web) ──────────────────────
 
@@ -120,11 +142,11 @@ export default function SubscriptionScreen() {
       const url = await getCheckoutUrl();
 
       if (Platform.OS === "web") {
-        // Web: use popup window (faster than iframe, Stripe blocks iframes)
         openStripePopup(
           url,
           handlePaymentSuccess,
-          () => {} // onCancel - do nothing
+          () => {},
+          handlePopupClosed
         );
       } else {
         // Native: use WebView modal
@@ -224,7 +246,7 @@ export default function SubscriptionScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => router.replace("/(tabs)/matcher")}
+          onPress={() => router.dismiss()}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <FontAwesome name="chevron-left" size={18} color="#8B7355" />
