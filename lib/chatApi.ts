@@ -62,7 +62,7 @@ export async function getMyChats(): Promise<ChatDto[]> {
   const chats: ChatDto[] = await res.json();
   return chats.map((chat) => {
     if (chat.lastMessage) {
-      chat.lastMessage.body = decryptMessage(chat.lastMessage.body);
+      chat.lastMessage.body = decryptMessage(chat.lastMessage.body, chat.encryptionKey);
     }
     return chat;
   });
@@ -84,7 +84,7 @@ export async function getChat(chatId: string | number): Promise<ChatDto> {
 
   const chat: ChatDto = await res.json();
   if (chat.lastMessage) {
-    chat.lastMessage.body = decryptMessage(chat.lastMessage.body);
+    chat.lastMessage.body = decryptMessage(chat.lastMessage.body, chat.encryptionKey);
   }
   return chat;
 }
@@ -95,6 +95,7 @@ export async function getChat(chatId: string | number): Promise<ChatDto> {
  */
 export async function getMessages(
   chatId: string | number,
+  encryptionKey?: string,
   page: number = 1,
   pageSize: number = 50,
 ): Promise<MessageDto[]> {
@@ -116,7 +117,7 @@ export async function getMessages(
   const messages: MessageDto[] = await res.json();
   return messages.map((msg) => ({
     ...msg,
-    body: decryptMessage(msg.body),
+    body: decryptMessage(msg.body, encryptionKey),
   }));
 }
 
@@ -129,9 +130,10 @@ export async function getMessages(
 export async function sendMessage(
   chatId: string | number,
   body: string,
+  encryptionKey?: string
 ): Promise<MessageDto> {
   const headers = await getAuthHeaders();
-  const encryptedBody = encryptMessage(body);
+  const encryptedBody = encryptMessage(body, encryptionKey);
   const request: SendMessageRequest = { body: encryptedBody };
 
   const res = await fetch(`${API_URL}/chat/${chatId}/messages`, {
@@ -145,7 +147,7 @@ export async function sendMessage(
   }
 
   const message: MessageDto = await res.json();
-  message.body = decryptMessage(message.body);
+  message.body = decryptMessage(message.body, encryptionKey);
   return message;
 }
 
