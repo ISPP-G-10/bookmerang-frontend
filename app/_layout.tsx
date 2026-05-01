@@ -59,7 +59,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [hasVisited, setHasVisited] = useState<boolean | null>(null);
 
-  const isAuthRoute = pathname === "/login" || pathname === "/register";
+  const isAuthRoute = pathname === "/login" || pathname === "/register" || pathname === "/forgot-password";
   const isWelcomeRoute = pathname === "/welcome";
   const isBookdropRoute = pathname === "/bookDropControlPanel";
   const isIndexRoute = pathname === "/";
@@ -148,6 +148,7 @@ function RootLayoutNav() {
                     <Stack.Screen name="login" options={{ headerShown: false }} />
                     <Stack.Screen name="modal" options={{ presentation: "modal" }} />
                     <Stack.Screen name="register" options={{ headerShown: false }} />
+                    <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
                     <Stack.Screen name="profile" options={{ headerShown: false }} />
                     <Stack.Screen
                       name="bookDropControlPanel"
