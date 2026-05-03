@@ -48,6 +48,18 @@ export type LanguageOption = {
   name: string;
 };
 
+export type ConditionOption = {
+  id: number;
+  label: string;
+  value: BookDetail["condition"];
+};
+
+export type CoverOption = {
+  id: number;
+  label: string;
+  value: BookDetail["cover"];
+};
+
 function extractLibraryItems(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.items)) return data.items;
@@ -541,6 +553,23 @@ export async function getLanguages(): Promise<LanguageOption[]> {
   }
 
   return defaultLanguages;
+}
+
+export async function getConditions(): Promise<ConditionOption[]> {
+  return [
+    { id: 1, label: "Como nuevo", value: "LikeNew" },
+    { id: 2, label: "Muy bueno", value: "VeryGood" },
+    { id: 3, label: "Bueno", value: "Good" },
+    { id: 4, label: "Aceptable", value: "Acceptable" },
+    { id: 5, label: "Malo", value: "Poor" },
+  ];
+}
+
+export async function getCovers(): Promise<CoverOption[]> {
+  return [
+    { id: 1, label: "Tapa dura", value: "Hardcover" },
+    { id: 2, label: "Tapa blanda", value: "Paperback" },
+  ];
 }
 
 export async function getBookDetail(bookId: number): Promise<BookDetail> {
