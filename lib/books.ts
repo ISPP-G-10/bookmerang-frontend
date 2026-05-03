@@ -532,9 +532,7 @@ const defaultLanguages: LanguageOption[] = [
   { id: 1, name: "Español" },
   { id: 2, name: "English" },
   { id: 3, name: "Français" },
-  { id: 4, name: "Deutsch" },
-  { id: 5, name: "Italiano" },
-  { id: 6, name: "Português" },
+  { id: 4, name: "Italiano" },
 ];
 
 export async function getLanguages(): Promise<LanguageOption[]> {
@@ -807,12 +805,8 @@ async function resolveGenreIds(names: string[]): Promise<number[]> {
 }
 
 export async function updateBook(book: BookDetail): Promise<void> {
-  const apiLanguageIds = (book.languages ?? [])
-    .map((name) => languageNameToId[name])
-    .filter(Boolean);
-  const apiGenreIds = (book.genres ?? [])
-    .map((name) => genreNameToId[name])
-    .filter(Boolean);
+  const apiLanguageIds = await resolveLanguageIds(book.languages ?? []);
+  const apiGenreIds = await resolveGenreIds(book.genres ?? []);
 
   const dataResponse = await apiRequest(`/books/${book.id}/data`, {
     method: "PUT",
