@@ -96,10 +96,8 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
         }
       }
 
-      const [chatData, messagesData] = await Promise.all([
-        getChat(chatId),
-        getMessages(chatId),
-      ]);
+      const chatData = await getChat(chatId);
+      const messagesData = await getMessages(chatId, chatData.encryptionKey);
 
       setChat(chatData);
 
@@ -118,7 +116,7 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
   // Refresh messages polling
   const refreshMessages = useCallback(async () => {
     try {
-      const messagesData = await getMessages(chatId);
+      const messagesData = await getMessages(chatId, chat?.encryptionKey);
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
@@ -126,7 +124,7 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
     } catch {
       // Silent error for polling
     }
-  }, [chatId]);
+  }, [chatId, chat]);
 
   // Refresh typing users
   const refreshTyping = useCallback(async () => {
@@ -230,7 +228,7 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
     }, 100);
 
     try {
-      const sentMessage = await apiSendMessage(chatId, trimmed);
+      const sentMessage = await apiSendMessage(chatId, trimmed, chat?.encryptionKey);
       if (!backendUserId && sentMessage.senderId) {
         setBackendUserId(sentMessage.senderId);
       }
