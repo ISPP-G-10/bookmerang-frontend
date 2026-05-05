@@ -23,7 +23,6 @@ import {
   exploreCommunities, 
   getMyCommunities, 
   joinCommunity, 
-  getCommunityLibrary, 
   getCommunityMembers } from '@/lib/communityApi';
 import { getBookspotById } from '@/lib/bookspotApi';
 import { CommunityDto, CommunityMemberDto } from '@/types/community';
@@ -49,8 +48,6 @@ const AVATAR_COLORS = ['#e4715f', '#3d405b', '#81b29a', '#f2cc8f', '#9c6644', '#
 const MAX_MEMBERS = 10;
 const MAX_VISIBLE_AVATARS = 4;
 
-// Default genres when library is empty
-const DEFAULT_GENRES = ['Literatura', 'Ficción'];
 
 const DEFAULT_LOCATION = {
   latitude: 37.3886,
@@ -74,7 +71,6 @@ export default function ComunidadesScreen() {
   const [loading, setLoading] = useState(true);
 
   const [bookspotInfoMap, setBookspotInfoMap] = useState<Record<number, BookspotInfo>>({});
-  const [communityGenresMap, setCommunityGenresMap] = useState<Record<number, string[]>>({});
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnce = useRef(false);
   const [joiningId, setJoiningId] = useState<number | null>(null);
@@ -120,23 +116,7 @@ export default function ComunidadesScreen() {
       results.forEach(r => { infoMap[r.id] = r.info; });
       setBookspotInfoMap(infoMap);
 
-      // Fetch genres from community libraries
-      const genresPromises = allCommunities.map(async (community) => {
-        try {
-          const library = await getCommunityLibrary(community.id, 1, 50);
-          // Extract unique genres from all books
-          const allGenres = library.flatMap(book => book.genres || []);
-          const uniqueGenres = [...new Set(allGenres)].slice(0, 3); // Max 3 genres
-          return { id: community.id, genres: uniqueGenres.length > 0 ? uniqueGenres : DEFAULT_GENRES };
-        } catch {
-          return { id: community.id, genres: DEFAULT_GENRES };
-        }
-      });
 
-      const genresResults = await Promise.all(genresPromises);
-      const genresMap: Record<number, string[]> = {};
-      genresResults.forEach(r => { genresMap[r.id] = r.genres; });
-      setCommunityGenresMap(genresMap);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'No se pudieron cargar las comunidades';
       console.error(error);
@@ -257,10 +237,6 @@ export default function ComunidadesScreen() {
     return list;
   }, [activeTab, communities, myCommunities, myCommIds, searchQuery]);
 
-  // Get genres for a community from library books
-  const getGenres = (id: number): string[] => {
-    return communityGenresMap[id] || DEFAULT_GENRES;
-  };
 
   // Render member avatars (for list cards)
   const renderMemberAvatars = (memberCount: number, communityId: number) => {
@@ -310,7 +286,6 @@ export default function ComunidadesScreen() {
   const renderCommunityCard = ({ item }: { item: CommunityDto }) => {
     const availableSpots = MAX_MEMBERS - item.memberCount;
     const bookspotInfo = bookspotInfoMap[item.referenceBookspotId];
-    const genres = getGenres(item.id);
     const isMine = myCommIds.has(item.id);
     const isJoining = joiningId === item.id;
     const isHovered = hoveredCardId === item.id;
@@ -355,15 +330,6 @@ export default function ComunidadesScreen() {
           {availableSpots > 0 && (
             <Text style={styles.availableSpots}>{availableSpots} plazas</Text>
           )}
-        </View>
-
-        {/* Genre Tags */}
-        <View style={styles.tagsContainer}>
-          {genres.map((genre, idx) => (
-            <View key={idx} style={styles.tag}>
-              <Text style={styles.tagText}>{genre}</Text>
-            </View>
-          ))}
         </View>
 
         {/* Action Button */}
@@ -628,18 +594,6 @@ export default function ComunidadesScreen() {
                   </View>
                 </View>
 
-                {/* Genres Section */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>Géneros de interés</Text>
-                  <View style={styles.genreTagsRow}>
-                    {getGenres(selectedCommunity.id).map((genre, idx) => (
-                      <View key={idx} style={styles.genreTag}>
-                        <Text style={styles.genreTagText}>{genre}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
                 {/* Benefits Section */}
                 <View style={styles.benefitsCard}>
                   <Text style={styles.benefitsTitle}>Al unirte tendrás:</Text>
@@ -885,25 +839,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Tags
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 12,
-    gap: 6,
-  },
-  tag: {
-    backgroundColor: COLORS.tagBg,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  tagText: {
-    fontSize: 12,
-    color: COLORS.grayText,
-    fontWeight: '500',
-  },
-
   // Buttons
   joinButton: {
     flexDirection: 'row',
@@ -1112,25 +1047,6 @@ const styles = StyleSheet.create({
   },
   availableSpotsChipText: {
     fontSize: 13,
-    color: COLORS.coral,
-    fontWeight: '500',
-  },
-
-  // Genre tags in modal
-  genreTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  genreTag: {
-    backgroundColor: COLORS.coralLight,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  genreTagText: {
-    fontSize: 14,
     color: COLORS.coral,
     fontWeight: '500',
   },
