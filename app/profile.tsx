@@ -15,7 +15,6 @@ import {
   getUserTier,
 } from "@/lib/rewardsSystem";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -29,6 +28,7 @@ import {
 } from "react-native";
 import { apiRequest } from "../lib/api";
 import { getStoredAuthSession } from "../lib/authSession";
+import { updateUserLocation } from "../lib/locationService";
 import {
   getMyLibrary,
   toConditionLabel,
@@ -83,7 +83,6 @@ export default function ProfileScreen() {
   }>({ distanceKm: 10, genres: [], bookLength: [] });
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesLoading, setPreferencesLoading] = useState(false);
-  const [locationUpdating, setLocationUpdating] = useState(false);
   const [availableGenres, setAvailableGenres] = useState<
     { id: number; name: string }[]
   >([]);
@@ -93,52 +92,13 @@ export default function ProfileScreen() {
   } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const [inkdropsModalVisible, setInkdropsModalVisible] = useState(false);
+  const [locationUpdating, setLocationUpdating] = useState(false);
 
   useEffect(() => {
     if (!authLoading && isBookdropUser) {
       router.replace("/bookDropControlPanel" as any);
     }
   }, [authLoading, isBookdropUser, router]);
-
-  const handleUpdateLocation = async () => {
-    setLocationUpdating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setLocationUpdating(false);
-        return;
-      }
-      const location = await Location.getCurrentPositionAsync({});
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-      setUserLocation({ latitude: lat, longitude: lon });
-      const userId = profile?.id ?? profile?.userId ?? profile?.user_id;
-      if (userId) {
-        await apiRequest(`/users/${userId}/preferences`, {
-          method: "PUT",
-          body: JSON.stringify({
-            latitude: lat,
-            longitude: lon,
-            radioKm: preferences.distanceKm || 10,
-            extension: preferences.bookLength.includes("0-200")
-              ? "SHORT"
-              : preferences.bookLength.includes("400+")
-                ? "LONG"
-                : "MEDIUM",
-            genreIds: availableGenres
-              .filter((g) => preferences.genres.includes(g.name))
-              .map((g) => g.id),
-          }),
-        });
-      }
-      const label = await reverseGeocode(lat, lon);
-      if (label) setLocationLabel(label);
-    } catch {
-      console.warn("Could not update location");
-    } finally {
-      setLocationUpdating(false);
-    }
-  };
 
   const reverseGeocode = async (lat: number, lon: number) => {
     try {
@@ -387,6 +347,20 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleManualUpdate = async () => {
+    setLocationUpdating(true);
+    try {
+      const session = await getStoredAuthSession();
+      const userId = session?.user?.id;
+      await updateUserLocation(userId);
+      await loadProfileData();
+    } catch (err) {
+      console.warn("Error actualizando ubicación manualmente:", err);
+    } finally {
+      setLocationUpdating(false);
+    }
+  };
+
   if (authLoading || isBookdropUser || loading) {
     return (
       <View
@@ -501,12 +475,11 @@ export default function ProfileScreen() {
               {locationLabel ?? profile?.location ?? "Cargando ubicación..."}
             </Text>
             <TouchableOpacity
-              onPress={handleUpdateLocation}
-              disabled={locationUpdating}
-              style={{ marginLeft: 6, padding: 2 }}
+              onPress={handleManualUpdate}
+              style={{ padding: 6, marginLeft: 6 }}
             >
               {locationUpdating ? (
-                <ActivityIndicator size={14} color="#e07a5f" />
+                <ActivityIndicator size="small" color="#e07a5f" />
               ) : (
                 <FontAwesome name="refresh" size={14} color="#e07a5f" />
               )}
