@@ -17,7 +17,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
+const DateTimePickerModal =
+  Platform.OS === 'web' ? null : require('react-native-modal-datetime-picker').default;
 
 import {
   createCommunityMeetup,
@@ -1052,26 +1053,30 @@ export default function CommunityMeetupTab({
           </KeyboardAvoidingView>
         </View>
 
-        <DateTimePickerModal
-          isVisible={Platform.OS !== 'web' && showDatePicker}
-          mode='date'
-          locale='es-ES'
-          minimumDate={new Date()}
-          themeVariant={colorScheme ?? 'light'}
-          onConfirm={handleDateConfirm}
-          onCancel={() => setShowDatePicker(false)}
-        />
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={showDatePicker}
+            mode='date'
+            locale='es-ES'
+            minimumDate={new Date()}
+            themeVariant={colorScheme ?? 'light'}
+            onConfirm={handleDateConfirm}
+            onCancel={() => setShowDatePicker(false)}
+          />
+        ) : null}
 
-        <DateTimePickerModal
-          isVisible={Platform.OS !== 'web' && showTimePicker}
-          mode='time'
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          locale='es-ES'
-          is24Hour
-          themeVariant={colorScheme ?? 'light'}
-          onConfirm={handleTimeConfirm}
-          onCancel={() => setShowTimePicker(false)}
-        />
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={showTimePicker}
+            mode='time'
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            locale='es-ES'
+            is24Hour
+            themeVariant={colorScheme ?? 'light'}
+            onConfirm={handleTimeConfirm}
+            onCancel={() => setShowTimePicker(false)}
+          />
+        ) : null}
       </Modal>
 
       <Modal visible={attendModalVisible} animationType='fade' transparent onRequestClose={closeAttendModal}>
