@@ -21,7 +21,8 @@ import {
   TextInput,
 } from "react-native";
 import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
-import DateTimePickerModal from "react-native-modal-datetime-picker";
+const DateTimePickerModal =
+  Platform.OS === "web" ? null : require("react-native-modal-datetime-picker").default;
 
 import ChatAvatar from "@/components/ChatAvatar";
 import { ConfirmModal } from "@/components/ConfirmationModal";
@@ -3535,22 +3536,25 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        <DateTimePickerModal
-          isVisible={meetingFormVisible && isDatePickerVisible}
-          mode="date"
-          locale="es-ES"
-          minimumDate={new Date()}
-          onConfirm={handleDateConfirm}
-          onCancel={() => setDatePickerVisible(false)}
-        />
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={meetingFormVisible && isDatePickerVisible}
+            mode="date"
+            locale="es-ES"
+            minimumDate={new Date()}
+            onConfirm={handleDateConfirm}
+            onCancel={() => setDatePickerVisible(false)}
+          />
+        ) : null}
 
-        <DateTimePickerModal
-          isVisible={meetingFormVisible && isTimePickerVisible}
-          mode="time"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          locale="es-ES"
-          is24Hour
-          onConfirm={(value) => {
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={meetingFormVisible && isTimePickerVisible}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            locale="es-ES"
+            is24Hour
+            onConfirm={(value) => {
             const selected = parseMeetingDate(meetingDate);
             const now = new Date();
 
@@ -3573,9 +3577,10 @@ export default function ChatDetailScreen() {
             }
 
             handleTimeConfirm(value);
-          }}
-          onCancel={() => setTimePickerVisible(false)}
-        />
+            }}
+            onCancel={() => setTimePickerVisible(false)}
+          />
+        ) : null}
 
         {/* Input de texto */}
         {!meetingFormVisible && (
