@@ -280,7 +280,7 @@ function getParticipantShelfView(
       ownerLabel: currentName,
       books: [
         {
-          title: participantKey === secondParticipantKey ? otherBookTitle : otherBookTitle,
+          title: otherBookTitle,
           originalOwner: otherName,
           status: "COLLECTED" as const,
         },

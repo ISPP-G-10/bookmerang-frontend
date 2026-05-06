@@ -85,7 +85,9 @@ export default function CommunityLibraryTab({ communityId }: Props) {
     }
   };
 
-  const allGenres = Array.from(new Set(books.flatMap(b => b.genres ?? []))).sort();
+  const allGenres = Array.from(new Set(books.flatMap(b => b.genres ?? []))).sort((a, b) =>
+    a.localeCompare(b, 'es', { sensitivity: 'base' })
+  );
   const genreFilters = [GENRE_ALL, ...allGenres];
 
   const filteredBooks =

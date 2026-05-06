@@ -189,7 +189,7 @@ export default function BookSpotsScreen() {
     } else {
       iframeRef.current?.contentWindow?.postMessage(
         { type: "eval", code: js },
-        "*",
+        window.location.origin,
       );
     }
   }, []);
