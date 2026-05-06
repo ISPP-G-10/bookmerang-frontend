@@ -1,10 +1,25 @@
 import * as Location from "expo-location";
 import { apiRequest } from "./api";
+import { Alert, Platform } from "react-native";
+
+const showLocationPermissionMessage = () => {
+  const title = "Permiso de ubicación necesario";
+  const message =
+    "No se puede actualizar tu ubicación sin permiso. Por favor, habilita el permiso de ubicación en la configuración de tu dispositivo.";
+
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+    return;
+  }
+
+  Alert.alert(title, message);
+};
 
 export const updateUserLocation = async (userId?: string | number) => {
   try {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
+      showLocationPermissionMessage();
       return null;
     }
 
