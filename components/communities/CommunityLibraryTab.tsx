@@ -265,7 +265,6 @@ const styles = StyleSheet.create({
   filtersScroll: {
     flexGrow: 0,
     flexShrink: 0,
-    maxHeight: 50,
   },
   filtersContainer: {
     paddingHorizontal: 16,

@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import CommunityChatTab from "@/components/communities/CommunityChatTab";
 import CommunityLibraryTab from "@/components/communities/CommunityLibraryTab";
@@ -212,17 +213,17 @@ export default function CommunityDetailScreen() {
 
   if (loading || !community) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#e4715f" />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Header principal */}
@@ -498,7 +499,7 @@ export default function CommunityDetailScreen() {
           </View>
         )}
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

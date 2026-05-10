@@ -13,6 +13,7 @@ import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
 import "../global.css";
 
@@ -127,6 +128,7 @@ function RootLayoutNav() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <AuthProvider>
         <TutorialProvider>
           <CopilotProvider
@@ -186,6 +188,7 @@ function RootLayoutNav() {
           </CopilotProvider>
         </TutorialProvider>
       </AuthProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
