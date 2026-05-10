@@ -12,6 +12,7 @@ import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 let WebView: any = null;
 if (Platform.OS !== "web") {
@@ -37,6 +38,7 @@ type PendingBookdropRegistration = {
 
 export default function RegisterScreen() {
   const { setBackendUserId } = useAuth();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ status?: string | string[]; session_id?: string | string[] }>();
   const [isBookdrop, setIsBookdrop] = useState(false);
   const [email, setEmail] = useState("");
@@ -595,7 +597,7 @@ export default function RegisterScreen() {
           >
             <View
               style={{
-                paddingTop: 56,
+                paddingTop: Math.max(insets.top, 20) + 16,
                 paddingBottom: 12,
                 paddingHorizontal: 16,
                 flexDirection: "row",

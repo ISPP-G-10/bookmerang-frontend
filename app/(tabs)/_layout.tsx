@@ -2,6 +2,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router, Tabs, useSegments } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -39,6 +40,8 @@ export default function TabLayout() {
   } = useTutorial();
   const { start, copilotEvents, visible: copilotVisible } = useCopilot();
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 0);
   const segments = useSegments();
   // `isTabsActive` ensures the tutorial only starts when the user is actually
   // viewing the tabs. Expo Router v3 might resolve the root path `/` to empty segments
@@ -115,9 +118,9 @@ export default function TabLayout() {
             fontFamily: 'Outfit_400Regular',
           },
           tabBarStyle: {
-            paddingBottom: 5,
+            paddingBottom: bottomInset + 5,
             paddingTop: 5,
-            height: 65,
+            height: 65 + bottomInset,
           },
           headerShown: false,
         }}>

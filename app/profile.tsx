@@ -26,6 +26,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { apiRequest } from "../lib/api";
 import { getStoredAuthSession } from "../lib/authSession";
 import { updateUserLocation } from "../lib/locationService";
@@ -64,6 +65,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { isBookdropUser, loading: authLoading } = useAuth();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const { message } = useLocalSearchParams<{ message?: string }>();
   const [libraryBooks, setLibraryBooks] = useState<BookListItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
@@ -393,7 +395,7 @@ export default function ProfileScreen() {
     <View style={{ flex: 1, backgroundColor: "#fdfbf7" }}>
       <Header showBack />
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 0) + 40 }}>
         {/* ── Mi Perfil + Avatar ── */}
         <View
           style={{

@@ -22,13 +22,13 @@ export const AuthLayout: React.FC<AuthLayoutProps> = ({
   scrollable = true,
 }) => {
   const isWeb = Platform.OS === "web";
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
 
   const isShortScreen = height < 760;
   const headerTopPadding = isShortScreen ? 36 : 56;
   const headerBottomPadding = isShortScreen ? 12 : 16;
   const imageHeight = isWeb ? Math.min(260, height * 0.32) : isShortScreen ? 170 : 220;
-  const imageWidth = isWeb ? 420 : "80%";
+  const imageWidth = isWeb ? Math.min(420, width * 0.85) : "80%";
 
   return (
     <KeyboardAvoidingView

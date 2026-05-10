@@ -12,22 +12,20 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import Header from '@/components/Header';
-import { 
-  exploreCommunities, 
-  getMyCommunities, 
-  joinCommunity, 
+import {
+  exploreCommunities,
+  getMyCommunities,
+  joinCommunity,
   getCommunityMembers } from '@/lib/communityApi';
 import { getBookspotById } from '@/lib/bookspotApi';
 import { CommunityDto, CommunityMemberDto } from '@/types/community';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Colors from mockup
 const COLORS = {
@@ -64,6 +62,7 @@ interface BookspotInfo {
 
 export default function ComunidadesScreen() {
   const router = useRouter();
+  const { height: screenHeight } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<TabKey>('mis');
   const [searchQuery, setSearchQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityDto[]>([]);
@@ -518,7 +517,7 @@ export default function ComunidadesScreen() {
       >
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={handleModalClose} />
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { maxHeight: screenHeight * 0.85, minHeight: screenHeight * 0.6 }]}>
             {selectedCommunity && (
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
                 {/* Modal Header */}
@@ -907,8 +906,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.85,
-    minHeight: SCREEN_HEIGHT * 0.6,
   },
   modalContent: {
     paddingHorizontal: 20,
