@@ -718,7 +718,7 @@ export default function SubirScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f7f4ef",
+    backgroundColor: "#fdfbf7",
   },
   scrollContent: {
     paddingBottom: 24,

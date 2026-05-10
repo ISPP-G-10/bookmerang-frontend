@@ -49,9 +49,6 @@ export default function Header({ showBack = false }: HeaderProps) {
       )}
 
       <View style={styles.logoContainer}>
-        <View style={styles.logoIcon}>
-          <FontAwesome name="book" size={16} color="#fdfbf7" />
-        </View>
         <Text style={styles.logoText}>Bookmerang</Text>
       </View>
 
@@ -91,16 +88,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logoIcon: {
-    backgroundColor: "#e07a5f",
-    borderRadius: 7,
     width: 32,
     height: 32,
-    alignItems: "center",
-    justifyContent: "center",
     marginRight: 8,
   },
   logoText: {
-    fontFamily: "Outfit_700Bold",
+    fontFamily: "RomanaBeckerDemi",
     fontSize: 18,
     color: "#e07a5f",
   },
