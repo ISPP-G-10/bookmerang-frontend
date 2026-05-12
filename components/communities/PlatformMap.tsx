@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   multiMarkerBadgeText: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   calloutContent: {
     backgroundColor: '#fff',
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   },
   commName: {
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginBottom: 2,
   },
   commSpot: {

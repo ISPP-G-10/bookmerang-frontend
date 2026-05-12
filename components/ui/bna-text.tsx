@@ -1,5 +1,11 @@
 import { useColor } from '@/hooks/useColor';
-import { FONT_SIZE } from '@/theme/globals';
+import {
+  FONTS,
+  FONT_SIZE,
+  FONT_WEIGHT,
+  LETTER_SPACING,
+  LINE_HEIGHT,
+} from '@/theme/typography';
 import React, { forwardRef } from 'react';
 import {
   Text as RNText,
@@ -33,46 +39,58 @@ export const Text = forwardRef<RNText, TextProps>(
     const getTextStyle = (): TextStyle => {
       const baseStyle: TextStyle = {
         color: textColor,
+        fontFamily: FONTS.regular,
       };
 
       switch (variant) {
         case 'heading':
           return {
             ...baseStyle,
-            fontSize: 28,
-            fontWeight: '800',
+            fontFamily: FONTS.bold,
+            fontSize: FONT_SIZE['3xl'],
+            lineHeight: LINE_HEIGHT['3xl'],
+            fontWeight: FONT_WEIGHT.bold as TextStyle['fontWeight'],
+            letterSpacing: LETTER_SPACING.tight,
           };
         case 'title':
           return {
             ...baseStyle,
-            fontSize: 24,
-            fontWeight: '700',
+            fontFamily: FONTS.bold,
+            fontSize: FONT_SIZE['2xl'],
+            lineHeight: LINE_HEIGHT['2xl'],
+            fontWeight: FONT_WEIGHT.bold as TextStyle['fontWeight'],
+            letterSpacing: LETTER_SPACING.tight,
           };
         case 'subtitle':
           return {
             ...baseStyle,
-            fontSize: 19,
-            fontWeight: '600',
+            fontFamily: FONTS.bold,
+            fontSize: FONT_SIZE.lg,
+            lineHeight: LINE_HEIGHT.lg,
+            fontWeight: FONT_WEIGHT.semibold as TextStyle['fontWeight'],
           };
         case 'caption':
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '400',
+            fontSize: FONT_SIZE.xs,
+            lineHeight: LINE_HEIGHT.xs,
+            fontWeight: FONT_WEIGHT.regular as TextStyle['fontWeight'],
             color: mutedColor,
           };
         case 'link':
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '500',
+            fontSize: FONT_SIZE.md,
+            lineHeight: LINE_HEIGHT.md,
+            fontWeight: FONT_WEIGHT.medium as TextStyle['fontWeight'],
             textDecorationLine: 'underline',
           };
         default: // 'body'
           return {
             ...baseStyle,
-            fontSize: FONT_SIZE,
-            fontWeight: '400',
+            fontSize: FONT_SIZE.md,
+            lineHeight: LINE_HEIGHT.md,
+            fontWeight: FONT_WEIGHT.regular as TextStyle['fontWeight'],
           };
       }
     };

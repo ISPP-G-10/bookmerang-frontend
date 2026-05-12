@@ -277,7 +277,7 @@ export default function SubscriptionScreen() {
                 alignSelf: "flex-start",
               }}
             >
-              <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 12 }}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
                 PREMIUM
               </Text>
             </View>
@@ -422,7 +422,7 @@ export default function SubscriptionScreen() {
                 alignSelf: "flex-start",
               }}
             >
-              <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 12 }}>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
                 GRATIS
               </Text>
             </View>

@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   },
   commName: {
     fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '700',
     marginBottom: 2,
     color: '#333',
   },

@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#333",
   },
   sectionTitle: {
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
   memberAvatarText: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
     textTransform: "uppercase",
   },
   memberName: {
@@ -720,7 +720,7 @@ const styles = StyleSheet.create({
   deleteBtnText: {
     color: "#ef4444",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   confirmOverlay: {
     position: "absolute",

@@ -14,8 +14,28 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Text as RNText, TextInput as RNTextInput } from "react-native";
 import "react-native-reanimated";
 import "../global.css";
+import { FONTS, FONT_SIZE, LINE_HEIGHT } from "@/theme/typography";
+
+const baseTextStyle = {
+  fontFamily: FONTS.regular,
+  fontSize: FONT_SIZE.md,
+  lineHeight: LINE_HEIGHT.md,
+};
+// Apply Outfit globally to every <Text> / <TextInput> that does not override.
+// Component-level styles still win because defaultProps style sits below.
+(RNText as any).defaultProps = {
+  ...((RNText as any).defaultProps ?? {}),
+  style: [((RNText as any).defaultProps?.style ?? null), baseTextStyle],
+  allowFontScaling: true,
+};
+(RNTextInput as any).defaultProps = {
+  ...((RNTextInput as any).defaultProps ?? {}),
+  style: [((RNTextInput as any).defaultProps?.style ?? null), baseTextStyle],
+  allowFontScaling: true,
+};
 
 import TutorialTooltip from '@/components/TutorialTooltip';
 import { TutorialProvider } from '@/contexts/TutorialContext';
@@ -145,7 +165,18 @@ function RootLayoutNav() {
             <SubscriptionProvider>
               <ThemeProvider value={DefaultTheme}>
                 <AuthGate>
-                  <Stack>
+                  <Stack
+                    screenOptions={{
+                      headerTitleStyle: {
+                        fontFamily: FONTS.bold,
+                        fontSize: FONT_SIZE.lg,
+                      },
+                      headerBackTitleStyle: {
+                        fontFamily: FONTS.regular,
+                        fontSize: FONT_SIZE.md,
+                      } as any,
+                    }}
+                  >
                     <Stack.Screen name="index" options={{ headerShown: false }} />
                     <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: '#fdfbf7' } }} />
                     <Stack.Screen name="login" options={{ headerShown: false }} />

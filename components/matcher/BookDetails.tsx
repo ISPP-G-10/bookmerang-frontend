@@ -216,7 +216,7 @@ export function BookDetailsScreen({
                     )}
                   </View>
                   <View style={{ marginLeft: 12 }}>
-                    <Text style={{ fontWeight: 'bold', color: textPrimary }}>
+                    <Text style={{ fontWeight: '700', color: textPrimary }}>
                       {owner.username}
                     </Text>
                     <View
@@ -246,7 +246,7 @@ export function BookDetailsScreen({
                   <Text
                     style={{
                       color: '#e07a5f',
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       fontSize: 14,
                     }}
                   >
@@ -368,14 +368,14 @@ export function BookDetailsScreen({
                       textTransform: 'uppercase',
                       letterSpacing: 1,
                       color: textSecondary,
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                     }}
                   >
                     Estado
                   </Text>
                   <Text
                     style={{
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       color: textPrimary,
                       fontSize: 14,
                       marginTop: 4,
@@ -404,14 +404,14 @@ export function BookDetailsScreen({
                       textTransform: 'uppercase',
                       letterSpacing: 1,
                       color: textSecondary,
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                     }}
                   >
                     Idioma
                   </Text>
                   <Text
                     style={{
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       color: textPrimary,
                       fontSize: 14,
                       marginTop: 4,
@@ -438,14 +438,14 @@ export function BookDetailsScreen({
                       textTransform: 'uppercase',
                       letterSpacing: 1,
                       color: textSecondary,
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                     }}
                   >
                     Páginas
                   </Text>
                   <Text
                     style={{
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       color: textPrimary,
                       fontSize: 14,
                       marginTop: 4,
@@ -472,14 +472,14 @@ export function BookDetailsScreen({
                       textTransform: 'uppercase',
                       letterSpacing: 1,
                       color: textSecondary,
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                     }}
                   >
                     Cubierta
                   </Text>
                   <Text
                     style={{
-                      fontWeight: 'bold',
+                      fontWeight: '700',
                       color: textPrimary,
                       fontSize: 14,
                       marginTop: 4,
@@ -586,7 +586,7 @@ export function BookDetailsScreen({
                 <Text
                   style={{
                     fontSize: 14,
-                    fontWeight: 'bold',
+                    fontWeight: '700',
                     color: textPrimary,
                   }}
                 >
@@ -774,10 +774,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
     color: '#8B7355',
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   specValue: {
-    fontWeight: 'bold',
+    fontWeight: '700',
     fontSize: 14,
     marginTop: 4,
   },

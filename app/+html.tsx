@@ -28,6 +28,13 @@ export default function Root({ children }: { children: React.ReactNode }) {
 }
 
 const responsiveBackground = `
-body {
+html, body {
   background-color: #fdfbf7;
+  font-family: 'Outfit_400Regular', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+button, input, textarea, select {
+  font-family: inherit;
 }`;

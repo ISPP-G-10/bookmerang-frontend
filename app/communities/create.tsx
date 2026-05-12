@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#333',
   },
   content: {
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#333',
     marginTop: 16,
     marginBottom: 8,
@@ -287,7 +287,7 @@ const styles = StyleSheet.create({
   createBtnText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   emptyText: {
     fontSize: 14,
