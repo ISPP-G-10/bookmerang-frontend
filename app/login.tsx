@@ -4,6 +4,7 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ErrorMessage } from "@/components/auth/ErrorMessage";
 import { authService } from "@/lib/authService";
 import { getEmailValidationError, normalizeEmail } from "@/lib/emailValidation";
+import { updateUserLocation } from "@/lib/locationService";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
@@ -29,7 +30,14 @@ export default function LoginScreen() {
     setLoading(true);
     setError("");
     try {
-      await authService.signIn(normalizeEmail(email), password);
+      const loginResult = await authService.signIn(normalizeEmail(email), password);
+      
+      // Actualizar ubicación automáticamente después del login
+      const userId = loginResult?.user?.id;
+      if (userId) {
+        await updateUserLocation(userId);
+      }
+      
       router.replace("/" as any);
     } catch (err: any) {
       setError(err.message || "Error al iniciar sesión");
@@ -63,7 +71,10 @@ export default function LoginScreen() {
         onSubmitEditing={handleLogin}
       />
 
-      <TouchableOpacity className="self-end mb-5">
+      <TouchableOpacity
+        className="self-end mb-5"
+        onPress={() => router.push("/forgot-password" as any)}
+      >
         <Text className="text-[#e07a5f] text-sm font-medium">
           ¿Olvidaste tu contraseña?
         </Text>

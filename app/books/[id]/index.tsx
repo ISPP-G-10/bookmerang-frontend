@@ -67,7 +67,7 @@ export default function BookDetailScreen() {
       if (!id) return;
       await deleteBook(Number(id));
       setShowDeleteModal(false);
-      router.replace("/profile?message=deleted" as any);
+      router.dismissTo("/profile?message=deleted" as any);
     } catch {
       setError("No se pudo eliminar el libro.");
     }

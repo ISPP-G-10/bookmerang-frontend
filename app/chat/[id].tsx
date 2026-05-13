@@ -21,7 +21,8 @@ import {
   TextInput,
 } from "react-native";
 import { TouchableOpacity as GHTouchableOpacity } from "react-native-gesture-handler";
-import DateTimePickerModal from "react-native-modal-datetime-picker";
+const DateTimePickerModal =
+  Platform.OS === "web" ? null : require("react-native-modal-datetime-picker").default;
 
 import ChatAvatar from "@/components/ChatAvatar";
 import { ConfirmModal } from "@/components/ConfirmationModal";
@@ -1115,11 +1116,9 @@ export default function ChatDetailScreen() {
       setLoading(true);
       setError(null);
 
-      // Cargar chat y mensajes en paralelo
-      const [chatData, messagesData] = await Promise.all([
-        fetchChat(chatId),
-        fetchMessages(chatId),
-      ]);
+      // Cargar chat y luego mensajes para tener la clave de encriptación
+      const chatData = await fetchChat(chatId);
+      const messagesData = await fetchMessages(chatId, chatData.encryptionKey);
 
       setChat(chatData);
 
@@ -1178,7 +1177,7 @@ export default function ChatDetailScreen() {
     if (!chatId) return;
 
     try {
-      const messagesData = await fetchMessages(chatId);
+      const messagesData = await fetchMessages(chatId, chat?.encryptionKey);
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
       );
@@ -1195,7 +1194,7 @@ export default function ChatDetailScreen() {
       }
       // Silenciar errores de polling
     }
-  }, [chatId, router]);
+  }, [chatId, router, chat]);
 
   const refreshTyping = useCallback(async () => {
     if (!chatId) return;
@@ -1505,7 +1504,7 @@ export default function ChatDetailScreen() {
     }, 100);
 
     try {
-      const sentMessage = await apiSendMessage(chatId, trimmed);
+      const sentMessage = await apiSendMessage(chatId, trimmed, chat?.encryptionKey);
       // Si no teníamos el userId, ahora lo sabemos por el senderId del mensaje enviado
       if (!backendUserId && sentMessage.senderId) {
         setBackendUserId(sentMessage.senderId);
@@ -3537,22 +3536,25 @@ export default function ChatDetailScreen() {
           </View>
         )}
 
-        <DateTimePickerModal
-          isVisible={meetingFormVisible && isDatePickerVisible}
-          mode="date"
-          locale="es-ES"
-          minimumDate={new Date()}
-          onConfirm={handleDateConfirm}
-          onCancel={() => setDatePickerVisible(false)}
-        />
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={meetingFormVisible && isDatePickerVisible}
+            mode="date"
+            locale="es-ES"
+            minimumDate={new Date()}
+            onConfirm={handleDateConfirm}
+            onCancel={() => setDatePickerVisible(false)}
+          />
+        ) : null}
 
-        <DateTimePickerModal
-          isVisible={meetingFormVisible && isTimePickerVisible}
-          mode="time"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          locale="es-ES"
-          is24Hour
-          onConfirm={(value) => {
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={meetingFormVisible && isTimePickerVisible}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            locale="es-ES"
+            is24Hour
+            onConfirm={(value) => {
             const selected = parseMeetingDate(meetingDate);
             const now = new Date();
 
@@ -3575,9 +3577,10 @@ export default function ChatDetailScreen() {
             }
 
             handleTimeConfirm(value);
-          }}
-          onCancel={() => setTimePickerVisible(false)}
-        />
+            }}
+            onCancel={() => setTimePickerVisible(false)}
+          />
+        ) : null}
 
         {/* Input de texto */}
         {!meetingFormVisible && (

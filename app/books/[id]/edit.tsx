@@ -1,11 +1,17 @@
 import {
   getBookDetail,
+  getLanguages,
+  getConditions,
+  getCovers,
   toConditionEnum,
   toConditionLabel,
   toCoverEnum,
   toCoverLabel,
   updateBook,
   type BookDetail,
+  type LanguageOption,
+  type ConditionOption,
+  type CoverOption,
 } from "@/lib/books";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { router, useLocalSearchParams } from "expo-router";
@@ -13,6 +19,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   ScrollView,
   Text,
   TextInput,
@@ -34,6 +41,7 @@ export default function EditBookScreen() {
   const [cover, setCover] = useState("Tapa dura");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
+  const [languages, setLanguages] = useState<LanguageOption[]>([]);
   const isDesktop = width >= 1024;
   const contentMaxWidth = isDesktop ? 1080 : 420;
   const imageColumnWidth = isDesktop ? 320 : undefined;
@@ -43,8 +51,12 @@ export default function EditBookScreen() {
       try {
         if (!id) return;
         setLoading(true);
-        const detail = await getBookDetail(Number(id));
+        const [detail, langs] = await Promise.all([
+          getBookDetail(Number(id)),
+          getLanguages(),
+        ]);
         setBook(detail);
+        setLanguages(langs);
         setTitle(detail.titulo ?? "");
         setAuthor(detail.autor ?? "");
         setCondition(toConditionLabel(detail.condition));
@@ -76,7 +88,7 @@ export default function EditBookScreen() {
         cover: toCoverEnum(cover),
         observaciones: description,
       });
-      router.replace("/profile?message=updated" as any);
+      router.dismissTo("/profile?message=updated" as any);
     } catch {
       setError("No se pudo guardar el libro.");
     }
@@ -138,19 +150,30 @@ export default function EditBookScreen() {
                     onChangeText={setTitle}
                   />
                   <Field label="Autor *" value={author} onChangeText={setAuthor} />
-                  <Field
+                  <SelectField
                     label="Estado del libro *"
                     value={condition}
                     onChangeText={setCondition}
+                    options={["Como nuevo", "Muy bueno", "Bueno", "Aceptable", "Malo"]}
                   />
-                  <Field label="Idioma" value={language} onChangeText={setLanguage} />
+                  <SelectField
+                    label="Idioma"
+                    value={language}
+                    onChangeText={setLanguage}
+                    options={languages.map((lang) => lang.name)}
+                  />
                   <Field
                     label="Número de páginas"
                     value={pages}
                     onChangeText={setPages}
                     keyboardType="number-pad"
                   />
-                  <Field label="Tipo de tapa" value={cover} onChangeText={setCover} />
+                  <SelectField
+                    label="Tipo de tapa"
+                    value={cover}
+                    onChangeText={setCover}
+                    options={["Tapa dura", "Tapa blanda"]}
+                  />
                   <Field
                     label="Descripción"
                     value={description}
@@ -215,6 +238,98 @@ function Field({
           multiline ? { minHeight: 120, textAlignVertical: "top" } : undefined
         }
       />
+    </View>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChangeText,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  options: string[];
+}) {
+  const [showModal, setShowModal] = useState(false);
+
+  return (
+    <View className="mb-4">
+      <Text
+        style={{ fontFamily: "Outfit_700Bold" }}
+        className="text-[#3e2723] text-xl mb-2"
+      >
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={() => setShowModal(true)}
+        className="bg-white rounded-3xl border border-[#F3E9E0] px-4 py-4 flex-row justify-between items-center"
+      >
+        <Text className="text-[#3e2723] text-xl">
+          {value || "Seleccionar"}
+        </Text>
+        <FontAwesome name="chevron-right" size={18} color="#e07a5f" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-center items-center">
+          <View className="bg-white rounded-3xl w-80 max-h-96">
+            <View className="p-4 border-b border-[#F3E9E0] items-center">
+              <Text
+                style={{ fontFamily: "Outfit_700Bold" }}
+                className="text-[#3e2723] text-lg"
+              >
+                Seleccionar {label}
+              </Text>
+            </View>
+            <ScrollView>
+              {options.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  onPress={() => {
+                    onChangeText(option);
+                    setShowModal(false);
+                  }}
+                  className={`px-4 py-3 border-b border-[#F3E9E0] ${
+                    option === value ? "bg-[#f5f0ea]" : ""
+                  }`}
+                >
+                  <Text
+                    className={`text-xl ${
+                      option === value
+                        ? "text-[#e07a5f] font-bold"
+                        : "text-[#3e2723]"
+                    }`}
+                  >
+                    {option === value ? "✓ " : "  "}
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <View className="p-4 border-t border-[#F3E9E0]">
+              <TouchableOpacity
+                onPress={() => setShowModal(false)}
+                className="bg-[#e07a5f] rounded-full py-2"
+              >
+                <Text
+                  style={{ fontFamily: "Outfit_700Bold" }}
+                  className="text-white text-center text-lg"
+                >
+                  Cerrar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

@@ -387,11 +387,13 @@ function EditProfileModal({
   );
   const [photoModal, setPhotoModal] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     if (visible) {
       setName(profile?.name ?? "");
       setUsername(profile?.username ?? "");
+      setError("");
     }
   }, [visible]);
   React.useEffect(() => {
@@ -492,19 +494,35 @@ function EditProfileModal({
           <TextInput
             style={inputStyle}
             value={name}
-            onChangeText={setName}
+            onChangeText={(v) => { setName(v); if (error) setError(""); }}
             placeholder="Tu nombre"
             placeholderTextColor="#c4a882"
+            maxLength={50}
           />
           <Text style={labelStyle}>Nombre de usuario</Text>
           <TextInput
             style={inputStyle}
             value={username}
-            onChangeText={setUsername}
+            onChangeText={(v) => { setUsername(v); if (error) setError(""); }}
             placeholder="@usuario"
             placeholderTextColor="#c4a882"
             autoCapitalize="none"
+            maxLength={30}
           />
+          {error ? (
+            <View
+              style={{
+                backgroundColor: "#fff0f0",
+                borderWidth: 1,
+                borderColor: "#fca5a5",
+                borderRadius: 8,
+                padding: 12,
+                marginTop: 8,
+              }}
+            >
+              <Text style={{ color: "#dc2626", fontSize: 13 }}>{error}</Text>
+            </View>
+          ) : null}
           <View style={{ flexDirection: "row", gap: 12, marginTop: 20 }}>
             <TouchableOpacity
               onPress={onClose}
@@ -527,19 +545,19 @@ function EditProfileModal({
                 const trimmedName = name.trim();
                 const trimmedUsername = username.trim();
                 if (!trimmedName || !trimmedUsername) {
-                  Alert.alert(
-                    "Campos obligatorios",
-                    "Introduce tu nombre y tu nombre de usuario.",
-                  );
+                  setError("Introduce tu nombre y tu nombre de usuario.");
                   return;
                 }
                 setSaving(true);
+                setError("");
                 try {
                   await onSave({
                     name: trimmedName,
                     username: trimmedUsername,
                     avatar,
                   });
+                } catch (err: any) {
+                  setError(err?.message || "No se pudo guardar el perfil");
                 } finally {
                   setSaving(false);
                 }
@@ -1409,59 +1427,53 @@ export default function SettingsScreen() {
     username: string;
     avatar?: string | null;
   }) => {
+    const nextAvatar = normalizeAvatarValue(data.avatar);
+    const nextName = data.name.trim();
+    const nextUsername = data.username.trim();
+    if (!nextName || !nextUsername) {
+      throw new Error("Introduce tu nombre y tu nombre de usuario.");
+    }
+    let savedProfile: any = null;
     try {
-      const nextAvatar = normalizeAvatarValue(data.avatar);
-      const nextName = data.name.trim();
-      const nextUsername = data.username.trim();
-      if (!nextName || !nextUsername) {
-        Alert.alert(
-          "Campos obligatorios",
-          "Introduce tu nombre y tu nombre de usuario.",
-        );
-        return;
-      }
-      let savedProfile: any = null;
-      try {
-        const patchRes = await apiRequest("/Auth/perfil", {
-          method: "PATCH",
-          body: JSON.stringify({
-            username: nextUsername,
-            name: nextName,
-            profilePhoto: nextAvatar === null ? "" : nextAvatar,
-          }),
-        });
-        if (!patchRes.ok) {
-          throw new Error(
-            await readApiError(
-              patchRes,
-              "Error actualizando perfil en el servidor",
-            ),
-          );
-        }
-        savedProfile = await patchRes.json().catch(() => null);
-      } catch (err: any) {
-        Alert.alert(
-          "Error",
-          err?.message || "No se pudo actualizar el perfil en el servidor",
-        );
-        return;
-      }
-      const out = normalizeProfile(
-        {
-          ...(profile ?? {}),
-          ...(savedProfile ?? {}),
-          name: nextName,
+      const patchRes = await apiRequest("/Auth/perfil", {
+        method: "PATCH",
+        body: JSON.stringify({
           username: nextUsername,
-          avatar: nextAvatar,
-          profilePhoto: nextAvatar ?? "",
-        },
-        {
-          email: currentEmail,
           name: nextName,
-          username: nextUsername,
-          profilePhoto: nextAvatar ?? "",
-        },
+          profilePhoto: nextAvatar === null ? "" : nextAvatar,
+        }),
+      });
+      if (!patchRes.ok) {
+        throw new Error(
+          await readApiError(
+            patchRes,
+            "Error actualizando perfil en el servidor",
+          ),
+        );
+      }
+      savedProfile = await patchRes.json().catch(() => null);
+    } catch (err: any) {
+      throw new Error(
+        err?.message || "No se pudo actualizar el perfil en el servidor",
       );
+    }
+    const out = normalizeProfile(
+      {
+        ...(profile ?? {}),
+        ...(savedProfile ?? {}),
+        name: nextName,
+        username: nextUsername,
+        avatar: nextAvatar,
+        profilePhoto: nextAvatar ?? "",
+      },
+      {
+        email: currentEmail,
+        name: nextName,
+        username: nextUsername,
+        profilePhoto: nextAvatar ?? "",
+      },
+    );
+    try {
       await updateStoredAuthUser({
         name: nextName,
         username: nextUsername,
@@ -1469,16 +1481,16 @@ export default function SettingsScreen() {
       });
       if (persistedAvatar && persistedAvatar !== nextAvatar)
         await removeStoredProfilePhoto(persistedAvatar);
-      hasUnsavedProfileDraft.current = false;
-      setPersistedAvatar(nextAvatar);
-      setProfile(out);
-      setEditProfileOpen(false);
-      showToast("Perfil actualizado correctamente");
-      if (router.canGoBack()) router.back();
-      else router.replace("/profile" as any);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // El perfil ya se guardó en el servidor; errores locales no bloquean al usuario
     }
+    hasUnsavedProfileDraft.current = false;
+    setPersistedAvatar(nextAvatar);
+    setProfile(out);
+    setEditProfileOpen(false);
+    showToast("Perfil actualizado correctamente");
+    if (router.canGoBack()) router.back();
+    else router.replace("/profile" as any);
   };
 
   // ── Guardar personalización cosmética ──
@@ -1531,9 +1543,8 @@ export default function SettingsScreen() {
           throw new Error(text || "Error borrando la cuenta en el servidor");
         }
         await authService.signOut();
-        window.alert(
-          "Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.",
-        );
+        window.alert("Cuenta eliminada: Tu cuenta ha sido eliminada correctamente.");
+        router.replace("/login" as any);
       } catch (e: any) {
         window.alert(
           e?.message ?? "No se pudo eliminar la cuenta en el servidor.",
@@ -1564,6 +1575,7 @@ export default function SettingsScreen() {
               Alert.alert(
                 "Cuenta eliminada",
                 "Tu cuenta ha sido eliminada correctamente.",
+                [{ text: "Aceptar", onPress: () => router.replace("/login" as any) }],
               );
             } catch (e: any) {
               Alert.alert(

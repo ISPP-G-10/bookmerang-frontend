@@ -6,14 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createCommunity } from '@/lib/communityApi';
-import { getUserActiveBookspots, BookspotPendingDTO } from '@/lib/bookspotApi';
+import { getActiveBookspots, BookspotDTO } from '@/lib/bookspotApi';
 
 export default function CreateCommunityScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<number | null>(null);
-  const [bookspots, setBookspots] = useState<BookspotPendingDTO[]>([]);
+  const [bookspots, setBookspots] = useState<BookspotDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export default function CreateCommunityScreen() {
   const fetchBookspots = useCallback(async () => {
     try {
       setInitialLoading(true);
-      const data = await getUserActiveBookspots();
+      const data = await getActiveBookspots();
       setBookspots(data);
     } catch (error: any) {
       console.error(error);

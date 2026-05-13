@@ -8,19 +8,21 @@ const SECRET_KEY = process.env.EXPO_PUBLIC_CHAT_ENCRYPTION_KEY || 'b00km3rang_s3
 /**
  * Encripta un mensaje de texto plano usando AES.
  */
-export function encryptMessage(text: string): string {
+export function encryptMessage(text: string, key?: string): string {
   if (!text) return text;
-  return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
+  const targetKey = key || SECRET_KEY;
+  return CryptoJS.AES.encrypt(text, targetKey).toString();
 }
 
 /**
  * Desencripta un mensaje encriptado con AES.
  * Si el mensaje no está encriptado (mensajes antiguos), lo devuelve tal cual.
  */
-export function decryptMessage(cipherText: string): string {
+export function decryptMessage(cipherText: string, key?: string): string {
   if (!cipherText) return cipherText;
+  const targetKey = key || SECRET_KEY;
   try {
-    const bytes = CryptoJS.AES.decrypt(cipherText, SECRET_KEY);
+    const bytes = CryptoJS.AES.decrypt(cipherText, targetKey);
     const decryptedText = bytes.toString(CryptoJS.enc.Utf8);
     
     // Si la desencriptación fue exitosa pero el resultado es vacío y el texto original no lo era,

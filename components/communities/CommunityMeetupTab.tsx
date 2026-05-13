@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  useColorScheme,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
+const DateTimePickerModal =
+  Platform.OS === 'web' ? null : require('react-native-modal-datetime-picker').default;
 
 import {
   createCommunityMeetup,
@@ -149,6 +151,7 @@ export default function CommunityMeetupTab({
   canCreateMeetups = false,
 }: Props) {
   const { currentUserId } = useAuth();
+  const colorScheme = useColorScheme();
 
   const [meetups, setMeetups] = useState<CommunityMeetupDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,7 +224,7 @@ export default function CommunityMeetupTab({
   );
 
   const sortedMeetups = useMemo(
-    () => [...meetups].sort((a, b) => +parseBackendDate(a.scheduledAt) - +parseBackendDate(b.scheduledAt)),
+    () => [...meetups].sort((a, b) => +parseBackendDate(b.createdAt) - +parseBackendDate(a.createdAt)),
     [meetups]
   );
 
@@ -1049,6 +1052,31 @@ export default function CommunityMeetupTab({
             </Animated.View>
           </KeyboardAvoidingView>
         </View>
+
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={showDatePicker}
+            mode='date'
+            locale='es-ES'
+            minimumDate={new Date()}
+            themeVariant={colorScheme ?? 'light'}
+            onConfirm={handleDateConfirm}
+            onCancel={() => setShowDatePicker(false)}
+          />
+        ) : null}
+
+        {DateTimePickerModal ? (
+          <DateTimePickerModal
+            isVisible={showTimePicker}
+            mode='time'
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            locale='es-ES'
+            is24Hour
+            themeVariant={colorScheme ?? 'light'}
+            onConfirm={handleTimeConfirm}
+            onCancel={() => setShowTimePicker(false)}
+          />
+        ) : null}
       </Modal>
 
       <Modal visible={attendModalVisible} animationType='fade' transparent onRequestClose={closeAttendModal}>
@@ -1148,25 +1176,6 @@ export default function CommunityMeetupTab({
           </KeyboardAvoidingView>
         </View>
       </Modal>
-
-      <DateTimePickerModal
-        isVisible={createModalVisible && Platform.OS !== 'web' && showDatePicker}
-        mode='date'
-        locale='es-ES'
-        minimumDate={new Date()}
-        onConfirm={handleDateConfirm}
-        onCancel={() => setShowDatePicker(false)}
-      />
-
-      <DateTimePickerModal
-        isVisible={createModalVisible && Platform.OS !== 'web' && showTimePicker}
-        mode='time'
-        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-        locale='es-ES'
-        is24Hour
-        onConfirm={handleTimeConfirm}
-        onCancel={() => setShowTimePicker(false)}
-      />
 
       <ConfirmModal
         visible={cancelModalVisible}

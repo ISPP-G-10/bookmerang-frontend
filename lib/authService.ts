@@ -279,6 +279,36 @@ export const authService = {
     return response.json();
   },
 
+  async requestPasswordReset(email: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const emailError = getEmailValidationError(normalizedEmail);
+    if (emailError) throw new Error(emailError);
+
+    const response = await apiRequest("/Auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email: normalizedEmail }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al solicitar el restablecimiento de contraseña"));
+    }
+
+    return response.json();
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    const response = await apiRequest("/Auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, newPassword }),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readApiError(response, "Error al restablecer la contraseña"));
+    }
+
+    return response.json();
+  },
+
   async signOut() {
     await clearStoredAuthSession();
   },

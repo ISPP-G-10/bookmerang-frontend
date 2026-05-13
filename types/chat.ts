@@ -28,6 +28,7 @@ export interface ChatDto {
   participants: ChatParticipantDto[];
   lastMessage: MessageDto | null;
   name?: string;
+  encryptionKey?: string;
 }
 
 export interface TypingUserDto {
