@@ -1175,9 +1175,13 @@ export default function ChatDetailScreen() {
   // Polling: recargar mensajes cada 3 segundos para ver actualizaciones
   const refreshMessages = useCallback(async () => {
     if (!chatId) return;
+    // Saltar el tick si todavía no se ha cargado el chat: descifrar con la
+    // clave global por defecto cuando el servidor cifra con la clave por
+    // conversación hace que los mensajes se vean en cifrado en pantalla.
+    if (!chat) return;
 
     try {
-      const messagesData = await fetchMessages(chatId, chat?.encryptionKey);
+      const messagesData = await fetchMessages(chatId, chat.encryptionKey);
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
       );
@@ -1478,6 +1482,11 @@ export default function ChatDetailScreen() {
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if (!trimmed || sending || !chatId) return;
+    // No enviar hasta tener el chat cargado: la clave por conversación es
+    // necesaria para cifrar correctamente; sin ella, el backend almacenaría
+    // el mensaje con `SECRET_KEY` y posteriormente al recibirlo por polling
+    // (descifrando con la clave del chat) se mostraría cifrado.
+    if (!chat) return;
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -1504,7 +1513,7 @@ export default function ChatDetailScreen() {
     }, 100);
 
     try {
-      const sentMessage = await apiSendMessage(chatId, trimmed, chat?.encryptionKey);
+      const sentMessage = await apiSendMessage(chatId, trimmed, chat.encryptionKey);
       // Si no teníamos el userId, ahora lo sabemos por el senderId del mensaje enviado
       if (!backendUserId && sentMessage.senderId) {
         setBackendUserId(sentMessage.senderId);

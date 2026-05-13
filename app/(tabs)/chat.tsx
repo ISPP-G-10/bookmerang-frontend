@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -17,7 +17,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getMyChats, resolveUserIdFromChats } from "@/lib/chatApi";
 import { ChatDto } from "@/types/chat";
 import { getExchangeByChatIdWithMatch } from "@/lib/exchangeApi";
-import { ExchangeWithMatchDto, ExchangeStatus } from "@/types/exchange";
+import { ExchangeWithMatchDto } from "@/types/exchange";
+import { ChatTab, filterChatsForTab } from "@/lib/chatFilters";
 import { FontAwesome } from "@expo/vector-icons";
 
 function formatTime(dateStr: string): string {
@@ -118,47 +119,19 @@ function ChatListItem({
 export default function ChatListScreen() {
   const router = useRouter();
   const { currentUserId, backendUserId, setBackendUserId } = useAuth();
-  const [chats, setChats] = useState<ChatDto[]>([]);
   const [allChats, setAllChats] = useState<ChatDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const TAB_VALUES = ["Nuevos matches", "En curso", "Finalizados"];
-  const TAB_LABELS: Record<string, string> = {
+  const TAB_VALUES: ChatTab[] = ["Nuevos matches", "En curso", "Finalizados"];
+  const TAB_LABELS: Record<ChatTab, string> = {
     "Nuevos matches": "Nuevos",
     "En curso": "Curso",
     Finalizados: "Final",
   };
-  const [activeTab, setActiveTab] = useState<string>('Nuevos matches');
+  const [activeTab, setActiveTab] = useState<ChatTab>('Nuevos matches');
   const [search, setSearch] = useState('');
   const [exchanges, setExchanges] = useState<ExchangeWithMatchDto[]>([])
   const hasLoadedOnce = useRef(false);
-
-  // Determina a qué pestaña pertenece un exchange según su estado.
-  const exchangeMatchesTab = (
-    exchange: ExchangeWithMatchDto | undefined,
-    tab: string,
-  ) => {
-    if (!exchange) return false;
-
-    const status = exchange.status as ExchangeStatus;
-
-    if (tab === "Nuevos matches") {
-      return (
-        status === "NEGOTIATING" ||
-        status === "ACCEPTED_BY_1" ||
-        status === "ACCEPTED_BY_2"
-      );
-    }
-
-    if (tab === "En curso") {
-      return status === "ACCEPTED";
-    }
-
-    // Finalizados
-    return (
-      status === "COMPLETED" || status === "REJECTED" || status === "INCIDENT"
-    );
-  };
 
   const fetchChats = useCallback(async () => {
     try {
@@ -186,7 +159,6 @@ export default function ChatListScreen() {
       });
 
       setAllChats(sorted);
-      setChats(sorted);
       hasLoadedOnce.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al cargar chats");
@@ -202,25 +174,20 @@ export default function ChatListScreen() {
     }, [fetchChats]),
   );
 
-  useEffect(() => {
-    // Filter out community chats - they are now in the Communities tab
-    const nonCommunityChats = allChats.filter((c) => c.type !== 'COMMUNITY');
-
-    // filtrar por texto (barra de búsqueda)
-    const bySearch = nonCommunityChats.filter((c) => {
-      const other = c.participants.find((p) => p.userId !== currentUserId);
-      const name = (other?.username ?? "Usuario desconocido").toLowerCase();
-      return name.includes(search.toLowerCase());
-    });
-
-    // filtrar por pestaña
-    const byTab = bySearch.filter((chat) => {
-      const currentExchange = exchanges.find((e) => String(e.chatId) === String(chat.id));
-      return exchangeMatchesTab(currentExchange, activeTab);
-    });
-
-    setChats(byTab);
-  }, [search, activeTab, allChats, exchanges, currentUserId]);
+  // Filtrado síncrono durante el render: evita el render intermedio que
+  // mostraba la lista de la pestaña anterior bajo la pestaña recién pulsada
+  // (parpadeo de ~medio segundo al cambiar de pestaña).
+  const chats = useMemo(
+    () =>
+      filterChatsForTab({
+        allChats,
+        exchanges,
+        currentUserId: currentUserId ?? null,
+        activeTab,
+        search,
+      }),
+    [allChats, exchanges, currentUserId, activeTab, search],
+  );
 
   if (loading) {
     return (

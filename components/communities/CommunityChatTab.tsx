@@ -115,8 +115,12 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
 
   // Refresh messages polling
   const refreshMessages = useCallback(async () => {
+    // Saltar el tick si todavía no se ha cargado el chat: sin la
+    // `encryptionKey` correcta los mensajes se descifrarían con la clave
+    // global y aparecerían en cifrado.
+    if (!chat) return;
     try {
-      const messagesData = await getMessages(chatId, chat?.encryptionKey);
+      const messagesData = await getMessages(chatId, chat.encryptionKey);
       const sorted = [...messagesData].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
@@ -200,6 +204,9 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if (!trimmed || sending) return;
+    // No enviar sin chat cargado: necesitamos la clave por conversación
+    // para evitar mismatches que harían que el mensaje se viese cifrado.
+    if (!chat) return;
 
     if (isTypingRef.current) {
       isTypingRef.current = false;
@@ -228,7 +235,7 @@ export default function CommunityChatTab({ communityId, chatId }: Props) {
     }, 100);
 
     try {
-      const sentMessage = await apiSendMessage(chatId, trimmed, chat?.encryptionKey);
+      const sentMessage = await apiSendMessage(chatId, trimmed, chat.encryptionKey);
       if (!backendUserId && sentMessage.senderId) {
         setBackendUserId(sentMessage.senderId);
       }

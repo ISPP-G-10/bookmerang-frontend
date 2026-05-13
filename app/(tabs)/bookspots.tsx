@@ -187,9 +187,13 @@ export default function BookSpotsScreen() {
     if (Platform.OS !== "web") {
       webViewRef.current?.injectJavaScript(`${js}; true;`);
     } else {
+      // El iframe se monta con `srcDoc`, por lo que su origen efectivo es
+      // opaco ("null"). Un targetOrigin distinto (ej. window.location.origin)
+      // hace que el navegador descarte silenciosamente el mensaje y el mapa
+      // nunca recibe updateBookspots / updateUserPendingSpots / etc.
       iframeRef.current?.contentWindow?.postMessage(
         { type: "eval", code: js },
-        window.location.origin,
+        "*",
       );
     }
   }, []);

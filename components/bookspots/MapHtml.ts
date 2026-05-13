@@ -575,7 +575,11 @@ export function getMapHtml(lat: number, lng: number): string {
             if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
               window.ReactNativeWebView.postMessage(message);
             } else if (window.parent !== window) {
-              window.parent.postMessage(message, window.location.origin);
+              // El iframe se monta con srcDoc → window.location.origin aquí
+              // es "null" (opaque origin). Pasar ese valor como targetOrigin
+              // hace que el navegador descarte el mensaje y el contenedor
+              // nunca reciba mapModalOpen / viewChange / pickLocation, etc.
+              window.parent.postMessage(message, '*');
             }
           }
 
