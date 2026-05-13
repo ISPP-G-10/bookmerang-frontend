@@ -575,7 +575,7 @@ export function getMapHtml(lat: number, lng: number): string {
             if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
               window.ReactNativeWebView.postMessage(message);
             } else if (window.parent !== window) {
-              window.parent.postMessage(message, window.location.origin);
+              window.parent.postMessage(message, '*');
             }
           }
 
